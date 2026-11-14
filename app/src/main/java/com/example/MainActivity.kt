@@ -7,11 +7,13 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color as AndroidColor
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,6 +21,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -52,6 +55,7 @@ import com.tapflow.feature.logs.ScriptLogScreen
 import com.tapflow.feature.onboarding.OnboardingScreen
 import com.tapflow.feature.paywall.PaywallScreen
 import com.tapflow.feature.studio.InspectStudioScreen
+import com.tapflow.core.service.theme.resolveIsDarkTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -96,10 +100,31 @@ class MainActivity : AppCompatActivity() {
       val prefsOrNull by
         preferencesRepository.preferencesFlow.collectAsStateWithLifecycle(initialValue = null)
       val prefs = prefsOrNull
+      val darkMode = prefs?.darkMode ?: AppPreferences().darkMode
+      val isDark = resolveIsDarkTheme(darkMode)
+
+      DisposableEffect(isDark) {
+        enableEdgeToEdge(
+          statusBarStyle =
+            if (isDark) {
+              SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+            } else {
+              SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+            },
+          navigationBarStyle =
+            if (isDark) {
+              SystemBarStyle.dark(AndroidColor.TRANSPARENT)
+            } else {
+              SystemBarStyle.light(AndroidColor.TRANSPARENT, AndroidColor.TRANSPARENT)
+            },
+        )
+        onDispose {}
+      }
 
       TapFlowTheme(
-        darkMode = prefs?.darkMode ?: AppPreferences().darkMode,
+        darkMode = darkMode,
         themePalette = prefs?.themePalette ?: AppPreferences().themePalette,
+        darkTheme = isDark,
       ) {
         if (prefs == null) {
           Box(modifier = Modifier.fillMaxSize())

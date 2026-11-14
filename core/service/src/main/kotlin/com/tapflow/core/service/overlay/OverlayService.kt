@@ -80,6 +80,7 @@ import com.tapflow.core.database.asset.ScriptAssetManager
 import com.tapflow.core.database.repository.InspectRepository
 import com.tapflow.core.database.repository.PipelineRepository
 import com.tapflow.core.database.repository.ScriptRepository
+import com.tapflow.core.datastore.AppPreferences
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
 import com.tapflow.core.model.action.LongPressMode
 import com.tapflow.core.model.action.Point2D
@@ -102,6 +103,7 @@ import com.tapflow.core.service.engine.RunnerPhase
 import com.tapflow.core.service.projection.MediaProjectionBridge
 import com.tapflow.core.service.projection.ScreenCaptureState
 import com.tapflow.core.service.shizuku.ShizukuManager
+import com.tapflow.core.service.theme.TapFlowTheme
 import com.tapflow.core.service.vision.ZeroAllocVisionEngine
 import dagger.hilt.android.AndroidEntryPoint
 import java.io.File
@@ -465,11 +467,17 @@ class OverlayService :
         setViewTreeViewModelStoreOwner(this@OverlayService)
         setContent {
           val state by uiState.collectAsStateWithLifecycle()
+          val prefs by preferencesRepository.preferencesFlow.collectAsStateWithLifecycle(initialValue = AppPreferences())
           val provider = optionalContentProvider.orElse(null)
-          if (provider != null) {
-            provider.CaptureLayerFeedbackContent(state)
-          } else {
-            FallbackCaptureFeedback(state)
+          TapFlowTheme(
+            darkMode = prefs.darkMode,
+            themePalette = prefs.themePalette,
+          ) {
+            if (provider != null) {
+              provider.CaptureLayerFeedbackContent(state)
+            } else {
+              FallbackCaptureFeedback(state)
+            }
           }
         }
       }
@@ -518,8 +526,12 @@ class OverlayService :
         setViewTreeViewModelStoreOwner(this@OverlayService)
         setContent {
           val state by uiState.collectAsStateWithLifecycle()
+          val prefs by preferencesRepository.preferencesFlow.collectAsStateWithLifecycle(initialValue = AppPreferences())
           val provider = optionalContentProvider.orElse(null)
-          MaterialTheme {
+          TapFlowTheme(
+            darkMode = prefs.darkMode,
+            themePalette = prefs.themePalette,
+          ) {
             if (provider != null) {
               provider.FloatingDockContent(state, callbacks)
             } else {
@@ -1486,6 +1498,7 @@ private fun FallbackFloatingDock(
       modifier = dragModifier.size(48.dp),
       shape = CircleShape,
       color = MaterialTheme.colorScheme.primaryContainer,
+      contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
       shadowElevation = 6.dp,
       onClick = { callbacks.onToggleBubbleCollapse() },
     ) {
@@ -1494,6 +1507,7 @@ private fun FallbackFloatingDock(
           text = "TF",
           style = MaterialTheme.typography.labelLarge,
           fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
       }
     }
@@ -1504,6 +1518,7 @@ private fun FallbackFloatingDock(
     modifier = dragModifier,
     shape = RoundedCornerShape(24.dp),
     color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+    contentColor = MaterialTheme.colorScheme.onSurface,
     shadowElevation = 8.dp,
   ) {
     Column(
