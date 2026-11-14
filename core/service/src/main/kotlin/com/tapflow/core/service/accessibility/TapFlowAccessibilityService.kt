@@ -6,8 +6,10 @@ import android.accessibilityservice.GestureDescription
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
+import android.os.Build
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -20,7 +22,9 @@ class TapFlowAccessibilityService : AccessibilityService(), AccessibilityExecuto
     super.onServiceConnected()
     serviceInfo =
       serviceInfo.apply {
-        eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+        eventTypes =
+          AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED
         feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
         flags =
           flags or
@@ -29,14 +33,85 @@ class TapFlowAccessibilityService : AccessibilityService(), AccessibilityExecuto
         notificationTimeout = 50L
       }
     bridge.attachHost(this)
+    resolveForegroundPackageNow()?.let { bridge.updateForegroundPackage(it) }
   }
 
   override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-    if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-      val pkg = event.packageName?.toString()
-      if (!pkg.isNullOrBlank()) {
-        bridge.updateForegroundPackage(pkg)
+    val eventType = event?.eventType ?: return
+    if (eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+      eventType != AccessibilityEvent.TYPE_WINDOWS_CHANGED
+    ) {
+      return
+    }
+
+    val resolved = resolveForegroundPackageNow()
+    if (resolved != null) {
+      bridge.updateForegroundPackage(resolved)
+      return
+    }
+
+    if (eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+      val eventPkg = event.packageName?.toString()
+      if (!bridge.isExcludedForegroundPackage(eventPkg) && !isNonApplicationWindowId(event.windowId)) {
+        bridge.updateForegroundPackage(eventPkg)
       }
+    }
+  }
+
+  override fun resolveForegroundPackageNow(): String? {
+    val imePackages = bridge.getEnabledImePackages()
+
+    val appWindows =
+      runCatching { windows }
+        .getOrNull()
+        ?.filter { it.type == AccessibilityWindowInfo.TYPE_APPLICATION }
+        ?.sortedByDescending { it.layer }
+        .orEmpty()
+
+    for (window in appWindows) {
+      val root = runCatching { window.root }.getOrNull() ?: continue
+      val pkg =
+        try {
+          root.packageName?.toString()
+        } finally {
+          recycleNodeCompat(root)
+        }
+      if (!bridge.isExcludedForegroundPackage(pkg, imePackages)) {
+        return pkg
+      }
+    }
+
+    val activeRoot = runCatching { rootInActiveWindow }.getOrNull()
+    if (activeRoot != null) {
+      val pkg =
+        try {
+          activeRoot.packageName?.toString()
+        } finally {
+          recycleNodeCompat(activeRoot)
+        }
+      if (!bridge.isExcludedForegroundPackage(pkg, imePackages)) {
+        return pkg
+      }
+    }
+
+    return null
+  }
+
+  private fun isNonApplicationWindowId(windowId: Int): Boolean {
+    if (windowId < 0) return false
+    val matched =
+      runCatching { windows }
+        .getOrNull()
+        ?.firstOrNull { it.id == windowId }
+        ?: return false
+    return matched.type != AccessibilityWindowInfo.TYPE_APPLICATION
+  }
+
+  private fun recycleNodeCompat(node: AccessibilityNodeInfo?) {
+    if (node == null) return
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+      @Suppress("DEPRECATION")
+      runCatching { node.recycle() }
     }
   }
 

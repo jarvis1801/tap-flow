@@ -10,6 +10,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.Path
@@ -836,6 +837,7 @@ class OverlayService :
 
     // Step 1 completed -> Step 2: Pre-Replay Capture (Modes 3 & 4) with highlights hidden
     var preReplayBitmap: Bitmap? = null
+    var capturedForegroundPkg = ""
     if (mode == OverlayMode.LIVE_RECORDER || mode == OverlayMode.LIVE_INSPECTOR) {
       uiState.update {
         it.copy(
@@ -843,6 +845,7 @@ class OverlayService :
           touchPreview = null,
         )
       }
+      capturedForegroundPkg = accessibilityBridge.resolveCurrentForegroundPackage() ?: ""
       captureFeedbackComposeView?.visibility = View.INVISIBLE
       try {
         delay(40L)
@@ -898,6 +901,7 @@ class OverlayService :
     if (mode == OverlayMode.LIVE_RECORDER) {
       persistRecordedGestureAndInspect(
         bitmap = preReplayBitmap,
+        foregroundPackage = capturedForegroundPkg,
         startX = startX,
         startY = startY,
         endX = endX,
@@ -910,6 +914,7 @@ class OverlayService :
     } else if (mode == OverlayMode.LIVE_INSPECTOR) {
       persistLiveInspectItem(
         bitmap = preReplayBitmap,
+        foregroundPackage = capturedForegroundPkg,
         tapX = startX,
         tapY = startY,
       )
@@ -975,6 +980,7 @@ class OverlayService :
 
   private suspend fun persistRecordedGestureAndInspect(
     bitmap: Bitmap?,
+    foregroundPackage: String,
     startX: Int,
     startY: Int,
     endX: Int,
@@ -1033,7 +1039,14 @@ class OverlayService :
     if (bitmap != null) {
       try {
         val groupId = activeInspectGroupId ?: return
-        saveInspectSnapshotForTap(bitmap, groupId, startX, startY, includeDefaultCrop = false)
+        saveInspectSnapshotForTap(
+          bitmap = bitmap,
+          groupId = groupId,
+          foregroundPackage = foregroundPackage,
+          tapX = startX,
+          tapY = startY,
+          includeDefaultCrop = false,
+        )
       } finally {
         bitmap.recycle()
       }
@@ -1042,13 +1055,21 @@ class OverlayService :
 
   private suspend fun persistLiveInspectItem(
     bitmap: Bitmap?,
+    foregroundPackage: String,
     tapX: Int,
     tapY: Int,
   ) {
     if (bitmap == null) return
     try {
       val groupId = activeInspectGroupId ?: return
-      saveInspectSnapshotForTap(bitmap, groupId, tapX, tapY, includeDefaultCrop = true)
+      saveInspectSnapshotForTap(
+        bitmap = bitmap,
+        groupId = groupId,
+        foregroundPackage = foregroundPackage,
+        tapX = tapX,
+        tapY = tapY,
+        includeDefaultCrop = true,
+      )
       uiState.update { it.copy(inspectedItemCount = it.inspectedItemCount + 1) }
     } finally {
       bitmap.recycle()
@@ -1058,6 +1079,7 @@ class OverlayService :
   private suspend fun saveInspectSnapshotForTap(
     bitmap: Bitmap,
     groupId: String,
+    foregroundPackage: String,
     tapX: Int,
     tapY: Int,
     includeDefaultCrop: Boolean,
@@ -1108,7 +1130,7 @@ class OverlayService :
         emptyList()
       }
 
-    val pkg = accessibilityBridge.currentForegroundPackage.value.orEmpty()
+    val pkg = foregroundPackage
     val appLabel = resolveAppLabel(pkg)
 
     inspectRepository.saveItem(
@@ -1146,8 +1168,17 @@ class OverlayService :
   private fun resolveAppLabel(packageName: String): String {
     if (packageName.isBlank()) return "Screen Capture"
     return runCatching {
-      val info = packageManager.getApplicationInfo(packageName, 0)
-      packageManager.getApplicationLabel(info).toString()
+      val info =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+          packageManager.getApplicationInfo(
+            packageName,
+            PackageManager.ApplicationInfoFlags.of(0L),
+          )
+        } else {
+          @Suppress("DEPRECATION")
+          packageManager.getApplicationInfo(packageName, 0)
+        }
+      packageManager.getApplicationLabel(info).toString().ifBlank { packageName }
     }.getOrDefault(packageName)
   }
 

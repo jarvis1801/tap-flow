@@ -164,7 +164,7 @@ class ConditionEvaluator @Inject constructor(
         }
 
         is ConditionPredicate.AppMatch -> {
-          val currentPkg = accessibilityBridge.currentForegroundPackage.value
+          val currentPkg = accessibilityBridge.resolveCurrentForegroundPackage()
           val matched = !currentPkg.isNullOrBlank() && currentPkg == predicate.packageName
           Triple(
             matched,

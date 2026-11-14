@@ -42,6 +42,19 @@ class ShizukuManager @Inject constructor(
     const val SHIZUKU_PACKAGE_NAME = "moe.shizuku.privileged.api"
     const val REQUEST_CODE_PERMISSION = 4201
     private const val USER_SERVICE_TAG = "TapFlowShizukuShell"
+    private val RESUMED_ACTIVITY_PKG_REGEX =
+      Regex("""ActivityRecord\{[^}]*\s+(?:u\d+\s+)?([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)/""")
+
+    internal fun parseResumedActivityPackage(output: String): String? {
+      if (output.isBlank()) return null
+      val lines = output.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }
+      val preferredLine =
+        lines.firstOrNull { it.contains("topResumedActivity", ignoreCase = true) }
+          ?: lines.firstOrNull { it.contains("mResumedActivity", ignoreCase = true) }
+          ?: lines.firstOrNull()
+          ?: return null
+      return RESUMED_ACTIVITY_PKG_REGEX.find(preferredLine)?.groupValues?.getOrNull(1)
+    }
   }
 
   private val bindMutex = Mutex()
@@ -185,6 +198,17 @@ class ShizukuManager @Inject constructor(
   suspend fun readClipboardText(): String? {
     val output = execShellOutput("cmd clipboard get-text")
     return output?.takeIf { !it.startsWith("Error") && !it.contains("Unknown command") }
+  }
+
+  suspend fun queryResumedActivityPackage(): String? {
+    if (!diagnosticState.value.isFullyReady) return null
+    val output =
+      withTimeoutOrNull(450L) {
+        execShellOutput(
+          "dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity|ResumedActivity'",
+        )
+      } ?: return null
+    return parseResumedActivityPackage(output)
   }
 
   suspend fun captureSilentScreenshotPngBytes(): ByteArray? =

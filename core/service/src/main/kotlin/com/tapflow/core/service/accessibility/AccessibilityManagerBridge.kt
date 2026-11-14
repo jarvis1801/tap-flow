@@ -2,12 +2,16 @@ package com.tapflow.core.service.accessibility
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.Context
 import android.graphics.Path
 import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.inputmethod.InputMethodManager
 import com.tapflow.core.model.action.PostTextActionKey
 import com.tapflow.core.model.action.SystemKeyType
+import com.tapflow.core.service.shizuku.ShizukuManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -43,14 +47,20 @@ interface AccessibilityExecutorHost {
   fun findFocusedEditableNode(): AccessibilityNodeInfo?
 
   fun findAnyEditableNode(): AccessibilityNodeInfo?
+
+  fun resolveForegroundPackageNow(): String?
 }
 
 @Singleton
-class AccessibilityManagerBridge @Inject constructor() {
+class AccessibilityManagerBridge @Inject constructor(
+  @ApplicationContext private val context: Context,
+  private val shizukuManager: ShizukuManager,
+) {
   companion object {
     /** Strictly under Android's 60,000ms GestureDescription.getMaxGestureDuration() limit. */
     const val MAX_STROKE_SEGMENT_MS: Long = 50_000L
     private const val JITTER_SEGMENT_MS: Long = 160L
+    private const val SYSTEM_UI_PACKAGE = "com.android.systemui"
   }
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -58,6 +68,9 @@ class AccessibilityManagerBridge @Inject constructor() {
 
   @Volatile
   private var host: AccessibilityExecutorHost? = null
+
+  @Volatile
+  private var lastValidForegroundPackage: String? = null
 
   private val _isAccessibilityConnected = MutableStateFlow(false)
   val isAccessibilityConnected: StateFlow<Boolean> = _isAccessibilityConnected.asStateFlow()
@@ -89,10 +102,54 @@ class AccessibilityManagerBridge @Inject constructor() {
     }
   }
 
+  internal fun getEnabledImePackages(): Set<String> {
+    val imm =
+      context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        ?: return emptySet()
+    return runCatching {
+      imm.enabledInputMethodList
+        .flatMap { listOfNotNull(it.packageName, it.serviceInfo?.packageName) }
+        .toSet()
+    }.getOrDefault(emptySet())
+  }
+
+  internal fun isExcludedForegroundPackage(
+    packageName: String?,
+    enabledImePackages: Set<String> = getEnabledImePackages(),
+  ): Boolean {
+    if (packageName.isNullOrBlank()) return true
+    if (packageName == context.packageName) return true
+    if (packageName == SYSTEM_UI_PACKAGE) return true
+    if (packageName in enabledImePackages) return true
+    return false
+  }
+
   internal fun updateForegroundPackage(packageName: String?) {
-    if (!packageName.isNullOrBlank()) {
+    if (!isExcludedForegroundPackage(packageName)) {
+      lastValidForegroundPackage = packageName
       _currentForegroundPackage.value = packageName
     }
+  }
+
+  suspend fun resolveCurrentForegroundPackage(): String? {
+    val imePackages = getEnabledImePackages()
+    val fromHost = host?.resolveForegroundPackageNow()
+    if (!isExcludedForegroundPackage(fromHost, imePackages)) {
+      lastValidForegroundPackage = fromHost
+      _currentForegroundPackage.value = fromHost
+      return fromHost
+    }
+
+    if (shizukuManager.diagnosticState.value.isFullyReady) {
+      val fromShizuku = shizukuManager.queryResumedActivityPackage()
+      if (!isExcludedForegroundPackage(fromShizuku, imePackages)) {
+        lastValidForegroundPackage = fromShizuku
+        _currentForegroundPackage.value = fromShizuku
+        return fromShizuku
+      }
+    }
+
+    return lastValidForegroundPackage?.takeUnless { isExcludedForegroundPackage(it, imePackages) }
   }
 
   suspend fun dispatchGestureAsync(
