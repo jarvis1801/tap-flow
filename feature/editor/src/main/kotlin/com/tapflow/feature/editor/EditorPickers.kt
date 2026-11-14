@@ -27,6 +27,9 @@ import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.StayCurrentLandscape
+import androidx.compose.material.icons.rounded.StayCurrentPortrait
+import androidx.compose.material.icons.rounded.TabletAndroid
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -55,12 +58,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.tapflow.core.database.R as DbR
 import com.tapflow.core.database.repository.InspectGroupWithItems
 import com.tapflow.core.model.common.DurationInput
 import com.tapflow.core.model.common.NumericInput
@@ -70,6 +75,7 @@ import com.tapflow.core.model.entitlement.ProFeatureGate
 import com.tapflow.core.model.inspect.InspectCrop
 import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.InspectPixel
+import com.tapflow.core.model.inspect.ScreenOrientation
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -493,6 +499,8 @@ fun InspectTargetPickerBottomSheet(
           items(flatItems, key = { it.second.id }) { (groupTitle, item) ->
             EditorSectionCard(
               title = "$groupTitle • ${item.appName}",
+              subtitle = "${item.screenWidth} × ${item.screenHeight} px",
+              trailing = { PickerOrientationBadge(item = item) },
               containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ) {
               if (isCropMode) {
@@ -571,6 +579,65 @@ fun InspectTargetPickerBottomSheet(
         }
       }
       Spacer(modifier = Modifier.height(8.dp))
+    }
+  }
+}
+
+@Composable
+private fun PickerOrientationBadge(
+  item: InspectItem,
+  modifier: Modifier = Modifier,
+) {
+  val orientation = item.screenOrientation
+  val icon =
+    when (orientation) {
+      ScreenOrientation.PORTRAIT -> Icons.Rounded.StayCurrentPortrait
+      ScreenOrientation.LANDSCAPE -> Icons.Rounded.StayCurrentLandscape
+      ScreenOrientation.SQUARE_UNFOLDED -> Icons.Rounded.TabletAndroid
+    }
+  val label =
+    when (orientation) {
+      ScreenOrientation.PORTRAIT -> stringResource(DbR.string.orientation_portrait)
+      ScreenOrientation.LANDSCAPE -> stringResource(DbR.string.orientation_landscape)
+      ScreenOrientation.SQUARE_UNFOLDED -> stringResource(DbR.string.orientation_unfolded)
+    }
+  val containerColor =
+    when (orientation) {
+      ScreenOrientation.SQUARE_UNFOLDED -> MaterialTheme.colorScheme.tertiaryContainer
+      ScreenOrientation.LANDSCAPE -> MaterialTheme.colorScheme.secondaryContainer
+      ScreenOrientation.PORTRAIT -> MaterialTheme.colorScheme.surfaceContainerHighest
+    }
+  val contentColor =
+    when (orientation) {
+      ScreenOrientation.SQUARE_UNFOLDED -> MaterialTheme.colorScheme.onTertiaryContainer
+      ScreenOrientation.LANDSCAPE -> MaterialTheme.colorScheme.onSecondaryContainer
+      ScreenOrientation.PORTRAIT -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+  Surface(
+    modifier = modifier,
+    shape = RoundedCornerShape(8.dp),
+    color = containerColor,
+  ) {
+    Row(
+      modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+      Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = contentColor,
+        modifier = Modifier.size(13.dp),
+      )
+      Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = contentColor,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
     }
   }
 }

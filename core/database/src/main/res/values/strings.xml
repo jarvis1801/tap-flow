@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="orientation_portrait">Portrait</string>
+    <string name="orientation_landscape">Landscape</string>
+    <string name="orientation_unfolded">Unfolded</string>
+    <string name="orientation_unfolded_portrait">Unfolded (Portrait)</string>
+    <string name="orientation_unfolded_landscape">Unfolded (Landscape)</string>
+    <string name="orientation_unfolded_square">Unfolded (Square)</string>
+</resources>

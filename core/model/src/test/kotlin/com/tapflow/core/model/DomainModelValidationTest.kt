@@ -13,12 +13,15 @@ import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.entitlement.ProFeatureGate
 import com.tapflow.core.model.entitlement.TrialStatus
+import com.tapflow.core.model.inspect.InspectItem
+import com.tapflow.core.model.inspect.ScreenOrientation
 import com.tapflow.core.model.ipc.WsMessage
 import com.tapflow.core.model.ipc.WsMessageType
 import com.tapflow.core.model.script.Script
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -109,5 +112,43 @@ class DomainModelValidationTest {
     val encoded = json.encodeToString(WsMessage.serializer(), msg)
     val decoded = json.decodeFromString(WsMessage.serializer(), encoded)
     assertEquals(msg, decoded)
+  }
+
+  @Test
+  fun inspectItemClassifiesPortraitLandscapeAndFoldableUnfolded() {
+    fun makeItem(w: Int, h: Int) =
+      InspectItem(
+        id = "i1",
+        groupId = "g1",
+        fullScreenPngPath = "",
+        screenWidth = w,
+        screenHeight = h,
+        appName = "Test",
+        packageName = "com.test",
+      )
+
+    val portrait = makeItem(1080, 2400)
+    assertEquals(ScreenOrientation.PORTRAIT, portrait.screenOrientation)
+    assertNull(portrait.orientationSubHint)
+
+    val landscape = makeItem(2400, 1080)
+    assertEquals(ScreenOrientation.LANDSCAPE, landscape.screenOrientation)
+    assertNull(landscape.orientationSubHint)
+
+    val unfoldedTall = makeItem(2076, 2152)
+    assertEquals(ScreenOrientation.SQUARE_UNFOLDED, unfoldedTall.screenOrientation)
+    assertEquals("Unfolded (Portrait)", unfoldedTall.orientationSubHint)
+
+    val unfoldedWide = makeItem(2152, 2076)
+    assertEquals(ScreenOrientation.SQUARE_UNFOLDED, unfoldedWide.screenOrientation)
+    assertEquals("Unfolded (Landscape)", unfoldedWide.orientationSubHint)
+
+    val unfoldedFold4 = makeItem(1812, 2176)
+    assertEquals(ScreenOrientation.SQUARE_UNFOLDED, unfoldedFold4.screenOrientation)
+    assertEquals("Unfolded (Portrait)", unfoldedFold4.orientationSubHint)
+
+    val exactSquare = makeItem(1800, 1800)
+    assertEquals(ScreenOrientation.SQUARE_UNFOLDED, exactSquare.screenOrientation)
+    assertEquals("Unfolded (Square)", exactSquare.orientationSubHint)
   }
 }

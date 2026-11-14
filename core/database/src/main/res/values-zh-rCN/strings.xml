@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="orientation_portrait">竖向</string>
+    <string name="orientation_landscape">横向</string>
+    <string name="orientation_unfolded">展开屏幕</string>
+    <string name="orientation_unfolded_portrait">展开屏幕（竖向）</string>
+    <string name="orientation_unfolded_landscape">展开屏幕（横向）</string>
+    <string name="orientation_unfolded_square">展开屏幕（方形）</string>
+</resources>

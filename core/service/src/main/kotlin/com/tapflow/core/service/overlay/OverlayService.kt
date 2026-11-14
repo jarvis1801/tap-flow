@@ -12,14 +12,19 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Path
 import android.graphics.PixelFormat
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.SystemClock
 import android.util.DisplayMetrics
+import android.view.Display
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -182,6 +187,8 @@ class OverlayService :
   private var dockComposeView: ComposeView? = null
   private var dockLayoutParams: WindowManager.LayoutParams? = null
   private var edgeSnapAnimator: ValueAnimator? = null
+  private var displayListener: DisplayManager.DisplayListener? = null
+  private val mainHandler = Handler(Looper.getMainLooper())
 
   private val uiState = MutableStateFlow(OverlayUiState())
 
@@ -333,6 +340,7 @@ class OverlayService :
     startOverlayForeground(buildNotification())
 
     attachWindowsInStrictZOrder()
+    registerDockDisplayListener()
 
     serviceScope.launch {
       val prefs = preferencesRepository.getPreferencesOnce()
@@ -402,8 +410,18 @@ class OverlayService :
     return START_NOT_STICKY
   }
 
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+    reclampDockForCurrentBounds()
+  }
+
   override fun onDestroy() {
     edgeSnapAnimator?.cancel()
+    displayListener?.let { listener ->
+      val dm = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+      runCatching { dm?.unregisterDisplayListener(listener) }
+    }
+    displayListener = null
     serviceScope.cancel()
     captureRootView?.let { runCatching { windowManager.removeViewImmediate(it) } }
     dockComposeView?.let { runCatching { windowManager.removeViewImmediate(it) } }
@@ -1334,9 +1352,63 @@ class OverlayService :
     }
   }
 
+  private fun registerDockDisplayListener() {
+    val displayManager = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager ?: return
+    val listener =
+      object : DisplayManager.DisplayListener {
+        override fun onDisplayAdded(displayId: Int) = Unit
+
+        override fun onDisplayRemoved(displayId: Int) = Unit
+
+        override fun onDisplayChanged(displayId: Int) {
+          if (displayId != Display.DEFAULT_DISPLAY) return
+          reclampDockForCurrentBounds()
+        }
+      }
+    displayListener = listener
+    displayManager.registerDisplayListener(listener, mainHandler)
+  }
+
+  private fun reclampDockForCurrentBounds() {
+    val view = dockComposeView ?: return
+    applyDockReclamp(view)
+    view.post {
+      if (dockComposeView === view) {
+        applyDockReclamp(view)
+      }
+    }
+  }
+
+  private fun applyDockReclamp(view: ComposeView) {
+    val params = dockLayoutParams ?: return
+    edgeSnapAnimator?.cancel()
+
+    val (newScreenW, newScreenH) = readScreenDimensions()
+    if (newScreenW <= 0 || newScreenH <= 0) return
+
+    val dockWidth = view.width.takeIf { it > 0 } ?: 64
+    val dockHeight = view.height.takeIf { it > 0 } ?: 160
+    val maxX = (newScreenW - dockWidth).coerceAtLeast(0)
+    val maxY = (newScreenH - dockHeight).coerceAtLeast(0)
+
+    val clampedY = params.y.coerceIn(0, maxY)
+    val snappedX =
+      if (uiState.value.isDockedOnRight) {
+        maxX
+      } else {
+        0
+      }
+
+    if (params.x != snappedX || params.y != clampedY) {
+      params.x = snappedX
+      params.y = clampedY
+      runCatching { windowManager.updateViewLayout(view, params) }
+    }
+  }
+
   private fun readScreenDimensions(): Pair<Int, Int> {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-      val bounds = windowManager.currentWindowMetrics.bounds
+      val bounds = windowManager.maximumWindowMetrics.bounds
       return bounds.width() to bounds.height()
     }
     val metrics = DisplayMetrics()

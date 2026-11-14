@@ -9,6 +9,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
@@ -26,6 +27,13 @@ import androidx.core.app.NotificationCompat
 import com.tapflow.core.service.R
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MediaProjectionService : Service() {
@@ -38,12 +46,15 @@ class MediaProjectionService : Service() {
     private const val CHANNEL_ID = "tapflow_media_projection"
     private const val NOTIFICATION_ID = 3102
     private const val VIRTUAL_DISPLAY_NAME = "TapFlowVirtualScreen"
+    private const val RESIZE_DEBOUNCE_MS = 175L
   }
 
   @Inject
   lateinit var mediaProjectionBridge: MediaProjectionBridge
 
   private val mainHandler = Handler(Looper.getMainLooper())
+  private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+  private var resizeDebounceJob: Job? = null
   private var mediaProjection: MediaProjection? = null
   private var virtualDisplay: VirtualDisplay? = null
   private var displayListener: DisplayManager.DisplayListener? = null
@@ -74,7 +85,7 @@ class MediaProjectionService : Service() {
 
       override fun onCapturedContentResize(width: Int, height: Int) {
         if (width > 0 && height > 0) {
-          rebuildSurfaceIfNeeded(width, height, currentDensityDpi)
+          scheduleDebouncedDisplayResize(explicitWidth = width, explicitHeight = height)
         }
       }
     }
@@ -115,6 +126,13 @@ class MediaProjectionService : Service() {
     }
   }
 
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+    if (virtualDisplay != null && mediaProjection != null) {
+      scheduleDebouncedDisplayResize()
+    }
+  }
+
   override fun onDestroy() {
     isStoppingInternally = true
     releaseResources(
@@ -125,6 +143,7 @@ class MediaProjectionService : Service() {
           ScreenCaptureState.Idle
         },
     )
+    serviceScope.cancel()
     super.onDestroy()
   }
 
@@ -202,12 +221,27 @@ class MediaProjectionService : Service() {
 
         override fun onDisplayChanged(displayId: Int) {
           if (displayId != Display.DEFAULT_DISPLAY) return
-          val (newW, newH, newDpi) = readCurrentDisplayMetrics()
-          rebuildSurfaceIfNeeded(newW, newH, newDpi)
+          scheduleDebouncedDisplayResize()
         }
       }
     displayListener = listener
     displayManager.registerDisplayListener(listener, mainHandler)
+  }
+
+  private fun scheduleDebouncedDisplayResize(
+    explicitWidth: Int? = null,
+    explicitHeight: Int? = null,
+  ) {
+    resizeDebounceJob?.cancel()
+    resizeDebounceJob =
+      serviceScope.launch {
+        delay(RESIZE_DEBOUNCE_MS)
+        if (virtualDisplay == null || mediaProjection == null) return@launch
+        val (measuredW, measuredH, measuredDpi) = readCurrentDisplayMetrics()
+        val targetW = explicitWidth ?: measuredW
+        val targetH = explicitHeight ?: measuredH
+        rebuildSurfaceIfNeeded(targetW, targetH, measuredDpi)
+      }
   }
 
   private fun rebuildSurfaceIfNeeded(newWidth: Int, newHeight: Int, newDensityDpi: Int) {
@@ -229,6 +263,9 @@ class MediaProjectionService : Service() {
   }
 
   private fun releaseResources(nextState: ScreenCaptureState) {
+    resizeDebounceJob?.cancel()
+    resizeDebounceJob = null
+
     displayListener?.let { listener ->
       val dm = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
       runCatching { dm?.unregisterDisplayListener(listener) }
@@ -251,8 +288,10 @@ class MediaProjectionService : Service() {
   private fun readCurrentDisplayMetrics(): Triple<Int, Int, Int> {
     val windowManager = getSystemService(Context.WINDOW_SERVICE) as? WindowManager
     if (windowManager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-      val bounds = windowManager.currentWindowMetrics.bounds
-      val density = resources.configuration.densityDpi
+      val bounds = windowManager.maximumWindowMetrics.bounds
+      val density =
+        resources.configuration.densityDpi.takeIf { it > 0 }
+          ?: DisplayMetrics.DENSITY_DEFAULT
       return Triple(bounds.width(), bounds.height(), density)
     }
 

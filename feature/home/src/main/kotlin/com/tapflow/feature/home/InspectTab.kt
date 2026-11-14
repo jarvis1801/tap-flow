@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CenterFocusStrong
@@ -30,6 +31,9 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.rounded.StayCurrentLandscape
+import androidx.compose.material.icons.rounded.StayCurrentPortrait
+import androidx.compose.material.icons.rounded.TabletAndroid
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -49,17 +53,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.tapflow.core.database.R as DbR
 import com.tapflow.core.database.repository.InspectGroupWithItems
 import com.tapflow.core.model.inspect.InspectCrop
 import com.tapflow.core.model.inspect.InspectGroup
 import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.InspectPixel
+import com.tapflow.core.model.inspect.ScreenOrientation
 import java.io.File
 
 @Composable
@@ -222,10 +229,16 @@ private fun InspectItemNestedCard(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
       ) {
+        val thumbSizeModifier =
+          when (item.screenOrientation) {
+            ScreenOrientation.PORTRAIT -> Modifier.size(width = 60.dp, height = 88.dp)
+            ScreenOrientation.LANDSCAPE -> Modifier.size(width = 88.dp, height = 58.dp)
+            ScreenOrientation.SQUARE_UNFOLDED -> Modifier.size(width = 76.dp, height = 76.dp)
+          }
         Surface(
           shape = MaterialTheme.shapes.small,
           color = MaterialTheme.colorScheme.surface,
-          modifier = Modifier.size(width = 64.dp, height = 88.dp),
+          modifier = thumbSizeModifier,
         ) {
           AsyncImage(
             model = File(item.fullScreenPngPath),
@@ -235,7 +248,7 @@ private fun InspectItemNestedCard(
           )
         }
 
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
           Text(
             text = item.appName.ifBlank { item.packageName },
             style = MaterialTheme.typography.titleSmall,
@@ -250,11 +263,21 @@ private fun InspectItemNestedCard(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
           )
-          Text(
-            text = "${item.screenWidth} × ${item.screenHeight} px • ${item.pixels.size} pixels • ${item.crops.size} crops",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
+          FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+          ) {
+            InspectOrientationBadge(
+              item = item,
+              modifier = Modifier.testTag("orientation_badge_${item.id}"),
+            )
+            Text(
+              text = "${item.screenWidth} × ${item.screenHeight} px • ${item.pixels.size} px • ${item.crops.size} crops",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.align(Alignment.CenterVertically),
+            )
+          }
         }
 
         IconButton(
@@ -511,6 +534,72 @@ private fun InspectSpeedDialFab(
   }
 }
 
+@Composable
+private fun InspectOrientationBadge(
+  item: InspectItem,
+  modifier: Modifier = Modifier,
+) {
+  val orientation = item.screenOrientation
+  val icon =
+    when (orientation) {
+      ScreenOrientation.PORTRAIT -> Icons.Rounded.StayCurrentPortrait
+      ScreenOrientation.LANDSCAPE -> Icons.Rounded.StayCurrentLandscape
+      ScreenOrientation.SQUARE_UNFOLDED -> Icons.Rounded.TabletAndroid
+    }
+  val label =
+    when (orientation) {
+      ScreenOrientation.PORTRAIT -> stringResource(DbR.string.orientation_portrait)
+      ScreenOrientation.LANDSCAPE -> stringResource(DbR.string.orientation_landscape)
+      ScreenOrientation.SQUARE_UNFOLDED ->
+        when {
+          item.screenHeight > item.screenWidth ->
+            stringResource(DbR.string.orientation_unfolded_portrait)
+          item.screenWidth > item.screenHeight ->
+            stringResource(DbR.string.orientation_unfolded_landscape)
+          else -> stringResource(DbR.string.orientation_unfolded_square)
+        }
+    }
+  val containerColor =
+    when (orientation) {
+      ScreenOrientation.SQUARE_UNFOLDED -> MaterialTheme.colorScheme.tertiaryContainer
+      ScreenOrientation.LANDSCAPE -> MaterialTheme.colorScheme.secondaryContainer
+      ScreenOrientation.PORTRAIT -> MaterialTheme.colorScheme.surfaceContainerHighest
+    }
+  val contentColor =
+    when (orientation) {
+      ScreenOrientation.SQUARE_UNFOLDED -> MaterialTheme.colorScheme.onTertiaryContainer
+      ScreenOrientation.LANDSCAPE -> MaterialTheme.colorScheme.onSecondaryContainer
+      ScreenOrientation.PORTRAIT -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+  Surface(
+    modifier = modifier,
+    shape = RoundedCornerShape(8.dp),
+    color = containerColor,
+  ) {
+    Row(
+      modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+      Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = contentColor,
+        modifier = Modifier.size(13.dp),
+      )
+      Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = contentColor,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
+  }
+}
+
 private fun parseHexColorOrDefault(hex: String): Color {
   val clean = hex.removePrefix("#").trim()
   val parsed = clean.toLongOrNull(16) ?: return Color.Gray
@@ -542,7 +631,7 @@ private fun InspectTabPreview() {
                       fullScreenPngPath = "",
                       screenWidth = 1080,
                       screenHeight = 2400,
-                      appName = "Fantasy Quest",
+                      appName = "Fantasy Quest (Cover)",
                       packageName = "com.example.game",
                       pixels =
                         listOf(
@@ -552,6 +641,15 @@ private fun InspectTabPreview() {
                         listOf(
                           InspectCrop("cr1", "Start Button", "", 400, 1750, 220, 96),
                         ),
+                    ),
+                    InspectItem(
+                      id = "i2",
+                      groupId = "g1",
+                      fullScreenPngPath = "",
+                      screenWidth = 2076,
+                      screenHeight = 2152,
+                      appName = "Fantasy Quest (Unfolded)",
+                      packageName = "com.example.game",
                     ),
                   ),
               ),

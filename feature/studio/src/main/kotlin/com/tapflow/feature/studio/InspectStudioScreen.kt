@@ -37,6 +37,9 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.rounded.StayCurrentLandscape
+import androidx.compose.material.icons.rounded.StayCurrentPortrait
+import androidx.compose.material.icons.rounded.TabletAndroid
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -72,6 +75,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -81,9 +85,11 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tapflow.core.database.R as DbR
 import com.tapflow.core.model.inspect.InspectCrop
 import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.InspectPixel
+import com.tapflow.core.model.inspect.ScreenOrientation
 import kotlin.math.roundToInt
 
 @Composable
@@ -158,7 +164,7 @@ fun InspectStudioContent(
           // Top Studio Bar
           StudioTopBar(
             groupTitle = state.groupTitle,
-            itemName = item.appName.ifBlank { item.packageName }.ifBlank { "Screenshot" },
+            item = item,
             zoom = zoom,
             markersVisible = state.markersVisible,
             mode = state.mode,
@@ -264,7 +270,7 @@ fun InspectStudioContent(
 @Composable
 private fun StudioTopBar(
   groupTitle: String,
-  itemName: String,
+  item: InspectItem,
   zoom: Float,
   markersVisible: Boolean,
   mode: StudioMode,
@@ -273,6 +279,7 @@ private fun StudioTopBar(
   onToggleMarkers: () -> Unit,
   onSwitchMode: (StudioMode) -> Unit,
 ) {
+  val itemName = item.appName.ifBlank { item.packageName }.ifBlank { "Screenshot" }
   Surface(
     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
     tonalElevation = 4.dp,
@@ -297,7 +304,7 @@ private fun StudioTopBar(
           Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Navigate back")
         }
 
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
           Text(
             text = "$groupTitle / $itemName",
             maxLines = 1,
@@ -305,12 +312,22 @@ private fun StudioTopBar(
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
           )
-          Text(
-            text = "Zoom ${(zoom * 100).roundToInt()}% (Pinch 100–1000%)",
-            style = MaterialTheme.typography.labelSmall,
-            fontFamily = FontFamily.Monospace,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
+          FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+          ) {
+            StudioOrientationBadge(
+              item = item,
+              modifier = Modifier.testTag("studio_orientation_badge"),
+            )
+            Text(
+              text = "${item.screenWidth} × ${item.screenHeight} • ${(zoom * 100).roundToInt()}%",
+              style = MaterialTheme.typography.labelSmall,
+              fontFamily = FontFamily.Monospace,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.align(Alignment.CenterVertically),
+            )
+          }
         }
 
         IconButton(
@@ -352,6 +369,72 @@ private fun StudioTopBar(
           modifier = Modifier.weight(1f).testTag("studio_mode_crop"),
         )
       }
+    }
+  }
+}
+
+@Composable
+private fun StudioOrientationBadge(
+  item: InspectItem,
+  modifier: Modifier = Modifier,
+) {
+  val orientation = item.screenOrientation
+  val icon =
+    when (orientation) {
+      ScreenOrientation.PORTRAIT -> Icons.Rounded.StayCurrentPortrait
+      ScreenOrientation.LANDSCAPE -> Icons.Rounded.StayCurrentLandscape
+      ScreenOrientation.SQUARE_UNFOLDED -> Icons.Rounded.TabletAndroid
+    }
+  val label =
+    when (orientation) {
+      ScreenOrientation.PORTRAIT -> stringResource(DbR.string.orientation_portrait)
+      ScreenOrientation.LANDSCAPE -> stringResource(DbR.string.orientation_landscape)
+      ScreenOrientation.SQUARE_UNFOLDED ->
+        when {
+          item.screenHeight > item.screenWidth ->
+            stringResource(DbR.string.orientation_unfolded_portrait)
+          item.screenWidth > item.screenHeight ->
+            stringResource(DbR.string.orientation_unfolded_landscape)
+          else -> stringResource(DbR.string.orientation_unfolded_square)
+        }
+    }
+  val containerColor =
+    when (orientation) {
+      ScreenOrientation.SQUARE_UNFOLDED -> MaterialTheme.colorScheme.tertiaryContainer
+      ScreenOrientation.LANDSCAPE -> MaterialTheme.colorScheme.secondaryContainer
+      ScreenOrientation.PORTRAIT -> MaterialTheme.colorScheme.surfaceContainerHighest
+    }
+  val contentColor =
+    when (orientation) {
+      ScreenOrientation.SQUARE_UNFOLDED -> MaterialTheme.colorScheme.onTertiaryContainer
+      ScreenOrientation.LANDSCAPE -> MaterialTheme.colorScheme.onSecondaryContainer
+      ScreenOrientation.PORTRAIT -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+  Surface(
+    modifier = modifier,
+    shape = RoundedCornerShape(8.dp),
+    color = containerColor,
+  ) {
+    Row(
+      modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+      Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = contentColor,
+        modifier = Modifier.size(13.dp),
+      )
+      Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = contentColor,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
     }
   }
 }

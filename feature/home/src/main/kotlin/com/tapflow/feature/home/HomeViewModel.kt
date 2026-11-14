@@ -17,6 +17,8 @@ import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.entitlement.ProFeatureGate
 import com.tapflow.core.model.entitlement.TrialStatus
+import com.tapflow.core.model.inspect.InspectItem
+import com.tapflow.core.model.inspect.ScreenOrientation
 import com.tapflow.core.model.pipeline.Pipeline
 import com.tapflow.core.model.pipeline.PipelineRepeatMode
 import com.tapflow.core.model.script.Script
@@ -195,7 +197,8 @@ class HomeViewModel @Inject constructor(
                 val matchingItems =
                   entry.items.filter { item ->
                     item.appName.contains(query, ignoreCase = true) ||
-                      item.packageName.contains(query, ignoreCase = true)
+                      item.packageName.contains(query, ignoreCase = true) ||
+                      matchesInspectOrientationQuery(item, query)
                   }
                 if (matchingItems.isNotEmpty()) entry.copy(items = matchingItems) else null
               }
@@ -802,5 +805,23 @@ class HomeViewModel @Inject constructor(
     viewModelScope.launch {
       _effects.send(effect)
     }
+  }
+
+  private fun matchesInspectOrientationQuery(item: InspectItem, query: String): Boolean {
+    val compactQuery = query.replace(" ", "").replace("×", "x")
+    val dimsCompact = "${item.screenWidth}x${item.screenHeight}"
+    if (dimsCompact.contains(compactQuery, ignoreCase = true)) return true
+
+    val keywords =
+      when (item.screenOrientation) {
+        ScreenOrientation.PORTRAIT -> listOf("portrait", "直向", "竖向")
+        ScreenOrientation.LANDSCAPE -> listOf("landscape", "橫向", "横向")
+        ScreenOrientation.SQUARE_UNFOLDED ->
+          listOf("unfolded", "fold", "foldable", "square", "展開", "展開螢幕", "展开", "展开屏幕")
+      }
+    if (keywords.any { it.contains(query, ignoreCase = true) || query.contains(it, ignoreCase = true) }) {
+      return true
+    }
+    return item.orientationSubHint?.contains(query, ignoreCase = true) == true
   }
 }
