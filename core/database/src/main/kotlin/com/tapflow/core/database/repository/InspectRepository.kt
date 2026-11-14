@@ -45,6 +45,8 @@ class InspectRepository @Inject constructor(
 
   suspend fun getItem(itemId: String): InspectItem? = inspectDao.getItemById(itemId)?.toDomain()
 
+  suspend fun countGroups(): Int = inspectDao.countGroups()
+
   suspend fun saveGroup(group: InspectGroup) {
     val normalized =
       if (group.createdAtMs <= 0L) group.copy(createdAtMs = System.currentTimeMillis()) else group

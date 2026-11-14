@@ -92,6 +92,9 @@ interface InspectDao {
   @Insert(onConflict = OnConflictStrategy.REPLACE)
   suspend fun upsertItem(item: InspectItemEntity)
 
+  @Query("SELECT COUNT(*) FROM inspect_groups")
+  suspend fun countGroups(): Int
+
   @Query("DELETE FROM inspect_groups WHERE id = :groupId")
   suspend fun deleteGroupById(groupId: String)
 

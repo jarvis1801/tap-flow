@@ -93,6 +93,8 @@ import com.tapflow.core.service.engine.AutomationRunnerEngine
 import com.tapflow.core.service.engine.PipelineExecutionEngine
 import com.tapflow.core.service.engine.RunnerControlHub
 import com.tapflow.core.service.engine.RunnerPhase
+import com.tapflow.core.service.projection.MediaProjectionBridge
+import com.tapflow.core.service.projection.ScreenCaptureState
 import com.tapflow.core.service.shizuku.ShizukuManager
 import com.tapflow.core.service.vision.ZeroAllocVisionEngine
 import dagger.hilt.android.AndroidEntryPoint
@@ -153,6 +155,7 @@ class OverlayService :
   @Inject lateinit var automationRunnerEngine: AutomationRunnerEngine
   @Inject lateinit var pipelineExecutionEngine: PipelineExecutionEngine
   @Inject lateinit var gesturePickerBridge: GesturePickerBridge
+  @Inject lateinit var mediaProjectionBridge: MediaProjectionBridge
   @Inject lateinit var optionalContentProvider: Optional<OverlayContentProvider>
 
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -181,8 +184,12 @@ class OverlayService :
 
   private val uiState = MutableStateFlow(OverlayUiState())
 
-  // Recording & Inspect session accumulators
+  // Active runner target & Recording / Inspect session accumulators
+  private var activeRunnerTargetId: String? = null
   private var activeInspectGroupId: String? = null
+  private var activeInspectGroupTitle: String? = null
+  private var activeInspectGroupTags: List<String> = emptyList()
+  private var inspectGroupPersisted: Boolean = false
   private var recordedActions = mutableListOf<ScriptAction>()
   private var lastRecordedActionCompletedAtMs: Long? = null
   private var isProcessingGesture = false
@@ -190,7 +197,22 @@ class OverlayService :
   private val callbacks =
     object : OverlayCallbacks {
       override fun onPlayPause() {
-        runnerControlHub.togglePlayPause()
+        val snap = uiState.value.runnerSnapshot
+        val targetId = activeRunnerTargetId
+        if (targetId != null &&
+          (snap.phase == RunnerPhase.COMPLETED ||
+            snap.phase == RunnerPhase.FAILED ||
+            snap.phase == RunnerPhase.STOPPED ||
+            snap.phase == RunnerPhase.IDLE)
+        ) {
+          when (uiState.value.mode) {
+            OverlayMode.RUNNER_SCRIPT -> startScriptRunnerMode(targetId)
+            OverlayMode.RUNNER_PIPELINE -> startPipelineRunnerMode(targetId)
+            else -> Unit
+          }
+        } else {
+          runnerControlHub.togglePlayPause()
+        }
       }
 
       override fun onPreviousStep() {
@@ -205,10 +227,58 @@ class OverlayService :
         when (uiState.value.mode) {
           OverlayMode.RUNNER_SCRIPT,
           OverlayMode.RUNNER_PIPELINE -> runnerControlHub.stopExecution()
-          OverlayMode.LIVE_RECORDER -> finalizeAndSaveRecordedScript()
-          OverlayMode.LIVE_INSPECTOR -> stopCaptureModeAndClose()
+          OverlayMode.LIVE_RECORDER -> stopRecorderAndSaveSession(closeAfter = false)
+          OverlayMode.LIVE_INSPECTOR -> pauseCaptureListening()
           OverlayMode.GESTURE_PICKER -> cancelPickerAndReturnToApp()
           OverlayMode.IDLE -> Unit
+        }
+      }
+
+      override fun onToggleCaptureListening() {
+        when (uiState.value.mode) {
+          OverlayMode.GESTURE_PICKER -> {
+            val nextActive = !uiState.value.isCaptureActive
+            setCaptureLayerInterceptable(visible = nextActive, interceptable = nextActive)
+            uiState.update {
+              it.copy(
+                isCaptureActive = nextActive,
+                capturePhase =
+                  if (nextActive) OverlayCapturePhase.INTERCEPTING
+                  else OverlayCapturePhase.IDLE,
+                touchPreview = null,
+                statusHint =
+                  if (nextActive) "Touch or drag on target location"
+                  else "Pick paused — navigate app then tap Inspect",
+              )
+            }
+          }
+
+          OverlayMode.LIVE_RECORDER -> {
+            if (uiState.value.isCaptureActive) {
+              stopRecorderAndSaveSession(closeAfter = false)
+            } else {
+              resumeOrRestartRecorderSession()
+            }
+          }
+
+          OverlayMode.LIVE_INSPECTOR -> {
+            val nextActive = !uiState.value.isCaptureActive
+            setCaptureLayerInterceptable(visible = nextActive, interceptable = nextActive)
+            uiState.update {
+              it.copy(
+                isCaptureActive = nextActive,
+                capturePhase =
+                  if (nextActive) OverlayCapturePhase.INTERCEPTING
+                  else OverlayCapturePhase.IDLE,
+                touchPreview = null,
+                statusHint =
+                  if (nextActive) "Tap screen to capture inspect targets"
+                  else "Inspect paused — tap Inspect to resume",
+              )
+            }
+          }
+
+          else -> Unit
         }
       }
 
@@ -218,10 +288,11 @@ class OverlayService :
 
       override fun onCloseOverlay() {
         when (uiState.value.mode) {
-          OverlayMode.LIVE_RECORDER -> finalizeAndSaveRecordedScript(closeAfter = true)
+          OverlayMode.LIVE_RECORDER -> stopRecorderAndSaveSession(closeAfter = true)
           OverlayMode.GESTURE_PICKER -> cancelPickerAndReturnToApp()
           else -> {
             runnerControlHub.stopExecution()
+            bringMainActivityToFrontPreservingState()
             closeOverlayService()
           }
         }
@@ -229,6 +300,14 @@ class OverlayService :
 
       override fun onCancelCaptureMode() {
         onStopExecution()
+      }
+
+      override fun onDismissCaptureAlert() {
+        uiState.update { it.copy(captureAlertMessage = null) }
+      }
+
+      override fun onReturnToTapFlow() {
+        bringMainActivityToFrontPreservingState()
       }
 
       override fun onDragDelta(dx: Float, dy: Float) {
@@ -262,6 +341,24 @@ class OverlayService :
     serviceScope.launch {
       runnerControlHub.snapshot.collectLatest { snapshot ->
         uiState.update { it.copy(runnerSnapshot = snapshot) }
+      }
+    }
+
+    serviceScope.launch {
+      mediaProjectionBridge.captureState.collectLatest { captureState ->
+        uiState.update { current ->
+          val alert =
+            when (captureState) {
+              is ScreenCaptureState.StoppedBySystem -> captureState.reason
+              is ScreenCaptureState.Error -> captureState.message
+              is ScreenCaptureState.Active -> null
+              ScreenCaptureState.Idle -> current.captureAlertMessage
+            }
+          current.copy(
+            captureState = captureState,
+            captureAlertMessage = alert,
+          )
+        }
       }
     }
   }
@@ -436,11 +533,15 @@ class OverlayService :
   }
 
   private fun startScriptRunnerMode(scriptId: String) {
+    activeRunnerTargetId = scriptId
     setCaptureLayerInterceptable(visible = false, interceptable = false)
     uiState.update {
       it.copy(
         mode = OverlayMode.RUNNER_SCRIPT,
+        isCaptureActive = false,
         capturePhase = OverlayCapturePhase.IDLE,
+        pickerTargetType = null,
+        touchPreview = null,
         statusHint = null,
       )
     }
@@ -455,11 +556,15 @@ class OverlayService :
   }
 
   private fun startPipelineRunnerMode(pipelineId: String) {
+    activeRunnerTargetId = pipelineId
     setCaptureLayerInterceptable(visible = false, interceptable = false)
     uiState.update {
       it.copy(
         mode = OverlayMode.RUNNER_PIPELINE,
+        isCaptureActive = false,
         capturePhase = OverlayCapturePhase.IDLE,
+        pickerTargetType = null,
+        touchPreview = null,
         statusHint = null,
       )
     }
@@ -474,11 +579,15 @@ class OverlayService :
   }
 
   private fun startGesturePickerMode(requestId: String, targetType: GesturePickerTargetType) {
+    activeRunnerTargetId = null
     gesturePickerBridge.beginPick(requestId, targetType)
     uiState.update {
       it.copy(
         mode = OverlayMode.GESTURE_PICKER,
+        isCaptureActive = true,
         capturePhase = OverlayCapturePhase.INTERCEPTING,
+        pickerTargetType = targetType,
+        touchPreview = null,
         statusHint = "Touch or drag on target location",
       )
     }
@@ -486,51 +595,70 @@ class OverlayService :
   }
 
   private fun startLiveRecorderMode() {
+    activeRunnerTargetId = null
     recordedActions.clear()
     lastRecordedActionCompletedAtMs = null
     activeInspectGroupId = UUID.randomUUID().toString()
+    val stamp = SimpleDateFormat("MMM dd HH:mm", Locale.US).format(Date())
+    activeInspectGroupTitle = "Recorded Session $stamp"
+    activeInspectGroupTags = listOf("recorded")
+    inspectGroupPersisted = false
     uiState.update {
       it.copy(
         mode = OverlayMode.LIVE_RECORDER,
+        isCaptureActive = true,
         capturePhase = OverlayCapturePhase.INTERCEPTING,
+        pickerTargetType = null,
+        touchPreview = null,
         recordedActionCount = 0,
+        lastSavedScriptTitle = null,
         statusHint = "Recording live gestures",
       )
     }
-    serviceScope.launch {
-      val stamp = SimpleDateFormat("MMM dd HH:mm", Locale.US).format(Date())
-      inspectRepository.saveGroup(
-        InspectGroup(
-          id = activeInspectGroupId!!,
-          title = "Recorded Session $stamp",
-          tags = listOf("recorded"),
-          createdAtMs = System.currentTimeMillis(),
-        ),
+    setCaptureLayerInterceptable(visible = true, interceptable = true)
+  }
+
+  private fun resumeOrRestartRecorderSession() {
+    recordedActions.clear()
+    lastRecordedActionCompletedAtMs = null
+    activeInspectGroupId = UUID.randomUUID().toString()
+    val stamp = SimpleDateFormat("MMM dd HH:mm", Locale.US).format(Date())
+    activeInspectGroupTitle = "Recorded Session $stamp"
+    activeInspectGroupTags = listOf("recorded")
+    inspectGroupPersisted = false
+    uiState.update {
+      it.copy(
+        isCaptureActive = true,
+        capturePhase = OverlayCapturePhase.INTERCEPTING,
+        touchPreview = null,
+        recordedActionCount = 0,
+        lastSavedScriptTitle = null,
+        statusHint = "Recording live gestures",
       )
     }
     setCaptureLayerInterceptable(visible = true, interceptable = true)
   }
 
   private fun startLiveInspectorMode() {
+    activeRunnerTargetId = null
     activeInspectGroupId = UUID.randomUUID().toString()
+    activeInspectGroupTitle = null
+    activeInspectGroupTags = listOf("live_inspect")
+    inspectGroupPersisted = false
     uiState.update {
       it.copy(
         mode = OverlayMode.LIVE_INSPECTOR,
+        isCaptureActive = true,
         capturePhase = OverlayCapturePhase.INTERCEPTING,
+        pickerTargetType = null,
+        touchPreview = null,
         inspectedItemCount = 0,
         statusHint = "Tap screen to capture inspect targets",
       )
     }
     serviceScope.launch {
-      val stamp = SimpleDateFormat("MMM dd HH:mm", Locale.US).format(Date())
-      inspectRepository.saveGroup(
-        InspectGroup(
-          id = activeInspectGroupId!!,
-          title = "Live Inspect $stamp",
-          tags = listOf("live_inspect"),
-          createdAtMs = System.currentTimeMillis(),
-        ),
-      )
+      val existingCount = inspectRepository.countGroups()
+      activeInspectGroupTitle = "InspectGroup (${existingCount + 1})"
     }
     setCaptureLayerInterceptable(visible = true, interceptable = true)
   }
@@ -543,7 +671,7 @@ class OverlayService :
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouch(v: View?, event: MotionEvent): Boolean {
-      if (isProcessingGesture) return true
+      if (isProcessingGesture || !uiState.value.isCaptureActive) return true
       val mode = uiState.value.mode
       if (mode != OverlayMode.GESTURE_PICKER &&
         mode != OverlayMode.LIVE_RECORDER &&
@@ -555,6 +683,7 @@ class OverlayService :
       // Strictly read physical rawX / rawY coordinates to avoid Status Bar offsets
       val rx = event.rawX.coerceAtLeast(0f)
       val ry = event.rawY.coerceAtLeast(0f)
+      val secondaryPoints = extractSecondaryRawPoints(event, rx, ry)
 
       when (event.actionMasked) {
         MotionEvent.ACTION_DOWN -> {
@@ -563,6 +692,43 @@ class OverlayService :
           downRawY = ry
           downTimeMs = SystemClock.uptimeMillis()
           pathPoints += Point2D(rx.roundToInt(), ry.roundToInt())
+          uiState.update {
+            it.copy(
+              touchPreview =
+                OverlayTouchPreview(
+                  isTouching = true,
+                  startX = rx,
+                  startY = ry,
+                  currentX = rx,
+                  currentY = ry,
+                  pathPoints = pathPoints.toList(),
+                  secondaryPoints = secondaryPoints,
+                  durationMs = 0L,
+                ),
+            )
+          }
+          return true
+        }
+
+        MotionEvent.ACTION_POINTER_DOWN,
+        MotionEvent.ACTION_POINTER_UP -> {
+          val elapsed = (SystemClock.uptimeMillis() - downTimeMs).coerceAtLeast(0L)
+          uiState.update {
+            it.copy(
+              touchPreview =
+                OverlayTouchPreview(
+                  isTouching = true,
+                  startX = downRawX,
+                  startY = downRawY,
+                  currentX = rx,
+                  currentY = ry,
+                  pathPoints = pathPoints.toList(),
+                  secondaryPoints = secondaryPoints,
+                  durationMs = elapsed,
+                  isLongPress = elapsed >= LONG_PRESS_THRESHOLD_MS,
+                ),
+            )
+          }
           return true
         }
 
@@ -572,6 +738,26 @@ class OverlayService :
           val py = ry.roundToInt()
           if (last == null || hypot((px - last.x).toDouble(), (py - last.y).toDouble()) >= 6.0) {
             pathPoints += Point2D(px, py)
+          }
+          val elapsed = (SystemClock.uptimeMillis() - downTimeMs).coerceAtLeast(0L)
+          val dist = hypot((rx - downRawX).toDouble(), (ry - downRawY).toDouble()).toFloat()
+          val isDrag = dist >= MOVE_THRESHOLD_PX
+          uiState.update {
+            it.copy(
+              touchPreview =
+                OverlayTouchPreview(
+                  isTouching = true,
+                  startX = downRawX,
+                  startY = downRawY,
+                  currentX = rx,
+                  currentY = ry,
+                  pathPoints = pathPoints.toList(),
+                  secondaryPoints = secondaryPoints,
+                  durationMs = elapsed,
+                  isLongPress = !isDrag && elapsed >= LONG_PRESS_THRESHOLD_MS,
+                  isDrag = isDrag,
+                ),
+            )
           }
           return true
         }
@@ -587,6 +773,7 @@ class OverlayService :
           }
           val durationMs = (SystemClock.uptimeMillis() - downTimeMs).coerceAtLeast(50L)
           val capturedPoints = pathPoints.toList()
+          uiState.update { it.copy(touchPreview = null) }
           isProcessingGesture = true
           serviceScope.launch {
             try {
@@ -607,6 +794,23 @@ class OverlayService :
         }
       }
       return false
+    }
+
+    private fun extractSecondaryRawPoints(
+      event: MotionEvent,
+      primaryRawX: Float,
+      primaryRawY: Float,
+    ): List<Point2D> {
+      if (event.pointerCount <= 1) return emptyList()
+      val offsetX = primaryRawX - event.getX(0)
+      val offsetY = primaryRawY - event.getY(0)
+      return buildList {
+        for (i in 1 until event.pointerCount) {
+          val sx = (event.getX(i) + offsetX).coerceAtLeast(0f).roundToInt()
+          val sy = (event.getY(i) + offsetY).coerceAtLeast(0f).roundToInt()
+          add(Point2D(sx, sy))
+        }
+      }
     }
   }
 
@@ -630,8 +834,13 @@ class OverlayService :
     // Step 1 completed -> Step 2: Pre-Replay Capture (Modes 3 & 4) with highlights hidden
     var preReplayBitmap: Bitmap? = null
     if (mode == OverlayMode.LIVE_RECORDER || mode == OverlayMode.LIVE_INSPECTOR) {
-      uiState.update { it.copy(capturePhase = OverlayCapturePhase.CAPTURING_CLEAN_FRAME) }
-      delay(35L)
+      uiState.update {
+        it.copy(
+          capturePhase = OverlayCapturePhase.CAPTURING_CLEAN_FRAME,
+          touchPreview = null,
+        )
+      }
+      delay(40L)
       preReplayBitmap = visionEngine.captureCleanBitmap(useShizukuFallback = prefs.shizuku.silentScreenshots)
     }
 
@@ -700,10 +909,15 @@ class OverlayService :
       preReplayBitmap?.recycle()
     }
 
-    // Step 5: Restore interceptable state for next gesture (Modes 3 & 4)
-    uiState.update { it.copy(capturePhase = OverlayCapturePhase.RESTORING) }
-    setCaptureLayerInterceptable(visible = true, interceptable = true)
-    uiState.update { it.copy(capturePhase = OverlayCapturePhase.INTERCEPTING) }
+    // Step 5: Restore interceptable state for next gesture (Modes 3 & 4) if capture is still active
+    if (uiState.value.isCaptureActive) {
+      uiState.update { it.copy(capturePhase = OverlayCapturePhase.RESTORING) }
+      setCaptureLayerInterceptable(visible = true, interceptable = true)
+      uiState.update { it.copy(capturePhase = OverlayCapturePhase.INTERCEPTING) }
+    } else {
+      setCaptureLayerInterceptable(visible = false, interceptable = false)
+      uiState.update { it.copy(capturePhase = OverlayCapturePhase.IDLE) }
+    }
   }
 
   private suspend fun replayGestureToTargetApp(
@@ -840,6 +1054,7 @@ class OverlayService :
     tapY: Int,
     includeDefaultCrop: Boolean,
   ) {
+    ensureInspectGroupPersisted(groupId)
     val itemId = UUID.randomUUID().toString()
     val fullScreenFile = File(scriptAssetManager.getInspectScreensDir(), "scr_${itemId}.png")
     if (!visionEngine.saveLosslessPng(bitmap, fullScreenFile)) return
@@ -904,6 +1119,22 @@ class OverlayService :
     )
   }
 
+  private suspend fun ensureInspectGroupPersisted(groupId: String) {
+    if (inspectGroupPersisted) return
+    val existingCount = inspectRepository.countGroups()
+    val resolvedTitle =
+      activeInspectGroupTitle ?: "InspectGroup (${existingCount + 1})"
+    inspectRepository.saveGroup(
+      InspectGroup(
+        id = groupId,
+        title = resolvedTitle,
+        tags = activeInspectGroupTags,
+        createdAtMs = System.currentTimeMillis(),
+      ),
+    )
+    inspectGroupPersisted = true
+  }
+
   private fun resolveAppLabel(packageName: String): String {
     if (packageName.isBlank()) return "Screen Capture"
     return runCatching {
@@ -912,18 +1143,29 @@ class OverlayService :
     }.getOrDefault(packageName)
   }
 
-  private fun finalizeAndSaveRecordedScript(closeAfter: Boolean = true) {
+  private fun stopRecorderAndSaveSession(closeAfter: Boolean) {
     val captured = recordedActions.toList()
     recordedActions.clear()
     lastRecordedActionCompletedAtMs = null
 
+    setCaptureLayerInterceptable(visible = false, interceptable = false)
+    uiState.update {
+      it.copy(
+        isCaptureActive = false,
+        capturePhase = OverlayCapturePhase.IDLE,
+        touchPreview = null,
+      )
+    }
+
     serviceScope.launch {
+      var savedTitle: String? = null
       if (captured.isNotEmpty()) {
         val stamp = SimpleDateFormat("MMM dd HH:mm", Locale.US).format(Date())
+        savedTitle = "Recorded Script $stamp"
         scriptRepository.saveScript(
           Script(
             id = UUID.randomUUID().toString(),
-            title = "Recorded Script $stamp",
+            title = savedTitle,
             description = "Captured via Floating Recorder",
             tags = listOf("recorded"),
             actions = captured,
@@ -934,8 +1176,27 @@ class OverlayService :
         bringMainActivityToFrontPreservingState()
         closeOverlayService()
       } else {
-        stopCaptureModeAndClose()
+        uiState.update {
+          it.copy(
+            lastSavedScriptTitle = savedTitle,
+            statusHint =
+              if (savedTitle != null) "Saved \"$savedTitle\" (${captured.size} steps)"
+              else "Recording stopped — tap Record to start again",
+          )
+        }
       }
+    }
+  }
+
+  private fun pauseCaptureListening() {
+    setCaptureLayerInterceptable(visible = false, interceptable = false)
+    uiState.update {
+      it.copy(
+        isCaptureActive = false,
+        capturePhase = OverlayCapturePhase.IDLE,
+        touchPreview = null,
+        statusHint = "Inspect paused — tap Inspect to resume",
+      )
     }
   }
 
@@ -943,17 +1204,6 @@ class OverlayService :
     gesturePickerBridge.cancelPendingPick()
     setCaptureLayerInterceptable(visible = false, interceptable = false)
     bringMainActivityToFrontPreservingState()
-    closeOverlayService()
-  }
-
-  private fun stopCaptureModeAndClose() {
-    setCaptureLayerInterceptable(visible = false, interceptable = false)
-    uiState.update {
-      it.copy(
-        mode = OverlayMode.IDLE,
-        capturePhase = OverlayCapturePhase.IDLE,
-      )
-    }
     closeOverlayService()
   }
 

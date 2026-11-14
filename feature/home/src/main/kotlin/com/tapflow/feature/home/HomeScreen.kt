@@ -85,6 +85,7 @@ fun HomeScreen(
   onNavigateToPipelineLog: (String) -> Unit,
   onNavigateToInspectStudio: (String) -> Unit,
   modifier: Modifier = Modifier,
+  onRequestMediaProjection: ((PendingMediaProjectionTarget, onDenied: () -> Unit) -> Unit)? = null,
   viewModel: HomeViewModel = hiltViewModel(),
 ) {
   val context = LocalContext.current
@@ -173,10 +174,17 @@ fun HomeScreen(
         is HomeUiEffect.NavigateToPipelineLog -> onNavigateToPipelineLog(effect.pipelineId)
         is HomeUiEffect.NavigateToInspectStudio -> onNavigateToInspectStudio(effect.inspectItemId)
         is HomeUiEffect.RequestMediaProjectionPermission -> {
-          pendingConsentTarget = effect.target
-          val mgr =
-            context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-          mediaProjectionLauncher.launch(mgr.createScreenCaptureIntent())
+          val activityHandler = onRequestMediaProjection
+          if (activityHandler != null) {
+            activityHandler(effect.target) {
+              viewModel.onIntent(HomeUiIntent.MediaProjectionDenied)
+            }
+          } else {
+            pendingConsentTarget = effect.target
+            val mgr =
+              context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            mediaProjectionLauncher.launch(mgr.createScreenCaptureIntent())
+          }
         }
         is HomeUiEffect.LaunchOverlayAndMinimize -> {
           launchOverlayForTarget(context, effect.target)

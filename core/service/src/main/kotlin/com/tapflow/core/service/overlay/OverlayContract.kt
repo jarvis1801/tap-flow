@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import com.tapflow.core.model.action.Point2D
 import com.tapflow.core.service.engine.RunnerExecutionSnapshot
+import com.tapflow.core.service.projection.ScreenCaptureState
 import dagger.BindsOptionalOf
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -29,14 +31,34 @@ enum class OverlayCapturePhase {
 }
 
 @Immutable
+data class OverlayTouchPreview(
+  val isTouching: Boolean = false,
+  val startX: Float = 0f,
+  val startY: Float = 0f,
+  val currentX: Float = 0f,
+  val currentY: Float = 0f,
+  val pathPoints: List<Point2D> = emptyList(),
+  val secondaryPoints: List<Point2D> = emptyList(),
+  val durationMs: Long = 0L,
+  val isLongPress: Boolean = false,
+  val isDrag: Boolean = false,
+)
+
+@Immutable
 data class OverlayUiState(
   val mode: OverlayMode = OverlayMode.IDLE,
   val isBubbleCollapsed: Boolean = false,
   val isDockedOnRight: Boolean = false,
+  val isCaptureActive: Boolean = true,
   val capturePhase: OverlayCapturePhase = OverlayCapturePhase.IDLE,
+  val pickerTargetType: GesturePickerTargetType? = null,
+  val touchPreview: OverlayTouchPreview? = null,
   val runnerSnapshot: RunnerExecutionSnapshot = RunnerExecutionSnapshot(),
+  val captureState: ScreenCaptureState = ScreenCaptureState.Idle,
+  val captureAlertMessage: String? = null,
   val recordedActionCount: Int = 0,
   val inspectedItemCount: Int = 0,
+  val lastSavedScriptTitle: String? = null,
   val statusHint: String? = null,
 )
 
@@ -45,9 +67,12 @@ interface OverlayCallbacks {
   fun onPreviousStep()
   fun onNextStep()
   fun onStopExecution()
+  fun onToggleCaptureListening()
   fun onToggleBubbleCollapse()
   fun onCloseOverlay()
   fun onCancelCaptureMode()
+  fun onDismissCaptureAlert()
+  fun onReturnToTapFlow()
   fun onDragDelta(dx: Float, dy: Float)
   fun onDragEnd()
 }

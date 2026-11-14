@@ -1,4 +1,4 @@
-package com.example.ui.boot
+package com.jarvis.ui.boot
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -37,8 +37,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.example.R
-import com.example.ui.theme.TapFlowTheme
+import com.jarvis.R
+import com.jarvis.ui.theme.TapFlowTheme
 
 @Composable
 fun Phase1BootScreen(

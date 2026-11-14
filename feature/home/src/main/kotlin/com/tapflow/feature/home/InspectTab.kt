@@ -545,7 +545,7 @@ private fun InspectTabPreview() {
                       screenWidth = 1080,
                       screenHeight = 2400,
                       appName = "Fantasy Quest",
-                      packageName = "com.example.game",
+                      packageName = "com.jarvis.game",
                       pixels =
                         listOf(
                           InspectPixel("px1", "Confirm Gold", 540, 1820, "#FFC107"),

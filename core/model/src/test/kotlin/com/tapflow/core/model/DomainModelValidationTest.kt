@@ -30,7 +30,7 @@ class DomainModelValidationTest {
     val leaf =
       ConditionLeaf(
         id = "leaf-1",
-        predicate = ConditionPredicate.AppMatch("com.example.game", "Game"),
+        predicate = ConditionPredicate.AppMatch("com.jarvis.game", "Game"),
       )
     val level3 = ConditionGroup(id = "g3", operator = LogicOperator.ALL, children = listOf(leaf))
     val level2 = ConditionGroup(id = "g2", operator = LogicOperator.ANY, children = listOf(level3))
