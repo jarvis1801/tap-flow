@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TapFlow</string>
+    <string name="accessibility_service_description">TapFlow 使用无障碍服务执行自动触控手势、系统按键操作及检测当前前台应用。</string>
+    <string name="boot_shell_title">TapFlow 核心已就绪</string>
+    <string name="boot_shell_subtitle">第一阶段架构与领域模型骨架</string>
+    <string name="boot_shell_status_label">多模块构建已启用</string>
+    <string name="boot_shell_cta_continue">继续</string>
+</resources>

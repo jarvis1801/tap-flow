@@ -1,0 +1,40 @@
+pluginManagement {
+  repositories {
+    google {
+      content {
+        includeGroupByRegex("com\\.android.*")
+        includeGroupByRegex("com\\.google.*")
+        includeGroupByRegex("androidx.*")
+      }
+    }
+    mavenCentral()
+    gradlePluginPortal()
+  }
+}
+
+plugins { id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0" }
+
+dependencyResolutionManagement {
+  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+  repositories {
+    google()
+    mavenCentral()
+  }
+}
+
+rootProject.name = "TapFlow"
+
+include(":app")
+include(":core:model")
+include(":core:database")
+include(":core:datastore")
+include(":core:billing")
+include(":core:server")
+include(":core:service")
+include(":feature:onboarding")
+include(":feature:paywall")
+include(":feature:home")
+include(":feature:editor")
+include(":feature:logs")
+include(":feature:studio")
+include(":feature:overlay")
