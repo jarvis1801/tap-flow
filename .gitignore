@@ -1,18 +1,57 @@
-*.iml
-.gradle
-.kotlin
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+# ==============================================================================
+# TapFlow Root .gitignore
+# Kotlin 2.x Multi-Module Android Project with build-logic Convention Plugins
+# ==============================================================================
+
+# Gradle & Kotlin compiler caches
+.gradle/
+**/.gradle/
+.kotlin/
+**/.kotlin/
+build-logic/.gradle/
+build-logic/.kotlin/
+
+# Build outputs (root, all subprojects, and build-logic)
+/build/
+**/build/
+build-logic/build/
+build-logic/**/build/
+captures/
+
+# Keep Gradle wrapper, version catalog, architecture spec, and Room schemas tracked
+!gradle/wrapper/
+!gradle/wrapper/**
+!gradle/libs.versions.toml
+!ARCHITECTURE_SPEC.md
+!**/schemas/
+!**/schemas/**
+
+# Local configuration & secrets
 local.properties
+secrets.properties
+keystore.properties
 .env
-debug.keystore
+!.env.example
+
+# IDE files
+.idea/
+*.iml
+
+# Native build artifacts
+.cxx/
+.externalNativeBuild/
+
+# Android packages & signing keys
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# TapFlow exported scripts & scratch artifacts
+.tapflow
+*.tapflow
+
+# OS temporary files
+.DS_Store
+Thumbs.db
+Desktop.ini
