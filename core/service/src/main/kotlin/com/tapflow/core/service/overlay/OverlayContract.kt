@@ -21,6 +21,12 @@ enum class OverlayMode {
   LIVE_INSPECTOR,
 }
 
+enum class OverlaySessionState {
+  STANDBY,
+  ACTIVE,
+  PAUSED,
+}
+
 enum class OverlayCapturePhase {
   IDLE,
   INTERCEPTING,
@@ -47,9 +53,10 @@ data class OverlayTouchPreview(
 @Immutable
 data class OverlayUiState(
   val mode: OverlayMode = OverlayMode.IDLE,
+  val sessionState: OverlaySessionState = OverlaySessionState.STANDBY,
   val isBubbleCollapsed: Boolean = false,
   val isDockedOnRight: Boolean = false,
-  val isCaptureActive: Boolean = true,
+  val isCaptureActive: Boolean = sessionState == OverlaySessionState.ACTIVE,
   val capturePhase: OverlayCapturePhase = OverlayCapturePhase.IDLE,
   val pickerTargetType: GesturePickerTargetType? = null,
   val touchPreview: OverlayTouchPreview? = null,
@@ -68,6 +75,9 @@ interface OverlayCallbacks {
   fun onNextStep()
   fun onStopExecution()
   fun onToggleCaptureListening()
+  fun onStartOrResumeCapture()
+  fun onPauseCapture()
+  fun onStopCapture()
   fun onToggleBubbleCollapse()
   fun onCloseOverlay()
   fun onCancelCaptureMode()

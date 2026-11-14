@@ -486,16 +486,16 @@ Service Architecture & Window Rules:
 
 Touch Intercept & Passthrough Execution State Machine (Modes 2, 3, 4):
   1. Intercept Phase: Full-screen transparent capture overlay intercepts `ACTION_DOWN -> ACTION_MOVE -> ACTION_UP`, recording `rawX / rawY`, trajectory, and duration.
-  2. Pre-Replay Capture (Modes 3 & 4): Immediately BEFORE replaying the touch (with highlight UI hidden), captures clean full-screen frame via `MediaProjection` / Shizuku.
-  3. Passthrough Disable Phase: Switches full-screen capture layer to `FLAG_NOT_TOUCHABLE`.
-  4. Gesture Replay Phase: Dispatches recorded gesture to underlying app via `AccessibilityService.dispatchGesture()` (awaiting `onCompleted()`) or Shizuku.
-  5. Restore Phase: Restores capture layer to interceptable state for next gesture (or exits in Mode 2).
+  2. Pre-Replay Capture (Modes 3 & 4): Immediately BEFORE replaying the touch (with highlight UI hidden — skipped on Mode 4 swipe/scroll drags), captures clean full-screen frame via `MediaProjection` / Shizuku.
+  3. Passthrough Disable Phase: Hides capture window (`View.GONE`) AND sets `FLAG_NOT_TOUCHABLE` with a brief synchronization yield (~40ms) so `InputDispatcher` drops window interception cleanly.
+  4. Gesture Replay Phase: Dispatches recorded gesture (tap, long press, or swipe/scroll path) to underlying app via `AccessibilityService.dispatchGesture()` (awaiting `onCompleted()`) or Shizuku.
+  5. Restore Phase: Restores capture layer to interceptable state for next gesture ONLY if `sessionState == ACTIVE` (or exits in Mode 2).
 
 Modes:
   - Mode 1 (Runner): Play/Pause, Previous (`⏮`: decrements top-level action index only; does NOT roll back Variables or external app state), Progress `[Current Top-Level Action / Total Top-Level Actions]`, Next (`⏭`: executes 1 top-level action/block atomically), Stop (`⏹`), Close (`✕`).
   - Mode 2 (Gesture Picker): Activated via `[Pick via Overlay]` (`moveTaskToBack`). Captures 1 gesture via state machine, writes result to singleton `GesturePickerBridge`, and brings TapFlow back via `FLAG_ACTIVITY_REORDER_TO_FRONT | FLAG_ACTIVITY_SINGLE_TOP` (or `PendingIntent` with `ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS`) without resetting the open Action BottomSheet.
-  - Mode 3 (Live Script Recorder): Requires `MediaProjection` (or Shizuku Silent Screenshot). Starts inter-action delay timer ONLY after the 1st gesture executes. Auto-captures full-screen 100% Lossless PNG + Pixel target per click into 1 `InspectGroup`. `[Stop]`/`[Close]` saves new `Script`.
-  - Mode 4 (Live Image & Target Inspector [Pro]): Requires `MediaProjection` (or Shizuku Silent Screenshot). Every click captures full-screen 100% Lossless PNG + Foreground App Name/Package as an `InspectItem` with initial Pixel target + default `64 × 64 px` centered Crop target (ensuring `[Open Studio]` always has the full-screen canvas).
+  - Mode 3 (Live Script Recorder): Requires `MediaProjection` (or Shizuku Silent Screenshot). Starts in `STANDBY` (passthrough allowed) so users can open their target app before tapping `[Record]`. Supports `Start -> Pause -> Resume -> Stop` (`OverlaySessionState`); `[Pause]` preserves recorded actions and `InspectGroup`, adjusts inter-action pause gaps, and allows free navigation; `[Stop]`/`[Close]` compiles and saves the `Script` and returns to `STANDBY`/TapFlow. Starts inter-action delay timer ONLY after the 1st gesture executes.
+  - Mode 4 (Live Image & Target Inspector [Pro]): Requires `MediaProjection` (or Shizuku Silent Screenshot). Starts in `STANDBY` (passthrough allowed) until user taps `[Inspect]`, which creates a new `InspectGroup`. Supports `Start -> Pause -> Resume -> Stop`; `[Pause]` re-enables full touch passthrough while keeping the active `InspectGroup` open so `[Resume]` continues adding items to the exact same group, and `[Stop]` finalizes/clears the group session back to `STANDBY`. During active inspection, taps/long-presses replay cleanly to the underlying app AND capture full-screen 100% Lossless PNG + Foreground App Name/Package + Pixel + `64 × 64 px` Crop, while swipe/drag scrolls replay cleanly to the underlying app without creating spurious tap snapshots.
 
 ---
 

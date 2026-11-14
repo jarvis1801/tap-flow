@@ -44,6 +44,7 @@ import com.tapflow.core.model.action.Point2D
 import com.tapflow.core.service.overlay.GesturePickerTargetType
 import com.tapflow.core.service.overlay.OverlayCapturePhase
 import com.tapflow.core.service.overlay.OverlayMode
+import com.tapflow.core.service.overlay.OverlaySessionState
 import com.tapflow.core.service.overlay.OverlayTouchPreview
 import com.tapflow.core.service.overlay.OverlayUiState
 import com.tapflow.core.service.theme.TapFlowTheme
@@ -423,6 +424,7 @@ private fun OverlayCaptureFeedbackSwipePreview() {
         state =
           OverlayUiState(
             mode = OverlayMode.GESTURE_PICKER,
+            sessionState = OverlaySessionState.ACTIVE,
             isCaptureActive = true,
             capturePhase = OverlayCapturePhase.INTERCEPTING,
             pickerTargetType = GesturePickerTargetType.SWIPE_PATH,

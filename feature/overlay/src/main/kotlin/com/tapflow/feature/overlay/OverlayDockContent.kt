@@ -59,6 +59,7 @@ import com.tapflow.core.service.engine.RunnerPhase
 import com.tapflow.core.service.overlay.GesturePickerTargetType
 import com.tapflow.core.service.overlay.OverlayCallbacks
 import com.tapflow.core.service.overlay.OverlayMode
+import com.tapflow.core.service.overlay.OverlaySessionState
 import com.tapflow.core.service.overlay.OverlayUiState
 import com.tapflow.core.service.projection.ScreenCaptureState
 import com.tapflow.core.service.theme.TapFlowTheme
@@ -480,14 +481,29 @@ private fun LiveRecorderModeControls(
   callbacks: OverlayCallbacks,
 ) {
   val badgeContainer =
-    if (state.isCaptureActive) MaterialTheme.colorScheme.errorContainer
-    else MaterialTheme.colorScheme.surfaceContainerHigh
+    when (state.sessionState) {
+      OverlaySessionState.ACTIVE -> MaterialTheme.colorScheme.errorContainer
+      OverlaySessionState.PAUSED -> MaterialTheme.colorScheme.tertiaryContainer
+      OverlaySessionState.STANDBY -> MaterialTheme.colorScheme.surfaceContainerHigh
+    }
   val badgeTitleColor =
-    if (state.isCaptureActive) MaterialTheme.colorScheme.onErrorContainer
-    else MaterialTheme.colorScheme.primary
+    when (state.sessionState) {
+      OverlaySessionState.ACTIVE -> MaterialTheme.colorScheme.onErrorContainer
+      OverlaySessionState.PAUSED -> MaterialTheme.colorScheme.onTertiaryContainer
+      OverlaySessionState.STANDBY -> MaterialTheme.colorScheme.primary
+    }
   val badgeCountColor =
-    if (state.isCaptureActive) MaterialTheme.colorScheme.onErrorContainer
-    else MaterialTheme.colorScheme.onSurface
+    when (state.sessionState) {
+      OverlaySessionState.ACTIVE -> MaterialTheme.colorScheme.onErrorContainer
+      OverlaySessionState.PAUSED -> MaterialTheme.colorScheme.onTertiaryContainer
+      OverlaySessionState.STANDBY -> MaterialTheme.colorScheme.onSurface
+    }
+  val badgeTitle =
+    when (state.sessionState) {
+      OverlaySessionState.STANDBY -> "READY"
+      OverlaySessionState.ACTIVE -> "REC"
+      OverlaySessionState.PAUSED -> "PAUSE"
+    }
 
   Surface(
     shape = RoundedCornerShape(8.dp),
@@ -500,7 +516,7 @@ private fun LiveRecorderModeControls(
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
       Text(
-        text = if (state.isCaptureActive) "REC" else "SAVED",
+        text = badgeTitle,
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.Bold,
         color = badgeTitleColor,
@@ -514,26 +530,83 @@ private fun LiveRecorderModeControls(
     }
   }
 
-  // Record / Stop toggle
-  DockActionIconButton(
-    icon = if (state.isCaptureActive) Icons.Filled.Stop else Icons.Filled.FiberManualRecord,
-    contentDescription =
-      if (state.isCaptureActive) "Stop recording and save script"
-      else "Start new recording",
-    tint =
-      if (state.isCaptureActive) MaterialTheme.colorScheme.onError
-      else MaterialTheme.colorScheme.onErrorContainer,
-    containerColor =
-      if (state.isCaptureActive) MaterialTheme.colorScheme.error
-      else MaterialTheme.colorScheme.errorContainer,
-    testTag = "overlay_recorder_toggle_button",
-    onClick = callbacks::onToggleCaptureListening,
-  )
-  Text(
-    text = if (state.isCaptureActive) "Stop" else "Record",
-    style = MaterialTheme.typography.labelSmall,
-    color = MaterialTheme.colorScheme.onSurfaceVariant,
-  )
+  when (state.sessionState) {
+    OverlaySessionState.STANDBY -> {
+      DockActionIconButton(
+        icon = Icons.Filled.FiberManualRecord,
+        contentDescription = "Start recording live gestures",
+        tint = MaterialTheme.colorScheme.onError,
+        containerColor = MaterialTheme.colorScheme.error,
+        testTag = "overlay_recorder_start_button",
+        onClick = callbacks::onStartOrResumeCapture,
+      )
+      Text(
+        text = "Record",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+
+    OverlaySessionState.ACTIVE -> {
+      DockActionIconButton(
+        icon = Icons.Filled.Pause,
+        contentDescription = "Pause recording",
+        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+        testTag = "overlay_recorder_pause_button",
+        onClick = callbacks::onPauseCapture,
+      )
+      Text(
+        text = "Pause",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+
+      DockActionIconButton(
+        icon = Icons.Filled.Stop,
+        contentDescription = "Stop recording and save script",
+        tint = MaterialTheme.colorScheme.onError,
+        containerColor = MaterialTheme.colorScheme.error,
+        testTag = "overlay_recorder_stop_button",
+        onClick = callbacks::onStopCapture,
+      )
+      Text(
+        text = "Stop",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+
+    OverlaySessionState.PAUSED -> {
+      DockActionIconButton(
+        icon = Icons.Filled.PlayArrow,
+        contentDescription = "Resume recording",
+        tint = MaterialTheme.colorScheme.onPrimary,
+        containerColor = MaterialTheme.colorScheme.primary,
+        testTag = "overlay_recorder_resume_button",
+        onClick = callbacks::onStartOrResumeCapture,
+      )
+      Text(
+        text = "Resume",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+
+      DockActionIconButton(
+        icon = Icons.Filled.Stop,
+        contentDescription = "Stop recording and save script",
+        tint = MaterialTheme.colorScheme.onErrorContainer,
+        containerColor = MaterialTheme.colorScheme.errorContainer,
+        testTag = "overlay_recorder_stop_button",
+        onClick = callbacks::onStopCapture,
+      )
+      Text(
+        text = "Stop",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+  }
 }
 
 @Composable
@@ -542,14 +615,29 @@ private fun LiveInspectorModeControls(
   callbacks: OverlayCallbacks,
 ) {
   val badgeContainer =
-    if (state.isCaptureActive) MaterialTheme.colorScheme.secondaryContainer
-    else MaterialTheme.colorScheme.surfaceContainerHigh
+    when (state.sessionState) {
+      OverlaySessionState.ACTIVE -> MaterialTheme.colorScheme.secondaryContainer
+      OverlaySessionState.PAUSED -> MaterialTheme.colorScheme.tertiaryContainer
+      OverlaySessionState.STANDBY -> MaterialTheme.colorScheme.surfaceContainerHigh
+    }
   val badgeTitleColor =
-    if (state.isCaptureActive) MaterialTheme.colorScheme.onSecondaryContainer
-    else MaterialTheme.colorScheme.onSurfaceVariant
+    when (state.sessionState) {
+      OverlaySessionState.ACTIVE -> MaterialTheme.colorScheme.onSecondaryContainer
+      OverlaySessionState.PAUSED -> MaterialTheme.colorScheme.onTertiaryContainer
+      OverlaySessionState.STANDBY -> MaterialTheme.colorScheme.secondary
+    }
   val badgeCountColor =
-    if (state.isCaptureActive) MaterialTheme.colorScheme.onSecondaryContainer
-    else MaterialTheme.colorScheme.onSurface
+    when (state.sessionState) {
+      OverlaySessionState.ACTIVE -> MaterialTheme.colorScheme.onSecondaryContainer
+      OverlaySessionState.PAUSED -> MaterialTheme.colorScheme.onTertiaryContainer
+      OverlaySessionState.STANDBY -> MaterialTheme.colorScheme.onSurface
+    }
+  val badgeTitle =
+    when (state.sessionState) {
+      OverlaySessionState.STANDBY -> "READY"
+      OverlaySessionState.ACTIVE -> "INSP"
+      OverlaySessionState.PAUSED -> "PAUSE"
+    }
 
   Surface(
     shape = RoundedCornerShape(8.dp),
@@ -562,7 +650,7 @@ private fun LiveInspectorModeControls(
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
       Text(
-        text = if (state.isCaptureActive) "INSP" else "PAUSE",
+        text = badgeTitle,
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.Bold,
         color = badgeTitleColor,
@@ -576,26 +664,83 @@ private fun LiveInspectorModeControls(
     }
   }
 
-  // Inspect / Stop toggle
-  DockActionIconButton(
-    icon = if (state.isCaptureActive) Icons.Filled.Stop else Icons.Filled.CenterFocusStrong,
-    contentDescription =
-      if (state.isCaptureActive) "Pause screen inspection"
-      else "Resume screen inspection",
-    tint =
-      if (state.isCaptureActive) MaterialTheme.colorScheme.onSecondary
-      else MaterialTheme.colorScheme.onSecondaryContainer,
-    containerColor =
-      if (state.isCaptureActive) MaterialTheme.colorScheme.secondary
-      else MaterialTheme.colorScheme.secondaryContainer,
-    testTag = "overlay_inspector_toggle_button",
-    onClick = callbacks::onToggleCaptureListening,
-  )
-  Text(
-    text = if (state.isCaptureActive) "Stop" else "Inspect",
-    style = MaterialTheme.typography.labelSmall,
-    color = MaterialTheme.colorScheme.onSurfaceVariant,
-  )
+  when (state.sessionState) {
+    OverlaySessionState.STANDBY -> {
+      DockActionIconButton(
+        icon = Icons.Filled.CenterFocusStrong,
+        contentDescription = "Start screen inspection",
+        tint = MaterialTheme.colorScheme.onSecondary,
+        containerColor = MaterialTheme.colorScheme.secondary,
+        testTag = "overlay_inspector_start_button",
+        onClick = callbacks::onStartOrResumeCapture,
+      )
+      Text(
+        text = "Inspect",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+
+    OverlaySessionState.ACTIVE -> {
+      DockActionIconButton(
+        icon = Icons.Filled.Pause,
+        contentDescription = "Pause screen inspection",
+        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+        testTag = "overlay_inspector_pause_button",
+        onClick = callbacks::onPauseCapture,
+      )
+      Text(
+        text = "Pause",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+
+      DockActionIconButton(
+        icon = Icons.Filled.Stop,
+        contentDescription = "Stop and finalize inspect group",
+        tint = MaterialTheme.colorScheme.onSecondary,
+        containerColor = MaterialTheme.colorScheme.secondary,
+        testTag = "overlay_inspector_stop_button",
+        onClick = callbacks::onStopCapture,
+      )
+      Text(
+        text = "Stop",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+
+    OverlaySessionState.PAUSED -> {
+      DockActionIconButton(
+        icon = Icons.Filled.PlayArrow,
+        contentDescription = "Resume screen inspection",
+        tint = MaterialTheme.colorScheme.onSecondary,
+        containerColor = MaterialTheme.colorScheme.secondary,
+        testTag = "overlay_inspector_resume_button",
+        onClick = callbacks::onStartOrResumeCapture,
+      )
+      Text(
+        text = "Resume",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+
+      DockActionIconButton(
+        icon = Icons.Filled.Stop,
+        contentDescription = "Stop and finalize inspect group",
+        tint = MaterialTheme.colorScheme.onErrorContainer,
+        containerColor = MaterialTheme.colorScheme.errorContainer,
+        testTag = "overlay_inspector_stop_button",
+        onClick = callbacks::onStopCapture,
+      )
+      Text(
+        text = "Stop",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+  }
 }
 
 @Composable
@@ -714,6 +859,9 @@ private val PreviewNoOpCallbacks =
     override fun onNextStep() = Unit
     override fun onStopExecution() = Unit
     override fun onToggleCaptureListening() = Unit
+    override fun onStartOrResumeCapture() = Unit
+    override fun onPauseCapture() = Unit
+    override fun onStopCapture() = Unit
     override fun onToggleBubbleCollapse() = Unit
     override fun onCloseOverlay() = Unit
     override fun onCancelCaptureMode() = Unit
@@ -762,6 +910,7 @@ private fun OverlayDockRecorderPreview() {
         state =
           OverlayUiState(
             mode = OverlayMode.LIVE_RECORDER,
+            sessionState = OverlaySessionState.ACTIVE,
             isCaptureActive = true,
             recordedActionCount = 7,
           ),
@@ -780,7 +929,8 @@ private fun OverlayDockInspectorPreview() {
         state =
           OverlayUiState(
             mode = OverlayMode.LIVE_INSPECTOR,
-            isCaptureActive = true,
+            sessionState = OverlaySessionState.PAUSED,
+            isCaptureActive = false,
             inspectedItemCount = 4,
           ),
         callbacks = PreviewNoOpCallbacks,
