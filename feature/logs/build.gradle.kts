@@ -39,8 +39,10 @@ dependencies {
   implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.navigation.compose)
   implementation(libs.coil.compose)
+  implementation(libs.kotlinx.serialization.json)
   implementation(libs.hilt.android)
   ksp(libs.hilt.compiler)
   implementation(libs.androidx.hilt.navigation.compose)
   debugImplementation(libs.androidx.compose.ui.tooling)
+  testImplementation(libs.junit)
 }

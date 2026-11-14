@@ -38,8 +38,11 @@ import com.tapflow.feature.editor.PipelineEditorScreen
 import com.tapflow.feature.editor.ScriptEditorScreen
 import com.tapflow.feature.home.HomeScreen
 import com.tapflow.feature.home.HomeTabType
+import com.tapflow.feature.logs.PipelineLogScreen
+import com.tapflow.feature.logs.ScriptLogScreen
 import com.tapflow.feature.onboarding.OnboardingScreen
 import com.tapflow.feature.paywall.PaywallScreen
+import com.tapflow.feature.studio.InspectStudioScreen
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.launch
@@ -168,28 +171,34 @@ fun TapFlowNavHost(
         },
       )
     }
-    composable<Route.ScriptLog> { backStackEntry ->
-      val route = backStackEntry.toRoute<Route.ScriptLog>()
-      UpcomingPhaseDestinationScreen(
-        title = "Script Execution History",
-        detail = "Script ID: ${route.scriptId} (Phase 8)",
-        onBack = { navController.popBackStack() },
+    composable<Route.ScriptLog> {
+      ScriptLogScreen(
+        onNavigateBack = { navController.popBackStack() },
+        onNavigateToPaywall = { sourceFeature ->
+          navController.navigate(Route.Paywall(sourceFeature)) {
+            launchSingleTop = true
+          }
+        },
       )
     }
-    composable<Route.PipelineLog> { backStackEntry ->
-      val route = backStackEntry.toRoute<Route.PipelineLog>()
-      UpcomingPhaseDestinationScreen(
-        title = "Pipeline Execution History",
-        detail = "Pipeline ID: ${route.pipelineId} (Phase 8)",
-        onBack = { navController.popBackStack() },
+    composable<Route.PipelineLog> {
+      PipelineLogScreen(
+        onNavigateBack = { navController.popBackStack() },
+        onNavigateToPaywall = { sourceFeature ->
+          navController.navigate(Route.Paywall(sourceFeature)) {
+            launchSingleTop = true
+          }
+        },
       )
     }
-    composable<Route.InspectStudio> { backStackEntry ->
-      val route = backStackEntry.toRoute<Route.InspectStudio>()
-      UpcomingPhaseDestinationScreen(
-        title = "Inspect Studio",
-        detail = "Inspect Item ID: ${route.inspectItemId} (Phase 8)",
-        onBack = { navController.popBackStack() },
+    composable<Route.InspectStudio> {
+      InspectStudioScreen(
+        onNavigateBack = { navController.popBackStack() },
+        onNavigateToPaywall = { sourceFeature ->
+          navController.navigate(Route.Paywall(sourceFeature)) {
+            launchSingleTop = true
+          }
+        },
       )
     }
   }
