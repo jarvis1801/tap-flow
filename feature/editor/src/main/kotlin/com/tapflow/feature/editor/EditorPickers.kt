@@ -1,5 +1,6 @@
 package com.tapflow.feature.editor
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,26 +13,34 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -49,6 +58,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.tapflow.core.database.repository.InspectGroupWithItems
@@ -62,6 +72,7 @@ import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.InspectPixel
 import java.io.File
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NumericInputField(
   label: String,
@@ -75,36 +86,36 @@ fun NumericInputField(
   val numberVars = remember(variables) { variables.filter { it.type == VariableType.NUMBER } }
   val isVar = value is NumericInput.VariableRef
 
-  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-    Row(
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-      FilterChip(
-        selected = !isVar,
-        onClick = {
-          if (isVar) onValueChange(NumericInput.Literal(0))
-        },
-        label = { Text("Fixed") },
-      )
-      FilterChip(
-        selected = isVar,
-        onClick = {
-          if (!isPro) {
-            onProRequested(ProFeatureGate.DYNAMIC_VARIABLES.displayName)
-          } else {
-            val defaultKey = numberVars.firstOrNull()?.key ?: "var"
-            onValueChange(NumericInput.VariableRef(defaultKey))
-          }
-        },
-        leadingIcon =
-          if (!isPro) {
-            { Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(14.dp)) }
-          } else {
-            null
+  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    val options = listOf("Fixed", "Variable")
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+      options.forEachIndexed { index, text ->
+        val selected = (index == 0 && !isVar) || (index == 1 && isVar)
+        val locked = index == 1 && !isPro
+        SegmentedButton(
+          selected = selected,
+          onClick = {
+            if (index == 0) {
+              if (isVar) onValueChange(NumericInput.Literal(0))
+            } else if (!isPro) {
+              onProRequested(ProFeatureGate.DYNAMIC_VARIABLES.displayName)
+            } else {
+              val defaultKey = numberVars.firstOrNull()?.key ?: "var"
+              onValueChange(NumericInput.VariableRef(defaultKey))
+            }
           },
-        label = { Text("Variable") },
-      )
+          shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+          icon = {
+            if (locked) {
+              Icon(Icons.Rounded.Lock, contentDescription = "Pro feature", modifier = Modifier.size(14.dp))
+            } else {
+              SegmentedButtonDefaults.Icon(active = selected)
+            }
+          },
+        ) {
+          Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+      }
     }
 
     when (value) {
@@ -146,6 +157,7 @@ fun NumericInputField(
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DurationInputField(
   label: String,
@@ -157,47 +169,49 @@ fun DurationInputField(
   modifier: Modifier = Modifier,
 ) {
   val numberVars = remember(variables) { variables.filter { it.type == VariableType.NUMBER } }
+  val selectedIdx =
+    when (value) {
+      is DurationInput.Fixed -> 0
+      is DurationInput.RandomRange -> 1
+      is DurationInput.VariableRef -> 2
+    }
+
   Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-      FilterChip(
-        selected = value is DurationInput.Fixed,
-        onClick = { onValueChange(DurationInput.Fixed(50L)) },
-        label = { Text("Fixed") },
-      )
-      FilterChip(
-        selected = value is DurationInput.RandomRange,
-        onClick = {
-          if (!isPro) {
-            onProRequested(ProFeatureGate.RANDOM_DEVIATION_DELAY.displayName)
-          } else {
-            onValueChange(DurationInput.RandomRange(40L, 120L))
-          }
-        },
-        leadingIcon =
-          if (!isPro) {
-            { Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(14.dp)) }
-          } else {
-            null
+    val options = listOf("Fixed", "Random", "Var")
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+      options.forEachIndexed { index, text ->
+        val locked = index > 0 && !isPro
+        SegmentedButton(
+          selected = selectedIdx == index,
+          onClick = {
+            when (index) {
+              0 -> onValueChange(DurationInput.Fixed(50L))
+              1 ->
+                if (!isPro) {
+                  onProRequested(ProFeatureGate.RANDOM_DEVIATION_DELAY.displayName)
+                } else {
+                  onValueChange(DurationInput.RandomRange(40L, 120L))
+                }
+              2 ->
+                if (!isPro) {
+                  onProRequested(ProFeatureGate.DYNAMIC_VARIABLES.displayName)
+                } else {
+                  onValueChange(DurationInput.VariableRef(numberVars.firstOrNull()?.key ?: "dur"))
+                }
+            }
           },
-        label = { Text("Random") },
-      )
-      FilterChip(
-        selected = value is DurationInput.VariableRef,
-        onClick = {
-          if (!isPro) {
-            onProRequested(ProFeatureGate.DYNAMIC_VARIABLES.displayName)
-          } else {
-            onValueChange(DurationInput.VariableRef(numberVars.firstOrNull()?.key ?: "dur"))
-          }
-        },
-        leadingIcon =
-          if (!isPro) {
-            { Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(14.dp)) }
-          } else {
-            null
+          shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+          icon = {
+            if (locked) {
+              Icon(Icons.Rounded.Lock, contentDescription = "Pro feature", modifier = Modifier.size(14.dp))
+            } else {
+              SegmentedButtonDefaults.Icon(active = selectedIdx == index)
+            }
           },
-        label = { Text("Var") },
-      )
+        ) {
+          Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+      }
     }
 
     when (value) {
@@ -286,9 +300,15 @@ fun AppPickerBottomSheet(
   ModalBottomSheet(
     onDismissRequest = onDismiss,
     sheetState = sheetState,
+    dragHandle = { BottomSheetDefaults.DragHandle() },
   ) {
     Column(
-      modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+      modifier =
+        Modifier
+          .fillMaxWidth()
+          .navigationBarsPadding()
+          .imePadding()
+          .padding(horizontal = 20.dp, vertical = 10.dp),
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       Text(
@@ -299,28 +319,41 @@ fun AppPickerBottomSheet(
 
       if (!currentForegroundPackage.isNullOrBlank()) {
         val currentApp = apps.firstOrNull { it.packageName == currentForegroundPackage }
-        AssistChip(
+        FilledTonalButton(
           onClick = {
             onSelect(
               currentForegroundPackage,
               currentApp?.label ?: currentForegroundPackage,
             )
           },
-          leadingIcon = { Icon(Icons.Filled.Apps, contentDescription = null) },
-          label = {
-            Text(
-              "Select Current Foreground App (${currentApp?.label ?: currentForegroundPackage})",
-            )
-          },
-          modifier = Modifier.testTag("select_current_foreground_app_button"),
-        )
+          modifier = Modifier.fillMaxWidth().testTag("select_current_foreground_app_button"),
+        ) {
+          Icon(Icons.Rounded.Apps, contentDescription = null, modifier = Modifier.size(18.dp))
+          Spacer(modifier = Modifier.size(6.dp))
+          Text(
+            text = "Current Foreground: ${currentApp?.label ?: currentForegroundPackage}",
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
       }
 
       OutlinedTextField(
         value = query,
         onValueChange = { query = it },
-        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+        trailingIcon =
+          if (query.isNotEmpty()) {
+            {
+              IconButton(onClick = { query = "" }) {
+                Icon(Icons.Rounded.Close, contentDescription = "Clear search")
+              }
+            }
+          } else {
+            null
+          },
         placeholder = { Text("Search app name or package...") },
+        shape = RoundedCornerShape(999.dp),
         singleLine = true,
         modifier = Modifier.fillMaxWidth().testTag("app_picker_search"),
       )
@@ -335,41 +368,51 @@ fun AppPickerBottomSheet(
       } else {
         LazyColumn(
           modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp),
-          verticalArrangement = Arrangement.spacedBy(4.dp),
+          verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
           items(filtered, key = { it.packageName }) { app ->
-            Row(
+            Surface(
+              shape = RoundedCornerShape(14.dp),
+              color = MaterialTheme.colorScheme.surfaceContainerLow,
+              border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
               modifier =
                 Modifier
                   .fillMaxWidth()
-                  .clickable { onSelect(app.packageName, app.label) }
-                  .padding(horizontal = 8.dp, vertical = 10.dp),
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(12.dp),
+                  .clip(RoundedCornerShape(14.dp))
+                  .clickable { onSelect(app.packageName, app.label) },
             ) {
-              AsyncImage(
-                model = app.iconDrawable,
-                contentDescription = app.label,
-                modifier = Modifier.size(36.dp),
-              )
-              Column(modifier = Modifier.weight(1f)) {
-                Text(
-                  text = app.label,
-                  style = MaterialTheme.typography.bodyLarge,
-                  fontWeight = FontWeight.Medium,
+              Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+              ) {
+                AsyncImage(
+                  model = app.iconDrawable,
+                  contentDescription = app.label,
+                  modifier = Modifier.size(36.dp),
                 )
-                Text(
-                  text = app.packageName,
-                  style = MaterialTheme.typography.bodySmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                  Text(
+                    text = app.label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                  )
+                  Text(
+                    text = app.packageName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                  )
+                }
               }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
           }
         }
       }
-      Spacer(modifier = Modifier.height(14.dp))
+      Spacer(modifier = Modifier.height(8.dp))
     }
   }
 }
@@ -388,9 +431,15 @@ fun InspectTargetPickerBottomSheet(
   ModalBottomSheet(
     onDismissRequest = onDismiss,
     sheetState = sheetState,
+    dragHandle = { BottomSheetDefaults.DragHandle() },
   ) {
     Column(
-      modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp),
+      modifier =
+        Modifier
+          .fillMaxWidth()
+          .navigationBarsPadding()
+          .imePadding()
+          .padding(horizontal = 20.dp, vertical = 10.dp),
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       Text(
@@ -419,108 +468,109 @@ fun InspectTargetPickerBottomSheet(
         }
 
       if (flatItems.isEmpty()) {
-        Text(
-          text =
-            if (isCropMode) {
-              "No Inspect Crops saved yet. Open Inspect Studio or run Live Inspect first."
-            } else {
-              "No Inspect Pixels saved yet. Pick pixels in Inspect Studio or Live Inspect first."
-            },
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(vertical = 24.dp),
-        )
+        Surface(
+          shape = RoundedCornerShape(14.dp),
+          color = MaterialTheme.colorScheme.surfaceContainerLow,
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Text(
+            text =
+              if (isCropMode) {
+                "No Inspect Crops saved yet. Open Inspect Studio or run Live Inspect first."
+              } else {
+                "No Inspect Pixels saved yet. Pick pixels in Inspect Studio or Live Inspect first."
+              },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(20.dp),
+          )
+        }
       } else {
         LazyColumn(
           modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp),
           verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
           items(flatItems, key = { it.second.id }) { (groupTitle, item) ->
-            Surface(
-              shape = MaterialTheme.shapes.medium,
-              color = MaterialTheme.colorScheme.surfaceContainerHigh,
-              modifier = Modifier.fillMaxWidth(),
+            EditorSectionCard(
+              title = "$groupTitle • ${item.appName}",
+              containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ) {
-              Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-              ) {
-                Text(
-                  text = "$groupTitle • ${item.appName}",
-                  style = MaterialTheme.typography.labelLarge,
-                  fontWeight = FontWeight.Bold,
-                )
-                if (isCropMode) {
-                  item.crops.forEach { crop ->
-                    Row(
-                      modifier =
-                        Modifier
-                          .fillMaxWidth()
-                          .clickable { onSelectCrop(crop) }
-                          .padding(vertical = 6.dp),
-                      verticalAlignment = Alignment.CenterVertically,
-                      horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                      AsyncImage(
-                        model = File(crop.cropPngPath),
-                        contentDescription = crop.label,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.size(44.dp),
+              if (isCropMode) {
+                item.crops.forEach { crop ->
+                  Row(
+                    modifier =
+                      Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onSelectCrop(crop) }
+                        .padding(vertical = 6.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                  ) {
+                    AsyncImage(
+                      model = File(crop.cropPngPath),
+                      contentDescription = crop.label,
+                      contentScale = ContentScale.Fit,
+                      modifier = Modifier.size(44.dp),
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                      Text(
+                        text = crop.label.ifBlank { "Crop Template" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
                       )
-                      Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                          text = crop.label.ifBlank { "Crop Template" },
-                          style = MaterialTheme.typography.bodyMedium,
-                          fontWeight = FontWeight.Medium,
-                        )
-                        Text(
-                          text = "${crop.width} × ${crop.height} px • (${crop.x}, ${crop.y})",
-                          style = MaterialTheme.typography.labelSmall,
-                          fontFamily = FontFamily.Monospace,
-                        )
-                      }
+                      Text(
+                        text = "${crop.width} × ${crop.height} px • (${crop.x}, ${crop.y})",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                      )
                     }
                   }
-                } else {
-                  item.pixels.forEach { pixel ->
-                    Row(
+                  HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                }
+              } else {
+                item.pixels.forEach { pixel ->
+                  Row(
+                    modifier =
+                      Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onSelectPixel(item, pixel) }
+                        .padding(vertical = 6.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                  ) {
+                    Box(
                       modifier =
                         Modifier
-                          .fillMaxWidth()
-                          .clickable { onSelectPixel(item, pixel) }
-                          .padding(vertical = 6.dp),
-                      verticalAlignment = Alignment.CenterVertically,
-                      horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                      Box(
-                        modifier =
-                          Modifier
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(parseEditorHexColor(pixel.hexColor))
-                            .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
+                          .size(22.dp)
+                          .clip(CircleShape)
+                          .background(parseEditorHexColor(pixel.hexColor))
+                          .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                      Text(
+                        text = pixel.label.ifBlank { "Pixel" },
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
                       )
-                      Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                          text = pixel.label.ifBlank { "Pixel" },
-                          style = MaterialTheme.typography.bodyMedium,
-                          fontWeight = FontWeight.Medium,
-                        )
-                        Text(
-                          text = "${pixel.hexColor} @ (${pixel.x}, ${pixel.y})",
-                          style = MaterialTheme.typography.labelSmall,
-                          fontFamily = FontFamily.Monospace,
-                        )
-                      }
+                      Text(
+                        text = "${pixel.hexColor} @ (${pixel.x}, ${pixel.y})",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                      )
                     }
                   }
+                  HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                 }
               }
             }
           }
         }
       }
-      Spacer(modifier = Modifier.height(14.dp))
+      Spacer(modifier = Modifier.height(8.dp))
     }
   }
 }

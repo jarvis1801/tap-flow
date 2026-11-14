@@ -15,24 +15,29 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.ImageSearch
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.ImageSearch
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -45,6 +50,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.tapflow.core.model.action.LoopMode
@@ -80,14 +86,16 @@ fun IfBlockActionEditor(
   onChange: (ScriptAction.IfBlock) -> Unit,
   onIntent: (ScriptEditorUiIntent) -> Unit,
 ) {
-  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    OutlinedTextField(
-      value = action.name,
-      onValueChange = { onChange(action.copy(name = it)) },
-      label = { Text("Block Label") },
-      singleLine = true,
-      modifier = Modifier.fillMaxWidth().testTag("if_block_name_input"),
-    )
+  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    EditorSectionCard(title = "Condition Block") {
+      OutlinedTextField(
+        value = action.name,
+        onValueChange = { onChange(action.copy(name = it)) },
+        label = { Text("Block Label") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().testTag("if_block_name_input"),
+      )
+    }
 
     ConditionGroupCardEditor(
       root = action.conditionRoot,
@@ -101,6 +109,7 @@ fun IfBlockActionEditor(
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LoopBlockActionEditor(
   action: ScriptAction.LoopBlock,
@@ -117,196 +126,197 @@ fun LoopBlockActionEditor(
       LoopMode.Unlimited -> 3
     }
 
-  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-    OutlinedTextField(
-      value = action.name,
-      onValueChange = { onChange(action.copy(name = it)) },
-      label = { Text("Loop Label") },
-      singleLine = true,
-      modifier = Modifier.fillMaxWidth().testTag("loop_block_name_input"),
-    )
+  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    EditorSectionCard(title = "Loop Configuration") {
+      OutlinedTextField(
+        value = action.name,
+        onValueChange = { onChange(action.copy(name = it)) },
+        label = { Text("Loop Label") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().testTag("loop_block_name_input"),
+      )
 
-    Text("Loop Mode", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-      FilterChip(
-        selected = modeIndex == 0,
-        onClick = { onChange(action.copy(mode = LoopMode.Count())) },
-        label = { Text("Count") },
-      )
-      FilterChip(
-        selected = modeIndex == 1,
-        onClick = {
-          if (!isPro) {
-            onIntent(ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.ADVANCED_LOOPS.displayName))
-          } else {
-            val existing =
-              (action.mode as? LoopMode.UntilCondition)?.conditionRoot
-                ?: ConditionGroup(id = UUID.randomUUID().toString(), name = "While Root")
-            onChange(action.copy(mode = LoopMode.WhileCondition(existing)))
-          }
-        },
-        leadingIcon =
-          if (!isPro) {
-            { Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(14.dp)) }
-          } else {
-            null
-          },
-        label = { Text("While") },
-      )
-      FilterChip(
-        selected = modeIndex == 2,
-        onClick = {
-          if (!isPro) {
-            onIntent(ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.ADVANCED_LOOPS.displayName))
-          } else {
-            val existing =
-              (action.mode as? LoopMode.WhileCondition)?.conditionRoot
-                ?: ConditionGroup(id = UUID.randomUUID().toString(), name = "Until Root")
-            onChange(action.copy(mode = LoopMode.UntilCondition(existing)))
-          }
-        },
-        leadingIcon =
-          if (!isPro) {
-            { Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(14.dp)) }
-          } else {
-            null
-          },
-        label = { Text("Until") },
-      )
-      FilterChip(
-        selected = modeIndex == 3,
-        onClick = {
-          if (!isPro) {
-            onIntent(ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.ADVANCED_LOOPS.displayName))
-          } else {
-            onChange(action.copy(mode = LoopMode.Unlimited))
-          }
-        },
-        leadingIcon =
-          if (!isPro) {
-            { Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(14.dp)) }
-          } else {
-            null
-          },
-        label = { Text("Unlimited") },
-      )
-    }
-
-    when (val mode = action.mode) {
-      is LoopMode.Count -> {
-        NumericInputField(
-          label = "Iteration Count",
-          value = mode.count,
-          variables = variables,
-          isPro = isPro,
-          onValueChange = { next ->
-            val safe =
-              if (next is NumericInput.Literal) NumericInput.Literal(next.value.coerceAtLeast(1)) else next
-            onChange(action.copy(mode = mode.copy(count = safe)))
-          },
-          onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
-        )
-        OutlinedTextField(
-          value = mode.exportIndexVarKey.orEmpty(),
-          onValueChange = { next ->
-            if (!isPro && next.isNotEmpty()) {
-              onIntent(ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.DYNAMIC_VARIABLES.displayName))
-            } else {
-              onChange(action.copy(mode = mode.copy(exportIndexVarKey = next.ifBlank { null })))
-            }
-          },
-          label = { Text("Export Loop Index Variable Key (Optional, Pro)") },
-          singleLine = true,
-          modifier = Modifier.fillMaxWidth(),
-        )
-      }
-      is LoopMode.WhileCondition -> {
-        ConditionGroupCardEditor(
-          root = mode.conditionRoot,
-          currentGroup = mode.conditionRoot,
-          depth = 1,
-          isPro = isPro,
-          variables = variables,
-          onRootChange = { updated -> onChange(action.copy(mode = LoopMode.WhileCondition(updated))) },
-          onIntent = onIntent,
-        )
-      }
-      is LoopMode.UntilCondition -> {
-        ConditionGroupCardEditor(
-          root = mode.conditionRoot,
-          currentGroup = mode.conditionRoot,
-          depth = 1,
-          isPro = isPro,
-          variables = variables,
-          onRootChange = { updated -> onChange(action.copy(mode = LoopMode.UntilCondition(updated))) },
-          onIntent = onIntent,
-        )
-      }
-      LoopMode.Unlimited -> {
-        Text(
-          text = "Runs until a Break action, End Script, or Loop Safeguard triggers.",
-          style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-    }
-
-    Card(
-      colors =
-        CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    ) {
-      Column(
-        modifier = Modifier.padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-      ) {
-        Text("Loop Safeguards", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-        Text("Interval Between Cycles", style = MaterialTheme.typography.labelMedium)
-        DelayConfigEditor(
-          config = action.safeguards.intervalDelay,
-          isPro = isPro,
-          onConfigChange = { cfg ->
-            onChange(action.copy(safeguards = action.safeguards.copy(intervalDelay = cfg)))
-          },
-          onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          LongTextField(
-            label = "Max Timeout (ms)",
-            value = action.safeguards.maxTimeoutMs,
-            min = 500L,
-            onChange = { ms ->
-              onChange(action.copy(safeguards = action.safeguards.copy(maxTimeoutMs = ms)))
+      val modeLabels = listOf("Count", "While", "Until", "∞")
+      SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        modeLabels.forEachIndexed { idx, label ->
+          val locked = idx > 0 && !isPro
+          SegmentedButton(
+            selected = modeIndex == idx,
+            onClick = {
+              when (idx) {
+                0 -> onChange(action.copy(mode = LoopMode.Count()))
+                1 ->
+                  if (!isPro) {
+                    onIntent(
+                      ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.ADVANCED_LOOPS.displayName),
+                    )
+                  } else {
+                    val existing =
+                      (action.mode as? LoopMode.UntilCondition)?.conditionRoot
+                        ?: ConditionGroup(id = UUID.randomUUID().toString(), name = "While Root")
+                    onChange(action.copy(mode = LoopMode.WhileCondition(existing)))
+                  }
+                2 ->
+                  if (!isPro) {
+                    onIntent(
+                      ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.ADVANCED_LOOPS.displayName),
+                    )
+                  } else {
+                    val existing =
+                      (action.mode as? LoopMode.WhileCondition)?.conditionRoot
+                        ?: ConditionGroup(id = UUID.randomUUID().toString(), name = "Until Root")
+                    onChange(action.copy(mode = LoopMode.UntilCondition(existing)))
+                  }
+                3 ->
+                  if (!isPro) {
+                    onIntent(
+                      ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.ADVANCED_LOOPS.displayName),
+                    )
+                  } else {
+                    onChange(action.copy(mode = LoopMode.Unlimited))
+                  }
+              }
             },
-            modifier = Modifier.weight(1f),
+            shape = SegmentedButtonDefaults.itemShape(index = idx, count = modeLabels.size),
+            icon = {
+              if (locked) {
+                Icon(Icons.Rounded.Lock, contentDescription = "Pro feature", modifier = Modifier.size(14.dp))
+              } else {
+                SegmentedButtonDefaults.Icon(active = modeIndex == idx)
+              }
+            },
+          ) {
+            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          }
+        }
+      }
+
+      when (val mode = action.mode) {
+        is LoopMode.Count -> {
+          NumericInputField(
+            label = "Iteration Count",
+            value = mode.count,
+            variables = variables,
+            isPro = isPro,
+            onValueChange = { next ->
+              val safe =
+                if (next is NumericInput.Literal) NumericInput.Literal(next.value.coerceAtLeast(1)) else next
+              onChange(action.copy(mode = mode.copy(count = safe)))
+            },
+            onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
           )
-          IntTextField(
-            label = "Max Iterations",
-            value = action.safeguards.maxIterations,
-            min = 1,
-            onChange = { cap ->
-              onChange(action.copy(safeguards = action.safeguards.copy(maxIterations = cap)))
+          OutlinedTextField(
+            value = mode.exportIndexVarKey.orEmpty(),
+            onValueChange = { next ->
+              if (!isPro && next.isNotEmpty()) {
+                onIntent(
+                  ScriptEditorUiIntent.RequestProUpgrade(
+                    ProFeatureGate.DYNAMIC_VARIABLES.displayName,
+                  ),
+                )
+              } else {
+                onChange(action.copy(mode = mode.copy(exportIndexVarKey = next.ifBlank { null })))
+              }
             },
-            modifier = Modifier.weight(1f),
+            label = { Text("Export Loop Index Variable Key (Optional, Pro)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
           )
         }
-        Text("On Timeout / Max Iterations", style = MaterialTheme.typography.labelMedium)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          LoopTimeoutAction.entries.forEach { timeoutAct ->
-            FilterChip(
-              selected = action.safeguards.onTimeout == timeoutAct,
-              onClick = {
-                onChange(action.copy(safeguards = action.safeguards.copy(onTimeout = timeoutAct)))
-              },
-              label = {
-                Text(
-                  if (timeoutAct == LoopTimeoutAction.BREAK_AND_CONTINUE) {
-                    "Break & Continue"
-                  } else {
-                    "Stop & Alert"
-                  },
-                )
-              },
+        is LoopMode.WhileCondition -> {
+          ConditionGroupCardEditor(
+            root = mode.conditionRoot,
+            currentGroup = mode.conditionRoot,
+            depth = 1,
+            isPro = isPro,
+            variables = variables,
+            onRootChange = { updated -> onChange(action.copy(mode = LoopMode.WhileCondition(updated))) },
+            onIntent = onIntent,
+          )
+        }
+        is LoopMode.UntilCondition -> {
+          ConditionGroupCardEditor(
+            root = mode.conditionRoot,
+            currentGroup = mode.conditionRoot,
+            depth = 1,
+            isPro = isPro,
+            variables = variables,
+            onRootChange = { updated -> onChange(action.copy(mode = LoopMode.UntilCondition(updated))) },
+            onIntent = onIntent,
+          )
+        }
+        LoopMode.Unlimited -> {
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Text(
+              text = "Runs continuously until a Break action, End Script, or Loop Safeguard triggers.",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.padding(10.dp),
             )
+          }
+        }
+      }
+    }
+
+    EditorSectionCard(
+      title = "Loop Safeguards",
+      subtitle = "Interval between cycles & timeout limits",
+      containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+      DelayConfigEditor(
+        config = action.safeguards.intervalDelay,
+        isPro = isPro,
+        onConfigChange = { cfg ->
+          onChange(action.copy(safeguards = action.safeguards.copy(intervalDelay = cfg)))
+        },
+        onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+      )
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LongTextField(
+          label = "Max Timeout (ms)",
+          value = action.safeguards.maxTimeoutMs,
+          min = 500L,
+          onChange = { ms ->
+            onChange(action.copy(safeguards = action.safeguards.copy(maxTimeoutMs = ms)))
+          },
+          modifier = Modifier.weight(1f),
+        )
+        IntTextField(
+          label = "Max Iterations",
+          value = action.safeguards.maxIterations,
+          min = 1,
+          onChange = { cap ->
+            onChange(action.copy(safeguards = action.safeguards.copy(maxIterations = cap)))
+          },
+          modifier = Modifier.weight(1f),
+        )
+      }
+      Text(
+        text = "On Timeout / Max Iterations",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      val timeoutActions = LoopTimeoutAction.entries
+      SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        timeoutActions.forEachIndexed { index, timeoutAct ->
+          val label =
+            if (timeoutAct == LoopTimeoutAction.BREAK_AND_CONTINUE) {
+              "Break & Continue"
+            } else {
+              "Stop & Alert"
+            }
+          SegmentedButton(
+            selected = action.safeguards.onTimeout == timeoutAct,
+            onClick = {
+              onChange(action.copy(safeguards = action.safeguards.copy(onTimeout = timeoutAct)))
+            },
+            shape = SegmentedButtonDefaults.itemShape(index = index, count = timeoutActions.size),
+          ) {
+            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
           }
         }
       }
@@ -321,12 +331,10 @@ fun DelayActionEditor(
   onChange: (ScriptAction.Delay) -> Unit,
   onIntent: (ScriptEditorUiIntent) -> Unit,
 ) {
-  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-    Text(
-      text = "Standalone blocking wait step (min 50ms). Does not carry a secondary post-delay.",
-      style = MaterialTheme.typography.bodySmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+  EditorSectionCard(
+    title = "Blocking Delay",
+    subtitle = "Standalone wait step (min 50ms). Does not add a secondary post-delay.",
+  ) {
     DelayConfigEditor(
       config = action.config,
       isPro = isPro,
@@ -346,19 +354,20 @@ fun SimpleFlowControlNotice(action: ScriptAction) {
       else -> ""
     }
   Surface(
-    shape = MaterialTheme.shapes.medium,
-    color = MaterialTheme.colorScheme.secondaryContainer,
+    shape = RoundedCornerShape(14.dp),
+    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
     modifier = Modifier.fillMaxWidth(),
   ) {
     Text(
       text = msg,
       style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSecondaryContainer,
+      color = MaterialTheme.colorScheme.onTertiaryContainer,
       modifier = Modifier.padding(14.dp),
     )
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConditionGroupCardEditor(
   root: ConditionGroup,
@@ -371,9 +380,9 @@ fun ConditionGroupCardEditor(
 ) {
   val borderColor =
     when (depth) {
-      1 -> MaterialTheme.colorScheme.outline
-      2 -> MaterialTheme.colorScheme.primary
-      else -> MaterialTheme.colorScheme.tertiary
+      1 -> MaterialTheme.colorScheme.outlineVariant
+      2 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+      else -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f)
     }
   val containerColor =
     when (depth) {
@@ -382,27 +391,27 @@ fun ConditionGroupCardEditor(
       else -> MaterialTheme.colorScheme.surfaceContainerHigh
     }
 
-  Card(
-    shape = MaterialTheme.shapes.medium,
-    border = BorderStroke(1.5.dp, borderColor),
-    colors = CardDefaults.cardColors(containerColor = containerColor),
+  Surface(
+    shape = RoundedCornerShape(14.dp),
+    border = BorderStroke(1.dp, borderColor),
+    color = containerColor,
     modifier = Modifier.fillMaxWidth(),
   ) {
     Column(
       modifier = Modifier.padding(12.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       if (depth == 1) {
         Surface(
-          shape = MaterialTheme.shapes.small,
-          color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+          shape = RoundedCornerShape(10.dp),
+          color = MaterialTheme.colorScheme.surfaceContainerHighest,
           modifier = Modifier.fillMaxWidth(),
         ) {
           Text(
             text = ConditionValidator.formatNaturalLanguagePreview(root),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(10.dp),
           )
         }
@@ -415,13 +424,13 @@ fun ConditionGroupCardEditor(
         Text(
           text = if (depth == 1) "Root Condition Group (L1)" else "Sub-Group (Level $depth)",
           style = MaterialTheme.typography.titleSmall,
-          fontWeight = FontWeight.Bold,
+          fontWeight = FontWeight.SemiBold,
           modifier = Modifier.weight(1f),
         )
         if (depth > 1) {
           IconButton(onClick = { onRootChange(ConditionTreeUtils.removeNode(root, currentGroup.id)) }) {
             Icon(
-              imageVector = Icons.Filled.DeleteOutline,
+              imageVector = Icons.Rounded.DeleteOutline,
               contentDescription = "Remove sub-group",
               tint = MaterialTheme.colorScheme.error,
             )
@@ -429,27 +438,28 @@ fun ConditionGroupCardEditor(
         }
         IconButton(onClick = { onRootChange(ConditionTreeUtils.toggleGroupExpanded(root, currentGroup.id)) }) {
           Icon(
-            imageVector = if (currentGroup.isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+            imageVector = if (currentGroup.isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
             contentDescription = "Toggle condition group",
           )
         }
       }
 
-      FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        LogicOperator.entries.forEach { op ->
-          FilterChip(
+      val ops = LogicOperator.entries
+      SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        ops.forEachIndexed { index, op ->
+          val label =
+            when (op) {
+              LogicOperator.ALL -> "Match ALL"
+              LogicOperator.ANY -> "Match ANY"
+              LogicOperator.NONE -> "Match NONE"
+            }
+          SegmentedButton(
             selected = currentGroup.operator == op,
             onClick = { onRootChange(ConditionTreeUtils.updateGroupOperator(root, currentGroup.id, op)) },
-            label = {
-              Text(
-                when (op) {
-                  LogicOperator.ALL -> "Match ALL"
-                  LogicOperator.ANY -> "Match ANY"
-                  LogicOperator.NONE -> "Match NONE"
-                },
-              )
-            },
-          )
+            shape = SegmentedButtonDefaults.itemShape(index = index, count = ops.size),
+          ) {
+            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          }
         }
       }
 
@@ -480,13 +490,16 @@ fun ConditionGroupCardEditor(
           }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
           Text(
-            text = "+ Add Condition",
+            text = "Add Condition",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+          ) {
             AssistChip(
               onClick = {
                 val leaf =
@@ -499,7 +512,7 @@ fun ConditionGroupCardEditor(
                   )
                 onRootChange(ConditionTreeUtils.addNodeToGroup(root, currentGroup.id, leaf))
               },
-              leadingIcon = { Icon(Icons.Filled.Palette, contentDescription = null, modifier = Modifier.size(16.dp)) },
+              leadingIcon = { Icon(Icons.Rounded.Palette, contentDescription = null, modifier = Modifier.size(16.dp)) },
               label = { Text("Color Match") },
             )
             AssistChip(
@@ -517,7 +530,7 @@ fun ConditionGroupCardEditor(
               },
               leadingIcon = {
                 Icon(
-                  imageVector = if (isPro) Icons.Filled.ImageSearch else Icons.Filled.Lock,
+                  imageVector = if (isPro) Icons.Rounded.ImageSearch else Icons.Rounded.Lock,
                   contentDescription = null,
                   modifier = Modifier.size(16.dp),
                 )
@@ -533,13 +546,17 @@ fun ConditionGroupCardEditor(
                   )
                 onRootChange(ConditionTreeUtils.addNodeToGroup(root, currentGroup.id, leaf))
               },
-              leadingIcon = { Icon(Icons.Filled.Apps, contentDescription = null, modifier = Modifier.size(16.dp)) },
+              leadingIcon = { Icon(Icons.Rounded.Apps, contentDescription = null, modifier = Modifier.size(16.dp)) },
               label = { Text("App Match") },
             )
             AssistChip(
               onClick = {
                 if (!isPro) {
-                  onIntent(ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.DYNAMIC_VARIABLES.displayName))
+                  onIntent(
+                    ScriptEditorUiIntent.RequestProUpgrade(
+                      ProFeatureGate.DYNAMIC_VARIABLES.displayName,
+                    ),
+                  )
                 } else {
                   val firstVar = variables.firstOrNull()
                   val leaf =
@@ -560,7 +577,7 @@ fun ConditionGroupCardEditor(
               },
               leadingIcon = {
                 Icon(
-                  imageVector = if (isPro) Icons.Filled.Add else Icons.Filled.Lock,
+                  imageVector = if (isPro) Icons.Rounded.Add else Icons.Rounded.Lock,
                   contentDescription = null,
                   modifier = Modifier.size(16.dp),
                 )
@@ -582,7 +599,7 @@ fun ConditionGroupCardEditor(
               },
               modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
             ) {
-              Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+              Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
               Spacer(modifier = Modifier.width(6.dp))
               Text("Add Condition Group (Max Depth 3)")
             }
@@ -599,6 +616,7 @@ fun ConditionGroupCardEditor(
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ConditionLeafCardEditor(
   leaf: ConditionLeaf,
@@ -608,35 +626,43 @@ private fun ConditionLeafCardEditor(
   onRemove: () -> Unit,
   onIntent: (ScriptEditorUiIntent) -> Unit,
 ) {
-  Card(
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+  Surface(
+    shape = RoundedCornerShape(12.dp),
+    color = MaterialTheme.colorScheme.surface,
+    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
     modifier = Modifier.fillMaxWidth(),
   ) {
     Column(
       modifier = Modifier.padding(10.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
-        FilterChip(
-          selected = leaf.inverted,
-          onClick = { onUpdate(leaf.copy(inverted = !leaf.inverted)) },
-          label = { Text(if (leaf.inverted) "NOT" else "IS") },
-        )
+        SingleChoiceSegmentedButtonRow {
+          listOf("IS", "NOT").forEachIndexed { index, label ->
+            val selected = (index == 0 && !leaf.inverted) || (index == 1 && leaf.inverted)
+            SegmentedButton(
+              selected = selected,
+              onClick = { onUpdate(leaf.copy(inverted = index == 1)) },
+              shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
+            ) {
+              Text(label, maxLines = 1)
+            }
+          }
+        }
         OutlinedTextField(
           value = leaf.label,
           onValueChange = { onUpdate(leaf.copy(label = it)) },
-          placeholder = { Text("Condition label (optional)") },
+          placeholder = { Text("Label (optional)") },
           singleLine = true,
           modifier = Modifier.weight(1f),
         )
         IconButton(onClick = onRemove) {
           Icon(
-            imageVector = Icons.Filled.DeleteOutline,
+            imageVector = Icons.Rounded.DeleteOutline,
             contentDescription = "Delete condition",
             tint = MaterialTheme.colorScheme.error,
           )
@@ -645,10 +671,17 @@ private fun ConditionLeafCardEditor(
 
       when (val predicate = leaf.predicate) {
         is ConditionPredicate.ColorMatch -> {
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ColorMatchMode.entries.forEach { mode ->
+          val colorModes = ColorMatchMode.entries
+          SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            colorModes.forEachIndexed { index, mode ->
               val proLocked = mode != ColorMatchMode.SINGLE_POINT && !isPro
-              FilterChip(
+              val label =
+                when (mode) {
+                  ColorMatchMode.SINGLE_POINT -> "Single"
+                  ColorMatchMode.MULTI_POINT -> "Multi"
+                  ColorMatchMode.REGION -> "Region"
+                }
+              SegmentedButton(
                 selected = predicate.mode == mode,
                 onClick = {
                   if (proLocked) {
@@ -667,19 +700,22 @@ private fun ConditionLeafCardEditor(
                     onUpdate(leaf.copy(predicate = predicate.copy(mode = mode, region = region)))
                   }
                 },
-                leadingIcon =
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = colorModes.size),
+                icon = {
                   if (proLocked) {
-                    { Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                    Icon(Icons.Rounded.Lock, contentDescription = "Pro feature", modifier = Modifier.size(14.dp))
                   } else {
-                    null
-                  },
-                label = { Text(mode.name.replace('_', ' ')) },
-              )
+                    SegmentedButtonDefaults.Icon(active = predicate.mode == mode)
+                  }
+                },
+              ) {
+                Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+              }
             }
           }
 
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
+            FilledTonalButton(
               onClick = {
                 onIntent(
                   ScriptEditorUiIntent.RequestOverlayPick(
@@ -695,9 +731,11 @@ private fun ConditionLeafCardEditor(
               },
               modifier = Modifier.weight(1f),
             ) {
-              Text("Pick via Overlay")
+              Icon(Icons.Rounded.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Overlay", maxLines = 1)
             }
-            OutlinedButton(
+            FilledTonalButton(
               onClick = {
                 onIntent(
                   ScriptEditorUiIntent.OpenInspectPicker(
@@ -707,7 +745,9 @@ private fun ConditionLeafCardEditor(
               },
               modifier = Modifier.weight(1f),
             ) {
-              Text("Import Inspect")
+              Icon(Icons.Rounded.Palette, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Inspect", maxLines = 1)
             }
           }
 
@@ -730,13 +770,22 @@ private fun ConditionLeafCardEditor(
           }
 
           if (predicate.mode != ColorMatchMode.SINGLE_POINT) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-              ConditionMatchRule.entries.forEach { rule ->
-                FilterChip(
+            val rules = ConditionMatchRule.entries
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+              rules.forEachIndexed { index, rule ->
+                val label =
+                  when (rule) {
+                    ConditionMatchRule.ALL -> "ALL"
+                    ConditionMatchRule.ANY -> "ANY"
+                    ConditionMatchRule.PERCENT_MATCH -> "% Match"
+                  }
+                SegmentedButton(
                   selected = predicate.rule == rule,
                   onClick = { onUpdate(leaf.copy(predicate = predicate.copy(rule = rule))) },
-                  label = { Text(rule.name.replace('_', ' ')) },
-                )
+                  shape = SegmentedButtonDefaults.itemShape(index = index, count = rules.size),
+                ) {
+                  Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
               }
             }
             if (predicate.rule == ConditionMatchRule.PERCENT_MATCH) {
@@ -802,7 +851,7 @@ private fun ConditionLeafCardEditor(
                       )
                     },
                   ) {
-                    Icon(Icons.Filled.DeleteOutline, contentDescription = "Remove target")
+                    Icon(Icons.Rounded.DeleteOutline, contentDescription = "Remove target")
                   }
                 }
               }
@@ -864,7 +913,7 @@ private fun ConditionLeafCardEditor(
                 )
               },
             ) {
-              Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+              Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
               Spacer(modifier = Modifier.width(4.dp))
               Text("Add Color Target")
             }
@@ -873,7 +922,7 @@ private fun ConditionLeafCardEditor(
 
         is ConditionPredicate.ImageMatch -> {
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(
+            FilledTonalButton(
               onClick = {
                 onIntent(
                   ScriptEditorUiIntent.OpenInspectPicker(
@@ -883,9 +932,11 @@ private fun ConditionLeafCardEditor(
               },
               modifier = Modifier.weight(1f),
             ) {
-              Text("Import Crop from Inspect")
+              Icon(Icons.Rounded.ImageSearch, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Import Crop", maxLines = 1)
             }
-            OutlinedButton(
+            FilledTonalButton(
               onClick = {
                 onIntent(
                   ScriptEditorUiIntent.RequestOverlayPick(
@@ -896,7 +947,9 @@ private fun ConditionLeafCardEditor(
               },
               modifier = Modifier.weight(1f),
             ) {
-              Text("Pick ROI Overlay")
+              Icon(Icons.Rounded.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
+              Spacer(modifier = Modifier.width(6.dp))
+              Text("Pick ROI", maxLines = 1)
             }
           }
 
@@ -925,21 +978,22 @@ private fun ConditionLeafCardEditor(
             )
           }
 
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ImageMatchAlgorithm.entries.forEach { algo ->
-              FilterChip(
+          val algos = ImageMatchAlgorithm.entries
+          SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            algos.forEachIndexed { index, algo ->
+              val label =
+                if (algo == ImageMatchAlgorithm.FAST_32_PIXEL) {
+                  "32-Pixel Fast"
+                } else {
+                  "Template Match"
+                }
+              SegmentedButton(
                 selected = predicate.algorithm == algo,
                 onClick = { onUpdate(leaf.copy(predicate = predicate.copy(algorithm = algo))) },
-                label = {
-                  Text(
-                    if (algo == ImageMatchAlgorithm.FAST_32_PIXEL) {
-                      "Fast 32-Pixel"
-                    } else {
-                      "Template Match"
-                    },
-                  )
-                },
-              )
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = algos.size),
+              ) {
+                Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+              }
             }
           }
 
@@ -983,13 +1037,13 @@ private fun ConditionLeafCardEditor(
               },
             style = MaterialTheme.typography.bodyMedium,
           )
-          OutlinedButton(
+          FilledTonalButton(
             onClick = {
               onIntent(ScriptEditorUiIntent.OpenAppPicker(AppPickerTarget.ConditionAppMatch(leaf.id)))
             },
             modifier = Modifier.fillMaxWidth(),
           ) {
-            Icon(Icons.Filled.Apps, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(Icons.Rounded.Apps, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(6.dp))
             Text("Select App / Foreground App")
           }
@@ -1003,9 +1057,10 @@ private fun ConditionLeafCardEditor(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
           )
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            VariableType.entries.forEach { t ->
-              FilterChip(
+          val types = VariableType.entries
+          SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            types.forEachIndexed { index, t ->
+              SegmentedButton(
                 selected = predicate.variableType == t,
                 onClick = {
                   onUpdate(
@@ -1020,8 +1075,10 @@ private fun ConditionLeafCardEditor(
                     ),
                   )
                 },
-                label = { Text(t.displayLabel) },
-              )
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = types.size),
+              ) {
+                Text(t.displayLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+              }
             }
           }
           when (predicate.variableType) {

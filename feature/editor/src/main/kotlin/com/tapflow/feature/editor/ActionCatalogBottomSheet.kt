@@ -1,36 +1,79 @@
 package com.tapflow.feature.editor
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.automirrored.rounded.AltRoute
+import androidx.compose.material.icons.automirrored.rounded.ExitToApp
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.AdsClick
+import androidx.compose.material.icons.rounded.Calculate
+import androidx.compose.material.icons.rounded.Cancel
+import androidx.compose.material.icons.rounded.Casino
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.DataObject
+import androidx.compose.material.icons.rounded.HourglassBottom
+import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.NotificationsActive
+import androidx.compose.material.icons.rounded.OutlinedFlag
+import androidx.compose.material.icons.rounded.PanToolAlt
+import androidx.compose.material.icons.rounded.Pinch
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.Smartphone
+import androidx.compose.material.icons.rounded.SwapHoriz
+import androidx.compose.material.icons.rounded.Swipe
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.ToggleOn
+import androidx.compose.material.icons.rounded.TouchApp
+import androidx.compose.material.icons.rounded.Vibration
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.Tab
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tapflow.core.model.action.BooleanOperator
 import com.tapflow.core.model.action.ClipboardActionType
@@ -50,6 +93,9 @@ import java.util.UUID
 
 private data class ActionTemplateSpec(
   val label: String,
+  val hint: String,
+  val icon: ImageVector,
+  val category: ActionCategoryGroup,
   val isPro: Boolean,
   val factory: (id: String) -> ScriptAction,
   val matcher: (ScriptAction) -> Boolean,
@@ -66,97 +112,190 @@ fun ActionCatalogBottomSheet(
 ) {
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
   val isEditingExisting = session.editingActionId != null
+  var searchQuery by remember(session.editingActionId) { mutableStateOf("") }
+  var showAllCategories by remember(session.editingActionId) { mutableStateOf(false) }
 
   ModalBottomSheet(
     onDismissRequest = { onIntent(ScriptEditorUiIntent.DismissActionSheet) },
     sheetState = sheetState,
+    dragHandle = { BottomSheetDefaults.DragHandle() },
   ) {
     Column(
-      modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-      verticalArrangement = Arrangement.spacedBy(10.dp),
+      modifier =
+        Modifier
+          .fillMaxWidth()
+          .navigationBarsPadding()
+          .imePadding(),
     ) {
-      Text(
-        text =
-          if (isEditingExisting) {
-            "Edit ${ActionTreeUtils.actionTypeTitle(session.draftAction)}"
-          } else {
-            "Add Action"
-          },
-        style = MaterialTheme.typography.titleLarge,
-        fontWeight = FontWeight.Bold,
-      )
-
-      if (!isEditingExisting) {
-        val categories = ActionCategoryGroup.entries
-        val selectedIdx = categories.indexOf(session.selectedCategory).coerceAtLeast(0)
-        ScrollableTabRow(
-          selectedTabIndex = selectedIdx,
-          edgePadding = 0.dp,
-        ) {
-          categories.forEach { category ->
-            val locked = category == ActionCategoryGroup.VARIABLE_OPS && !isPro
-            Tab(
-              selected = session.selectedCategory == category,
-              onClick = { onIntent(ScriptEditorUiIntent.SelectCatalogCategory(category)) },
-              text = {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                  if (locked) {
-                    Icon(
-                      imageVector = Icons.Filled.Lock,
-                      contentDescription = "Pro feature",
-                      modifier = Modifier.size(14.dp),
-                    )
-                  }
-                  Text(categoryTitle(category))
-                }
+      Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        ActionIconBadge(
+          icon = session.draftAction.actionIcon(),
+          category = session.draftAction.categoryGroup(),
+          boxSize = 40.dp,
+          iconSize = 20.dp,
+          cornerRadius = 12.dp,
+        )
+        Column(modifier = Modifier.weight(1f)) {
+          Text(
+            text =
+              if (isEditingExisting) {
+                "Edit ${ActionTreeUtils.actionTypeTitle(session.draftAction)}"
+              } else {
+                "Add Action"
               },
-            )
-          }
-        }
-
-        val templates = templatesForCategory(session.selectedCategory)
-        FlowRow(
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
-          verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-          templates.forEach { spec ->
-            FilterChip(
-              selected = spec.matcher(session.draftAction),
-              onClick = {
-                onIntent(
-                  ScriptEditorUiIntent.SelectTemplateAction(
-                    spec.factory(session.draftAction.id),
-                  ),
-                )
-              },
-              leadingIcon =
-                if (spec.isPro && !isPro) {
-                  {
-                    Icon(
-                      imageVector = Icons.Filled.Lock,
-                      contentDescription = "Pro feature",
-                      modifier = Modifier.size(14.dp),
-                    )
-                  }
-                } else {
-                  null
-                },
-              label = { Text(spec.label) },
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+          )
+          if (!isEditingExisting) {
+            Text(
+              text = "Selected: ${ActionTreeUtils.actionTypeTitle(session.draftAction)}",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
           }
         }
       }
 
-      HorizontalDivider()
+      Spacer(modifier = Modifier.height(8.dp))
+      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
       Column(
         modifier =
           Modifier
             .fillMaxWidth()
-            .heightIn(max = 460.dp)
-            .verticalScroll(rememberScrollState()),
+            .weight(1f, fill = false)
+            .heightIn(max = 540.dp)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
+        if (!isEditingExisting) {
+          OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            placeholder = { Text("Search actions...") },
+            leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
+            trailingIcon =
+              if (searchQuery.isNotEmpty()) {
+                {
+                  IconButton(onClick = { searchQuery = "" }) {
+                    Icon(Icons.Rounded.Close, contentDescription = "Clear search")
+                  }
+                }
+              } else {
+                null
+              },
+            shape = RoundedCornerShape(999.dp),
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+          )
+
+          Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            FilterChip(
+              selected = showAllCategories,
+              onClick = { showAllCategories = true },
+              label = { Text("All") },
+            )
+            ActionCategoryGroup.entries.forEach { category ->
+              val locked = category == ActionCategoryGroup.VARIABLE_OPS && !isPro
+              FilterChip(
+                selected = !showAllCategories && session.selectedCategory == category,
+                onClick = {
+                  if (category != ActionCategoryGroup.VARIABLE_OPS || isPro) {
+                    showAllCategories = false
+                  }
+                  onIntent(ScriptEditorUiIntent.SelectCatalogCategory(category))
+                },
+                leadingIcon =
+                  if (locked) {
+                    {
+                      Icon(
+                        imageVector = Icons.Rounded.Lock,
+                        contentDescription = "Pro feature",
+                        modifier = Modifier.size(14.dp),
+                      )
+                    }
+                  } else {
+                    null
+                  },
+                label = { Text(categoryTitle(category)) },
+              )
+            }
+          }
+
+          val visibleTemplates =
+            remember(searchQuery, showAllCategories, session.selectedCategory) {
+              val q = searchQuery.trim()
+              val pool =
+                if (q.isNotEmpty() || showAllCategories) {
+                  ActionCategoryGroup.entries.flatMap { templatesForCategory(it) }
+                } else {
+                  templatesForCategory(session.selectedCategory)
+                }
+              if (q.isEmpty()) {
+                pool
+              } else {
+                pool.filter {
+                  it.label.contains(q, ignoreCase = true) ||
+                    it.hint.contains(q, ignoreCase = true)
+                }
+              }
+            }
+
+          if (visibleTemplates.isEmpty()) {
+            Text(
+              text = "No matching actions found.",
+              style = MaterialTheme.typography.bodyMedium,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.padding(vertical = 8.dp),
+            )
+          } else {
+            val rows = remember(visibleTemplates) { visibleTemplates.chunked(2) }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+              rows.forEach { pair ->
+                Row(
+                  modifier = Modifier.fillMaxWidth(),
+                  horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                  pair.forEach { spec ->
+                    ActionCatalogTile(
+                      spec = spec,
+                      selected = spec.matcher(session.draftAction),
+                      isPro = isPro,
+                      onClick = {
+                        onIntent(
+                          ScriptEditorUiIntent.SelectTemplateAction(
+                            spec.factory(session.draftAction.id),
+                          ),
+                        )
+                      },
+                      modifier = Modifier.weight(1f),
+                    )
+                  }
+                  if (pair.size == 1) {
+                    Spacer(modifier = Modifier.weight(1f))
+                  }
+                }
+              }
+            }
+          }
+
+          HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+          Text(
+            text = "Configure ${ActionTreeUtils.actionTypeTitle(session.draftAction)}",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+          )
+        }
+
         when (val draft = session.draftAction) {
           is ScriptAction.Tap ->
             TapActionEditor(
@@ -293,32 +432,125 @@ fun ActionCatalogBottomSheet(
             onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
           )
         } else {
-          Text(
-            text = "Post-Action Delay: 0ms (Excluded for Flow Control, Delay & Variable Ops)",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth(),
+          ) {
+            Text(
+              text = "Post-Action Delay: 0ms (Excluded for Flow Control, Delay & Variable Ops)",
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+          }
         }
       }
 
-      HorizontalDivider()
+      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
       Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically,
       ) {
-        TextButton(onClick = { onIntent(ScriptEditorUiIntent.DismissActionSheet) }) {
+        TextButton(
+          onClick = { onIntent(ScriptEditorUiIntent.DismissActionSheet) },
+          modifier = Modifier.heightIn(min = 48.dp),
+        ) {
           Text("Cancel")
         }
         Spacer(modifier = Modifier.width(8.dp))
         Button(
           onClick = { onIntent(ScriptEditorUiIntent.CommitDraftAction) },
+          contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
           modifier = Modifier.heightIn(min = 48.dp).testTag("commit_action_button"),
         ) {
           Text(if (isEditingExisting) "Save Changes" else "Insert Action")
         }
       }
-      Spacer(modifier = Modifier.height(6.dp))
+    }
+  }
+}
+
+@Composable
+private fun ActionCatalogTile(
+  spec: ActionTemplateSpec,
+  selected: Boolean,
+  isPro: Boolean,
+  onClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val containerColor =
+    if (selected) {
+      MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+    } else {
+      MaterialTheme.colorScheme.surfaceContainerLow
+    }
+  val border =
+    if (selected) {
+      BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+    } else {
+      BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant)
+    }
+
+  Surface(
+    shape = RoundedCornerShape(14.dp),
+    color = containerColor,
+    border = border,
+    modifier =
+      modifier
+        .clip(RoundedCornerShape(14.dp))
+        .clickable(onClick = onClick),
+  ) {
+    Column(
+      modifier = Modifier.padding(10.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top,
+      ) {
+        ActionIconBadge(
+          icon = spec.icon,
+          category = spec.category,
+          boxSize = 36.dp,
+          iconSize = 18.dp,
+          cornerRadius = 10.dp,
+        )
+        if (spec.isPro && !isPro) {
+          Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = MaterialTheme.colorScheme.tertiaryContainer,
+          ) {
+            Text(
+              text = "PRO",
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onTertiaryContainer,
+              modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+          }
+        }
+      }
+
+      Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+          text = spec.label,
+          style = MaterialTheme.typography.labelLarge,
+          fontWeight = FontWeight.SemiBold,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+          text = spec.hint,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
     }
   }
 }
@@ -337,6 +569,9 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
       listOf(
         ActionTemplateSpec(
           label = "Tap",
+          hint = "Single screen tap",
+          icon = Icons.Rounded.TouchApp,
+          category = ActionCategoryGroup.TOUCH_GESTURES,
           isPro = false,
           factory = { id ->
             ScriptAction.Tap(id = id, x = NumericInput.Literal(540), y = NumericInput.Literal(960))
@@ -345,6 +580,9 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
         ),
         ActionTemplateSpec(
           label = "Double Tap",
+          hint = "Two rapid taps",
+          icon = Icons.Rounded.AdsClick,
+          category = ActionCategoryGroup.TOUCH_GESTURES,
           isPro = false,
           factory = { id ->
             ScriptAction.DoubleTap(
@@ -357,6 +595,9 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
         ),
         ActionTemplateSpec(
           label = "Long Press",
+          hint = "Touch & hold",
+          icon = Icons.Rounded.PanToolAlt,
+          category = ActionCategoryGroup.TOUCH_GESTURES,
           isPro = false,
           factory = { id ->
             ScriptAction.LongPress(
@@ -369,12 +610,18 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
         ),
         ActionTemplateSpec(
           label = "Multi-touch",
+          hint = "Pinch, rotate, multi",
+          icon = Icons.Rounded.Pinch,
+          category = ActionCategoryGroup.TOUCH_GESTURES,
           isPro = true,
           factory = { id -> ScriptAction.MultiTouch(id = id, centerX = 540, centerY = 960) },
           matcher = { it is ScriptAction.MultiTouch },
         ),
         ActionTemplateSpec(
           label = "Swipe & Drag",
+          hint = "Linear or curved",
+          icon = Icons.Rounded.Swipe,
+          category = ActionCategoryGroup.TOUCH_GESTURES,
           isPro = false,
           factory = { id ->
             ScriptAction.SwipeDrag(
@@ -389,6 +636,9 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
         ),
         ActionTemplateSpec(
           label = "Input Text",
+          hint = "Type or paste text",
+          icon = Icons.Rounded.Keyboard,
+          category = ActionCategoryGroup.TOUCH_GESTURES,
           isPro = false,
           factory = { id -> ScriptAction.InputText(id = id) },
           matcher = { it is ScriptAction.InputText },
@@ -399,6 +649,9 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
       listOf(
         ActionTemplateSpec(
           label = "If Block",
+          hint = "Conditional branch",
+          icon = Icons.AutoMirrored.Rounded.AltRoute,
+          category = ActionCategoryGroup.FLOW_CONTROL,
           isPro = true,
           factory = { id ->
             ScriptAction.IfBlock(
@@ -411,30 +664,45 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
         ),
         ActionTemplateSpec(
           label = "Loop Block",
+          hint = "Repeat steps",
+          icon = Icons.Rounded.Repeat,
+          category = ActionCategoryGroup.FLOW_CONTROL,
           isPro = false,
           factory = { id -> ScriptAction.LoopBlock(id = id, mode = LoopMode.Count()) },
           matcher = { it is ScriptAction.LoopBlock },
         ),
         ActionTemplateSpec(
           label = "Delay",
+          hint = "Pause execution",
+          icon = Icons.Rounded.HourglassBottom,
+          category = ActionCategoryGroup.FLOW_CONTROL,
           isPro = false,
           factory = { id -> ScriptAction.Delay(id = id, config = DelayConfig.Fixed(500L)) },
           matcher = { it is ScriptAction.Delay },
         ),
         ActionTemplateSpec(
           label = "Break",
+          hint = "Exit current loop",
+          icon = Icons.AutoMirrored.Rounded.ExitToApp,
+          category = ActionCategoryGroup.FLOW_CONTROL,
           isPro = false,
           factory = { id -> ScriptAction.Break(id = id) },
           matcher = { it is ScriptAction.Break },
         ),
         ActionTemplateSpec(
           label = "Continue",
+          hint = "Next loop cycle",
+          icon = Icons.Rounded.SkipNext,
+          category = ActionCategoryGroup.FLOW_CONTROL,
           isPro = false,
           factory = { id -> ScriptAction.Continue(id = id) },
           matcher = { it is ScriptAction.Continue },
         ),
         ActionTemplateSpec(
           label = "End Script",
+          hint = "Stop script run",
+          icon = Icons.Rounded.OutlinedFlag,
+          category = ActionCategoryGroup.FLOW_CONTROL,
           isPro = false,
           factory = { id -> ScriptAction.EndScript(id = id) },
           matcher = { it is ScriptAction.EndScript },
@@ -445,24 +713,36 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
       listOf(
         ActionTemplateSpec(
           label = "Key Event",
+          hint = "Back, Home, Recents",
+          icon = Icons.Rounded.Smartphone,
+          category = ActionCategoryGroup.SYSTEM_HARDWARE,
           isPro = false,
           factory = { id -> ScriptAction.KeyEvent(id = id, key = SystemKeyType.BACK) },
           matcher = { it is ScriptAction.KeyEvent },
         ),
         ActionTemplateSpec(
           label = "Launch App",
+          hint = "Open installed app",
+          icon = Icons.AutoMirrored.Rounded.OpenInNew,
+          category = ActionCategoryGroup.SYSTEM_HARDWARE,
           isPro = false,
           factory = { id -> ScriptAction.LaunchApp(id = id, packageName = "") },
           matcher = { it is ScriptAction.LaunchApp },
         ),
         ActionTemplateSpec(
           label = "Force Stop",
+          hint = "Kill target app",
+          icon = Icons.Rounded.Cancel,
+          category = ActionCategoryGroup.SYSTEM_HARDWARE,
           isPro = true,
           factory = { id -> ScriptAction.ForceStopApp(id = id, packageName = "") },
           matcher = { it is ScriptAction.ForceStopApp },
         ),
         ActionTemplateSpec(
           label = "Clipboard",
+          hint = "Copy, paste, clear",
+          icon = Icons.Rounded.ContentPaste,
+          category = ActionCategoryGroup.SYSTEM_HARDWARE,
           isPro = false,
           factory = { id ->
             ScriptAction.ClipboardOp(id = id, operation = ClipboardActionType.PASTE)
@@ -471,12 +751,18 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
         ),
         ActionTemplateSpec(
           label = "Vibrate",
+          hint = "Haptic pulse",
+          icon = Icons.Rounded.Vibration,
+          category = ActionCategoryGroup.SYSTEM_HARDWARE,
           isPro = false,
           factory = { id -> ScriptAction.Vibrate(id = id) },
           matcher = { it is ScriptAction.Vibrate },
         ),
         ActionTemplateSpec(
           label = "Alert Sound",
+          hint = "Audio notification",
+          icon = Icons.Rounded.NotificationsActive,
+          category = ActionCategoryGroup.SYSTEM_HARDWARE,
           isPro = false,
           factory = { id -> ScriptAction.PlayAlertSound(id = id) },
           matcher = { it is ScriptAction.PlayAlertSound },
@@ -487,6 +773,9 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
       listOf(
         ActionTemplateSpec(
           label = "Set Variable",
+          hint = "Assign value",
+          icon = Icons.Rounded.DataObject,
+          category = ActionCategoryGroup.VARIABLE_OPS,
           isPro = true,
           factory = { id ->
             ScriptAction.SetVariable(id = id, targetKey = "counter", valueTemplate = "1")
@@ -495,6 +784,9 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
         ),
         ActionTemplateSpec(
           label = "Math",
+          hint = "Arithmetic ops",
+          icon = Icons.Rounded.Calculate,
+          category = ActionCategoryGroup.VARIABLE_OPS,
           isPro = true,
           factory = { id ->
             ScriptAction.MathOp(
@@ -509,6 +801,9 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
         ),
         ActionTemplateSpec(
           label = "Random",
+          hint = "Random number/bool",
+          icon = Icons.Rounded.Casino,
+          category = ActionCategoryGroup.VARIABLE_OPS,
           isPro = true,
           factory = { id ->
             ScriptAction.RandomOp(
@@ -523,6 +818,9 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
         ),
         ActionTemplateSpec(
           label = "String",
+          hint = "Text transforms",
+          icon = Icons.Rounded.TextFields,
+          category = ActionCategoryGroup.VARIABLE_OPS,
           isPro = true,
           factory = { id ->
             ScriptAction.StringOp(
@@ -537,6 +835,9 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
         ),
         ActionTemplateSpec(
           label = "Boolean",
+          hint = "Logic toggle/gate",
+          icon = Icons.Rounded.ToggleOn,
+          category = ActionCategoryGroup.VARIABLE_OPS,
           isPro = true,
           factory = { id ->
             ScriptAction.BooleanOp(
@@ -550,6 +851,9 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
         ),
         ActionTemplateSpec(
           label = "Type Cast",
+          hint = "Convert var type",
+          icon = Icons.Rounded.SwapHoriz,
+          category = ActionCategoryGroup.VARIABLE_OPS,
           isPro = true,
           factory = { id ->
             ScriptAction.TypeCastOp(

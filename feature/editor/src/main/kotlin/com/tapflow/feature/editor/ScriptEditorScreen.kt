@@ -2,49 +2,60 @@ package com.tapflow.feature.editor
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DataObject
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ArrowDownward
+import androidx.compose.material.icons.rounded.ArrowUpward
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DataObject
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -63,10 +74,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -80,6 +93,7 @@ import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
 import com.tapflow.core.model.common.PostActionDelay
 import com.tapflow.core.model.condition.ConditionGroup
+import com.tapflow.core.model.condition.ConditionValidator
 import com.tapflow.core.service.overlay.OverlayLaunchIntents
 
 private sealed interface EditorTreeRow {
@@ -90,6 +104,7 @@ private sealed interface EditorTreeRow {
     override val key: String,
     override val depth: Int,
     val title: String,
+    val branchKind: BranchKind,
   ) : EditorTreeRow
 
   data class InsertRow(
@@ -98,6 +113,7 @@ private sealed interface EditorTreeRow {
     val location: ActionBranchLocation,
     val insertIndex: Int,
     val label: String,
+    val isTail: Boolean,
   ) : EditorTreeRow
 
   data class ActionRow(
@@ -173,6 +189,9 @@ fun ScriptEditorContent(
   onIntent: (ScriptEditorUiIntent) -> Unit,
 ) {
   var tagDraft by remember { mutableStateOf("") }
+  var showDetailsSection by remember(state.scriptId) {
+    mutableStateOf(state.description.isNotBlank() || state.tags.isNotEmpty())
+  }
   val treeRows = remember(state.actions) { flattenActionTree(state.actions) }
 
   Scaffold(
@@ -191,42 +210,40 @@ fun ScriptEditorContent(
           }
         },
         title = {
-          Column {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
             Text(
-              text = state.title.ifBlank { "Untitled Script" },
+              text = if (state.isExistingScript) "Edit Script" else "New Script",
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold,
+              style = MaterialTheme.typography.titleLarge,
+              fontWeight = FontWeight.SemiBold,
             )
-            Text(
-              text =
-                "Global Delay: ${ActionTreeUtils.formatDelayConfig(state.globalDelay)}" +
-                  if (state.isDirty) " • Unsaved" else "",
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (state.isDirty) {
+              Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+              ) {
+                Text(
+                  text = "Unsaved",
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.onSecondaryContainer,
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+              }
+            }
           }
         },
         actions = {
-          IconButton(
-            onClick = { onIntent(ScriptEditorUiIntent.SetGlobalDelaySheetVisible(true)) },
-            modifier = Modifier.testTag("global_delay_button"),
-          ) {
-            Icon(Icons.Filled.Timer, contentDescription = "Global post-action delay")
-          }
-          IconButton(
-            onClick = { onIntent(ScriptEditorUiIntent.SetVariablesSheetVisible(true)) },
-            modifier = Modifier.testTag("dynamic_variables_button"),
-          ) {
-            Icon(Icons.Filled.DataObject, contentDescription = "Dynamic script variables")
-          }
-          FilledTonalIconButton(
+          FilledTonalButton(
             onClick = { onIntent(ScriptEditorUiIntent.SaveScriptClicked) },
             enabled = !state.isSaving,
-            modifier = Modifier.padding(end = 6.dp).testTag("save_script_button"),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+            modifier = Modifier.padding(end = 8.dp).testTag("save_script_button"),
           ) {
-            Icon(Icons.Filled.Save, contentDescription = "Save script")
+            Text(if (state.isSaving) "Saving…" else "Save")
           }
         },
       )
@@ -241,25 +258,24 @@ fun ScriptEditorContent(
       }
     } else {
       Box(
-        modifier = Modifier.fillMaxSize().padding(innerPadding),
+        modifier = Modifier.fillMaxSize().padding(innerPadding).imePadding(),
         contentAlignment = Alignment.TopCenter,
       ) {
         LazyColumn(
           modifier = Modifier.widthIn(max = 840.dp).fillMaxSize(),
-          contentPadding = PaddingValues(16.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
+          contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+          verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
           item(key = "script_metadata_card") {
-            Card(
-              colors =
-                CardDefaults.cardColors(
-                  containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
+            Surface(
+              shape = RoundedCornerShape(16.dp),
+              color = MaterialTheme.colorScheme.surfaceContainerLow,
+              border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
               modifier = Modifier.fillMaxWidth(),
             ) {
               Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
               ) {
                 OutlinedTextField(
                   value = state.title,
@@ -268,104 +284,217 @@ fun ScriptEditorContent(
                   singleLine = true,
                   modifier = Modifier.fillMaxWidth().testTag("script_title_input"),
                 )
-                OutlinedTextField(
-                  value = state.description,
-                  onValueChange = { onIntent(ScriptEditorUiIntent.UpdateDescription(it)) },
-                  label = { Text("Description (Optional)") },
-                  minLines = 1,
-                  maxLines = 4,
-                  modifier = Modifier.fillMaxWidth().testTag("script_description_input"),
-                )
+
                 Row(
+                  modifier = Modifier.fillMaxWidth(),
                   verticalAlignment = Alignment.CenterVertically,
-                  horizontalArrangement = Arrangement.spacedBy(8.dp),
+                  horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                  OutlinedTextField(
-                    value = tagDraft,
-                    onValueChange = { tagDraft = it },
-                    label = { Text("Add Tag") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
+                  Text(
+                    text = "${state.actions.size} top-level steps",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                   )
-                  Button(
-                    onClick = {
-                      if (tagDraft.isNotBlank()) {
-                        onIntent(ScriptEditorUiIntent.AddTag(tagDraft))
-                        tagDraft = ""
-                      }
-                    },
-                    modifier = Modifier.heightIn(min = 48.dp),
+                  TextButton(
+                    onClick = { showDetailsSection = !showDetailsSection },
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                   ) {
-                    Text("Add")
+                    Text(if (showDetailsSection) "Hide Notes & Tags" else "Notes & Tags")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                      imageVector = if (showDetailsSection) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                      contentDescription = null,
+                      modifier = Modifier.size(18.dp),
+                    )
                   }
                 }
-                if (state.tags.isNotEmpty()) {
-                  FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    state.tags.forEach { tag ->
-                      InputChip(
-                        selected = false,
-                        onClick = { onIntent(ScriptEditorUiIntent.RemoveTag(tag)) },
-                        label = { Text(tag) },
-                        trailingIcon = {
-                          Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "Remove tag $tag",
-                            modifier = Modifier.size(16.dp),
-                          )
-                        },
+
+                AnimatedVisibility(visible = showDetailsSection) {
+                  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                      value = state.description,
+                      onValueChange = { onIntent(ScriptEditorUiIntent.UpdateDescription(it)) },
+                      label = { Text("Description (Optional)") },
+                      minLines = 1,
+                      maxLines = 4,
+                      modifier = Modifier.fillMaxWidth().testTag("script_description_input"),
+                    )
+                    Row(
+                      verticalAlignment = Alignment.CenterVertically,
+                      horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                      OutlinedTextField(
+                        value = tagDraft,
+                        onValueChange = { tagDraft = it },
+                        label = { Text("Add Tag") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
                       )
+                      FilledTonalButton(
+                        onClick = {
+                          if (tagDraft.isNotBlank()) {
+                            onIntent(ScriptEditorUiIntent.AddTag(tagDraft))
+                            tagDraft = ""
+                          }
+                        },
+                        modifier = Modifier.heightIn(min = 48.dp),
+                      ) {
+                        Text("Add")
+                      }
                     }
+                    if (state.tags.isNotEmpty()) {
+                      FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        state.tags.forEach { tag ->
+                          InputChip(
+                            selected = false,
+                            onClick = { onIntent(ScriptEditorUiIntent.RemoveTag(tag)) },
+                            label = { Text(tag) },
+                            trailingIcon = {
+                              Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "Remove tag $tag",
+                                modifier = Modifier.size(16.dp),
+                              )
+                            },
+                          )
+                        }
+                      }
+                    }
+                  }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                FlowRow(
+                  horizontalArrangement = Arrangement.spacedBy(8.dp),
+                  verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                  FilledTonalButton(
+                    onClick = { onIntent(ScriptEditorUiIntent.SetGlobalDelaySheetVisible(true)) },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.heightIn(min = 40.dp).testTag("global_delay_button"),
+                  ) {
+                    Icon(
+                      imageVector = Icons.Rounded.Timer,
+                      contentDescription = null,
+                      modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                      text = "Global Delay: ${ActionTreeUtils.formatDelayConfig(state.globalDelay)}",
+                      style = MaterialTheme.typography.labelLarge,
+                    )
+                  }
+
+                  FilledTonalButton(
+                    onClick = { onIntent(ScriptEditorUiIntent.SetVariablesSheetVisible(true)) },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.heightIn(min = 40.dp).testTag("dynamic_variables_button"),
+                  ) {
+                    Icon(
+                      imageVector = if (!state.isPro) Icons.Rounded.Lock else Icons.Rounded.DataObject,
+                      contentDescription = null,
+                      modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                      text = "Variables (${state.variables.size})",
+                      style = MaterialTheme.typography.labelLarge,
+                    )
                   }
                 }
               }
             }
           }
 
-          items(treeRows, key = { it.key }) { row ->
-            val indentDp = (row.depth * 18).dp
-            when (row) {
-              is EditorTreeRow.BranchLabel -> {
-                Text(
-                  text = row.title,
-                  style = MaterialTheme.typography.labelLarge,
-                  fontWeight = FontWeight.Bold,
-                  color = MaterialTheme.colorScheme.primary,
-                  modifier = Modifier.padding(start = indentDp, top = 4.dp),
-                )
-              }
+          if (state.actions.isEmpty()) {
+            item(key = "empty_actions_state") {
+              EmptyActionsCard(
+                onAddFirst = {
+                  onIntent(
+                    ScriptEditorUiIntent.OpenAddActionSheet(
+                      location = ActionBranchLocation(),
+                      insertIndex = 0,
+                    ),
+                  )
+                },
+              )
+            }
+          } else {
+            items(treeRows, key = { it.key }) { row ->
+              DepthIndentedRow(depth = row.depth) {
+                when (row) {
+                  is EditorTreeRow.BranchLabel -> {
+                    val containerColor =
+                      when (row.branchKind) {
+                        BranchKind.IF_THEN -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                        BranchKind.IF_ELSE -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f)
+                        BranchKind.LOOP_BODY -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                        BranchKind.ROOT -> MaterialTheme.colorScheme.surfaceContainerHigh
+                      }
+                    val contentColor =
+                      when (row.branchKind) {
+                        BranchKind.IF_THEN -> MaterialTheme.colorScheme.onPrimaryContainer
+                        BranchKind.IF_ELSE -> MaterialTheme.colorScheme.onTertiaryContainer
+                        BranchKind.LOOP_BODY -> MaterialTheme.colorScheme.onSecondaryContainer
+                        BranchKind.ROOT -> MaterialTheme.colorScheme.onSurface
+                      }
+                    Surface(
+                      shape = RoundedCornerShape(8.dp),
+                      color = containerColor,
+                      modifier = Modifier.padding(top = 4.dp),
+                    ) {
+                      Text(
+                        text = row.title,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = contentColor,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                      )
+                    }
+                  }
 
-              is EditorTreeRow.InsertRow -> {
-                OutlinedButton(
-                  onClick = {
-                    onIntent(
-                      ScriptEditorUiIntent.OpenAddActionSheet(
-                        location = row.location,
-                        insertIndex = row.insertIndex,
-                      ),
+                  is EditorTreeRow.InsertRow -> {
+                    val onInsert = {
+                      onIntent(
+                        ScriptEditorUiIntent.OpenAddActionSheet(
+                          location = row.location,
+                          insertIndex = row.insertIndex,
+                        ),
+                      )
+                    }
+                    if (row.isTail) {
+                      FilledTonalButton(
+                        onClick = onInsert,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).testTag(row.key),
+                      ) {
+                        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(row.label)
+                      }
+                    } else {
+                      InlineInsertDivider(
+                        label = "Insert",
+                        onClick = onInsert,
+                        testTag = row.key,
+                      )
+                    }
+                  }
+
+                  is EditorTreeRow.ActionRow -> {
+                    ActionTreeItemCard(
+                      row = row,
+                      globalDelay = state.globalDelay,
+                      onIntent = onIntent,
                     )
-                  },
-                  modifier =
-                    Modifier
-                      .fillMaxWidth()
-                      .padding(start = indentDp)
-                      .heightIn(min = 44.dp)
-                      .testTag(row.key),
-                ) {
-                  Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                  Spacer(modifier = Modifier.width(6.dp))
-                  Text(row.label)
+                  }
                 }
               }
-
-              is EditorTreeRow.ActionRow -> {
-                ActionTreeItemCard(
-                  row = row,
-                  globalDelay = state.globalDelay,
-                  onIntent = onIntent,
-                  modifier = Modifier.padding(start = indentDp),
-                )
-              }
             }
+          }
+
+          item(key = "bottom_scroll_spacer") {
+            Spacer(modifier = Modifier.height(88.dp))
           }
         }
       }
@@ -456,6 +585,139 @@ fun ScriptEditorContent(
 }
 
 @Composable
+private fun EmptyActionsCard(onAddFirst: () -> Unit) {
+  Surface(
+    shape = RoundedCornerShape(16.dp),
+    color = MaterialTheme.colorScheme.surfaceContainerLow,
+    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+    modifier = Modifier.fillMaxWidth(),
+  ) {
+    Column(
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+      ActionIconBadge(
+        icon = Icons.Rounded.TouchApp,
+        category = ActionCategoryGroup.TOUCH_GESTURES,
+        boxSize = 56.dp,
+        iconSize = 28.dp,
+        cornerRadius = 16.dp,
+      )
+      Text(
+        text = "No actions yet",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+      )
+      Text(
+        text = "Build an automation flow with taps, swipes, conditional logic, loops, or app actions.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+      )
+      Spacer(modifier = Modifier.height(4.dp))
+      FilledTonalButton(
+        onClick = onAddFirst,
+        modifier = Modifier.heightIn(min = 48.dp).testTag("insert_root_ROOT_0"),
+      ) {
+        Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text("Add Action")
+      }
+    }
+  }
+}
+
+@Composable
+private fun DepthIndentedRow(
+  depth: Int,
+  content: @Composable () -> Unit,
+) {
+  if (depth <= 0) {
+    content()
+    return
+  }
+  val railColor =
+    when (depth) {
+      1 -> MaterialTheme.colorScheme.primary
+      2 -> MaterialTheme.colorScheme.tertiary
+      else -> MaterialTheme.colorScheme.secondary
+    }
+  Row(
+    modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    if (depth > 1) {
+      Spacer(modifier = Modifier.width(((depth - 1) * 14).dp))
+    }
+    Box(
+      modifier =
+        Modifier
+          .width(3.dp)
+          .fillMaxHeight()
+          .padding(vertical = 2.dp)
+          .clip(RoundedCornerShape(999.dp))
+          .background(railColor.copy(alpha = 0.7f)),
+    )
+    Spacer(modifier = Modifier.width(10.dp))
+    Box(modifier = Modifier.weight(1f)) {
+      content()
+    }
+  }
+}
+
+@Composable
+private fun InlineInsertDivider(
+  label: String,
+  onClick: () -> Unit,
+  testTag: String,
+) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    HorizontalDivider(
+      modifier = Modifier.weight(1f),
+      color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+    )
+    Surface(
+      shape = RoundedCornerShape(999.dp),
+      color = MaterialTheme.colorScheme.surfaceContainerHigh,
+      border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+      modifier =
+        Modifier
+          .clip(RoundedCornerShape(999.dp))
+          .clickable(onClick = onClick)
+          .testTag(testTag),
+    ) {
+      Row(
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+      ) {
+        Icon(
+          imageVector = Icons.Rounded.Add,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.size(14.dp),
+        )
+        Text(
+          text = label,
+          style = MaterialTheme.typography.labelSmall,
+          fontWeight = FontWeight.Medium,
+          color = MaterialTheme.colorScheme.primary,
+        )
+      }
+    }
+    HorizontalDivider(
+      modifier = Modifier.weight(1f),
+      color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+    )
+  }
+}
+
+@Composable
 private fun ActionTreeItemCard(
   row: EditorTreeRow.ActionRow,
   globalDelay: DelayConfig,
@@ -470,44 +732,71 @@ private fun ActionTreeItemCard(
       is ScriptAction.LoopBlock -> action.isExpanded
       else -> false
     }
-  val borderColor =
-    when (action.categoryGroup()) {
-      ActionCategoryGroup.TOUCH_GESTURES -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-      ActionCategoryGroup.FLOW_CONTROL -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.6f)
-      ActionCategoryGroup.SYSTEM_HARDWARE -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.55f)
-      ActionCategoryGroup.VARIABLE_OPS -> MaterialTheme.colorScheme.outline
+  var menuExpanded by remember(action.id) { mutableStateOf(false) }
+
+  val containerColor =
+    if (isContainer) {
+      MaterialTheme.colorScheme.surfaceContainerHigh
+    } else {
+      MaterialTheme.colorScheme.surfaceContainerLow
     }
 
-  Card(
-    border = BorderStroke(1.dp, borderColor),
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-    modifier = modifier.fillMaxWidth().testTag("action_card_${action.id}"),
+  Surface(
+    shape = RoundedCornerShape(16.dp),
+    color = containerColor,
+    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+    modifier =
+      modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(16.dp))
+        .clickable { onIntent(ScriptEditorUiIntent.OpenEditActionSheet(action.id)) }
+        .testTag("action_card_${action.id}"),
   ) {
-    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(
+      modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
       Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
       ) {
-        Surface(
-          shape = MaterialTheme.shapes.small,
-          color = MaterialTheme.colorScheme.primaryContainer,
+        Column(
+          horizontalAlignment = Alignment.CenterHorizontally,
+          verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-          Text(
-            text = row.stepLabel,
-            style = MaterialTheme.typography.labelMedium,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+          ActionIconBadge(
+            icon = action.actionIcon(),
+            category = action.categoryGroup(),
+            boxSize = 40.dp,
+            iconSize = 20.dp,
+            cornerRadius = 12.dp,
           )
+          Surface(
+            shape = CircleShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+          ) {
+            Text(
+              text = row.stepLabel,
+              style = MaterialTheme.typography.labelSmall,
+              fontFamily = FontFamily.Monospace,
+              fontWeight = FontWeight.SemiBold,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+            )
+          }
         }
 
-        Column(modifier = Modifier.weight(1f)) {
+        Column(
+          modifier = Modifier.weight(1f),
+          verticalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
           Text(
             text = ActionTreeUtils.actionTypeTitle(action),
             style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
           )
           Text(
             text = ActionTreeUtils.summarizeAction(action),
@@ -516,67 +805,108 @@ private fun ActionTreeItemCard(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
           )
+          if (action.supportsPostActionDelay()) {
+            val delayPillText = formatPostDelayBadge(action, globalDelay)
+            Surface(
+              shape = RoundedCornerShape(6.dp),
+              color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            ) {
+              Text(
+                text = delayPillText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+              )
+            }
+          }
         }
 
-        if (isContainer) {
-          IconButton(
-            onClick = { onIntent(ScriptEditorUiIntent.ToggleActionExpanded(action.id)) },
-            modifier = Modifier.size(48.dp),
-          ) {
-            Icon(
-              imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-              contentDescription = if (isExpanded) "Collapse branch" else "Expand branch",
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+          if (isContainer) {
+            IconButton(
+              onClick = { onIntent(ScriptEditorUiIntent.ToggleActionExpanded(action.id)) },
+              modifier = Modifier.size(48.dp),
+            ) {
+              Icon(
+                imageVector = if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                contentDescription = if (isExpanded) "Collapse branch" else "Expand branch",
+              )
+            }
+          }
+
+          Box {
+            IconButton(
+              onClick = { menuExpanded = true },
+              modifier = Modifier.size(48.dp),
+            ) {
+              Icon(
+                imageVector = Icons.Rounded.MoreVert,
+                contentDescription = "Action options",
+              )
+            }
+            DropdownMenu(
+              expanded = menuExpanded,
+              onDismissRequest = { menuExpanded = false },
+            ) {
+              DropdownMenuItem(
+                text = { Text("Edit") },
+                leadingIcon = { Icon(Icons.Rounded.Edit, contentDescription = null) },
+                onClick = {
+                  menuExpanded = false
+                  onIntent(ScriptEditorUiIntent.OpenEditActionSheet(action.id))
+                },
+              )
+              DropdownMenuItem(
+                text = { Text("Move Up") },
+                leadingIcon = { Icon(Icons.Rounded.ArrowUpward, contentDescription = null) },
+                enabled = row.indexInBranch > 0,
+                onClick = {
+                  menuExpanded = false
+                  onIntent(ScriptEditorUiIntent.MoveActionUp(row.location, row.indexInBranch))
+                },
+              )
+              DropdownMenuItem(
+                text = { Text("Move Down") },
+                leadingIcon = { Icon(Icons.Rounded.ArrowDownward, contentDescription = null) },
+                enabled = row.indexInBranch < row.siblingCount - 1,
+                onClick = {
+                  menuExpanded = false
+                  onIntent(ScriptEditorUiIntent.MoveActionDown(row.location, row.indexInBranch))
+                },
+              )
+              HorizontalDivider()
+              DropdownMenuItem(
+                text = { Text("Delete") },
+                leadingIcon = { Icon(Icons.Rounded.DeleteOutline, contentDescription = null) },
+                colors =
+                  MenuDefaults.itemColors(
+                    textColor = MaterialTheme.colorScheme.error,
+                    leadingIconColor = MaterialTheme.colorScheme.error,
+                  ),
+                onClick = {
+                  menuExpanded = false
+                  onIntent(ScriptEditorUiIntent.DeleteAction(action.id))
+                },
+              )
+            }
           }
         }
       }
 
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-      ) {
-        val delayBadgeText = formatPostDelayBadge(action, globalDelay)
-        AssistChip(
-          onClick = { onIntent(ScriptEditorUiIntent.OpenEditActionSheet(action.id)) },
-          label = { Text(delayBadgeText, style = MaterialTheme.typography.labelSmall) },
-        )
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          IconButton(
-            onClick = {
-              onIntent(ScriptEditorUiIntent.MoveActionUp(row.location, row.indexInBranch))
-            },
-            enabled = row.indexInBranch > 0,
-            modifier = Modifier.size(48.dp),
-          ) {
-            Icon(Icons.Filled.ArrowUpward, contentDescription = "Move up")
-          }
-          IconButton(
-            onClick = {
-              onIntent(ScriptEditorUiIntent.MoveActionDown(row.location, row.indexInBranch))
-            },
-            enabled = row.indexInBranch < row.siblingCount - 1,
-            modifier = Modifier.size(48.dp),
-          ) {
-            Icon(Icons.Filled.ArrowDownward, contentDescription = "Move down")
-          }
-          IconButton(
-            onClick = { onIntent(ScriptEditorUiIntent.OpenEditActionSheet(action.id)) },
-            modifier = Modifier.size(48.dp),
-          ) {
-            Icon(Icons.Filled.Edit, contentDescription = "Edit action")
-          }
-          IconButton(
-            onClick = { onIntent(ScriptEditorUiIntent.DeleteAction(action.id)) },
-            modifier = Modifier.size(48.dp),
-          ) {
-            Icon(
-              imageVector = Icons.Filled.DeleteOutline,
-              contentDescription = "Delete action",
-              tint = MaterialTheme.colorScheme.error,
-            )
-          }
+      if (action is ScriptAction.IfBlock) {
+        Surface(
+          shape = RoundedCornerShape(10.dp),
+          color = MaterialTheme.colorScheme.surfaceContainerHighest,
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Text(
+            text = ConditionValidator.formatNaturalLanguagePreview(action.conditionRoot),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+          )
         }
       }
     }
@@ -584,7 +914,7 @@ private fun ActionTreeItemCard(
 }
 
 private fun formatPostDelayBadge(action: ScriptAction, globalDelay: DelayConfig): String {
-  if (!action.supportsPostActionDelay()) return "Post Delay: 0ms"
+  if (!action.supportsPostActionDelay()) return "0ms"
   val postDelay =
     when (action) {
       is ScriptAction.Tap -> action.postDelay
@@ -600,9 +930,9 @@ private fun formatPostDelayBadge(action: ScriptAction, globalDelay: DelayConfig)
       else -> PostActionDelay.Off
     }
   return when (postDelay) {
-    PostActionDelay.Global -> "Post: Global (${ActionTreeUtils.formatDelayConfig(globalDelay)})"
-    is PostActionDelay.Override -> "Post: ${ActionTreeUtils.formatDelayConfig(postDelay.config)}"
-    PostActionDelay.Off -> "Post: Off (0ms)"
+    PostActionDelay.Global -> "Global (${ActionTreeUtils.formatDelayConfig(globalDelay)})"
+    is PostActionDelay.Override -> "Delay ${ActionTreeUtils.formatDelayConfig(postDelay.config)}"
+    PostActionDelay.Off -> "Delay 0ms"
   }
 }
 
@@ -614,7 +944,7 @@ private fun flattenActionTree(actions: List<ScriptAction>): List<EditorTreeRow> 
     location = ActionBranchLocation(),
     depth = 0,
     prefix = "#",
-    addLabel = "+ Add Action",
+    addLabel = "Add Action",
   )
   return rows
 }
@@ -635,6 +965,7 @@ private fun appendBranchRows(
       location = location,
       insertIndex = 0,
       label = addLabel,
+      isTail = branchActions.isEmpty(),
     )
 
   branchActions.forEachIndexed { index, action ->
@@ -663,6 +994,7 @@ private fun appendBranchRows(
               key = "branch_then_${action.id}",
               depth = depth + 1,
               title = "Then Branch (${action.thenActions.size})",
+              branchKind = BranchKind.IF_THEN,
             )
           appendBranchRows(
             rows = rows,
@@ -670,13 +1002,14 @@ private fun appendBranchRows(
             location = ActionBranchLocation(action.id, BranchKind.IF_THEN),
             depth = depth + 1,
             prefix = "$stepNum.T",
-            addLabel = "+ Add Then Action",
+            addLabel = "Add Then Action",
           )
           rows +=
             EditorTreeRow.BranchLabel(
               key = "branch_else_${action.id}",
               depth = depth + 1,
               title = "Else Branch (${action.elseActions.size})",
+              branchKind = BranchKind.IF_ELSE,
             )
           appendBranchRows(
             rows = rows,
@@ -684,7 +1017,7 @@ private fun appendBranchRows(
             location = ActionBranchLocation(action.id, BranchKind.IF_ELSE),
             depth = depth + 1,
             prefix = "$stepNum.E",
-            addLabel = "+ Add Else Action",
+            addLabel = "Add Else Action",
           )
         }
       }
@@ -696,6 +1029,7 @@ private fun appendBranchRows(
               key = "branch_loop_${action.id}",
               depth = depth + 1,
               title = "Loop Body (${action.bodyActions.size})",
+              branchKind = BranchKind.LOOP_BODY,
             )
           appendBranchRows(
             rows = rows,
@@ -703,7 +1037,7 @@ private fun appendBranchRows(
             location = ActionBranchLocation(action.id, BranchKind.LOOP_BODY),
             depth = depth + 1,
             prefix = "$stepNum.",
-            addLabel = "+ Add Loop Action",
+            addLabel = "Add Loop Action",
           )
         }
       }
@@ -718,6 +1052,7 @@ private fun appendBranchRows(
         location = location,
         insertIndex = index + 1,
         label = addLabel,
+        isTail = index == branchActions.lastIndex,
       )
   }
 }

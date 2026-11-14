@@ -1,36 +1,40 @@
 package com.tapflow.feature.editor
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,8 +47,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.PostActionDelay
@@ -52,12 +58,13 @@ import com.tapflow.core.model.common.VariableDefinition
 import com.tapflow.core.model.common.VariableType
 import com.tapflow.core.model.entitlement.ProFeatureGate
 
-private enum class DelayModeTab {
-  FIXED,
-  RANDOM_RANGE,
-  DEVIATION,
+private enum class DelayModeTab(val label: String, val requiresPro: Boolean) {
+  FIXED("Fixed", false),
+  RANDOM_RANGE("Random", true),
+  DEVIATION("Deviation", true),
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DelayConfigEditor(
   config: DelayConfig,
@@ -77,69 +84,42 @@ fun DelayConfigEditor(
     modifier = modifier.fillMaxWidth(),
     verticalArrangement = Arrangement.spacedBy(10.dp),
   ) {
-    FlowRow(
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
-      verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-      FilterChip(
-        selected = mode == DelayModeTab.FIXED,
-        onClick = {
-          val baseMs =
-            when (config) {
-              is DelayConfig.Fixed -> config.durationMs
-              is DelayConfig.RandomRange -> config.minMs
-              is DelayConfig.Deviation -> config.baseMs
+    val tabs = DelayModeTab.entries
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+      tabs.forEachIndexed { index, tab ->
+        val locked = tab.requiresPro && !isPro
+        SegmentedButton(
+          selected = mode == tab,
+          onClick = {
+            if (locked) {
+              onProRequested(ProFeatureGate.RANDOM_DEVIATION_DELAY.displayName)
+            } else {
+              val baseMs =
+                when (config) {
+                  is DelayConfig.Fixed -> config.durationMs
+                  is DelayConfig.RandomRange -> config.minMs
+                  is DelayConfig.Deviation -> config.baseMs
+                }
+              when (tab) {
+                DelayModeTab.FIXED -> onConfigChange(DelayConfig.fixed(baseMs))
+                DelayModeTab.RANDOM_RANGE ->
+                  onConfigChange(DelayConfig.randomRange(baseMs, (baseMs + 150L).coerceAtLeast(baseMs)))
+                DelayModeTab.DEVIATION -> onConfigChange(DelayConfig.deviation(baseMs, 50L))
+              }
             }
-          onConfigChange(DelayConfig.fixed(baseMs))
-        },
-        label = { Text("Fixed") },
-      )
-      FilterChip(
-        selected = mode == DelayModeTab.RANDOM_RANGE,
-        onClick = {
-          if (!isPro) {
-            onProRequested(ProFeatureGate.RANDOM_DEVIATION_DELAY.displayName)
-          } else {
-            val min =
-              when (config) {
-                is DelayConfig.Fixed -> config.durationMs
-                is DelayConfig.RandomRange -> config.minMs
-                is DelayConfig.Deviation -> config.baseMs
-              }
-            onConfigChange(DelayConfig.randomRange(min, (min + 150L).coerceAtLeast(min)))
-          }
-        },
-        leadingIcon =
-          if (!isPro) {
-            { Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(14.dp)) }
-          } else {
-            null
           },
-        label = { Text("Random Range") },
-      )
-      FilterChip(
-        selected = mode == DelayModeTab.DEVIATION,
-        onClick = {
-          if (!isPro) {
-            onProRequested(ProFeatureGate.RANDOM_DEVIATION_DELAY.displayName)
-          } else {
-            val base =
-              when (config) {
-                is DelayConfig.Fixed -> config.durationMs
-                is DelayConfig.RandomRange -> config.minMs
-                is DelayConfig.Deviation -> config.baseMs
-              }
-            onConfigChange(DelayConfig.deviation(base, 50L))
-          }
-        },
-        leadingIcon =
-          if (!isPro) {
-            { Icon(Icons.Filled.Lock, contentDescription = null, modifier = Modifier.size(14.dp)) }
-          } else {
-            null
+          shape = SegmentedButtonDefaults.itemShape(index = index, count = tabs.size),
+          icon = {
+            if (locked) {
+              Icon(Icons.Rounded.Lock, contentDescription = "Pro feature", modifier = Modifier.size(16.dp))
+            } else {
+              SegmentedButtonDefaults.Icon(active = mode == tab)
+            }
           },
-        label = { Text("Deviation (±)") },
-      )
+        ) {
+          Text(tab.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+      }
     }
 
     when (config) {
@@ -272,6 +252,7 @@ fun HmsMsDurationRow(
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PostActionDelaySection(
   postDelay: PostActionDelay,
@@ -280,52 +261,48 @@ fun PostActionDelaySection(
   onPostDelayChange: (PostActionDelay) -> Unit,
   onProRequested: (String) -> Unit,
 ) {
-  Card(
-    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-    modifier = Modifier.fillMaxWidth(),
+  val selectedIdx =
+    when (postDelay) {
+      PostActionDelay.Global -> 0
+      is PostActionDelay.Override -> 1
+      PostActionDelay.Off -> 2
+    }
+
+  EditorSectionCard(
+    title = "Post-Action Delay",
+    subtitle = "Global default: ${ActionTreeUtils.formatDelayConfig(globalDelay)}",
+    containerColor = MaterialTheme.colorScheme.surfaceContainer,
   ) {
-    Column(
-      modifier = Modifier.padding(12.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-      Text(
-        text = "Post-Action Delay",
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
-      )
-      FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-      ) {
-        FilterChip(
-          selected = postDelay is PostActionDelay.Global,
-          onClick = { onPostDelayChange(PostActionDelay.Global) },
-          label = { Text("Global (${ActionTreeUtils.formatDelayConfig(globalDelay)})") },
-        )
-        FilterChip(
-          selected = postDelay is PostActionDelay.Override,
+    val options = listOf("Global", "Override", "Off (0ms)")
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+      options.forEachIndexed { index, label ->
+        SegmentedButton(
+          selected = selectedIdx == index,
           onClick = {
-            if (postDelay !is PostActionDelay.Override) {
-              onPostDelayChange(PostActionDelay.Override(globalDelay.clamped()))
+            when (index) {
+              0 -> onPostDelayChange(PostActionDelay.Global)
+              1 -> {
+                if (postDelay !is PostActionDelay.Override) {
+                  onPostDelayChange(PostActionDelay.Override(globalDelay.clamped()))
+                }
+              }
+              2 -> onPostDelayChange(PostActionDelay.Off)
             }
           },
-          label = { Text("Override") },
-        )
-        FilterChip(
-          selected = postDelay is PostActionDelay.Off,
-          onClick = { onPostDelayChange(PostActionDelay.Off) },
-          label = { Text("Off (0ms)") },
-        )
+          shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+        ) {
+          Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
       }
+    }
 
-      if (postDelay is PostActionDelay.Override) {
-        DelayConfigEditor(
-          config = postDelay.config,
-          isPro = isPro,
-          onConfigChange = { next -> onPostDelayChange(PostActionDelay.Override(next)) },
-          onProRequested = onProRequested,
-        )
-      }
+    if (postDelay is PostActionDelay.Override) {
+      DelayConfigEditor(
+        config = postDelay.config,
+        isPro = isPro,
+        onConfigChange = { next -> onPostDelayChange(PostActionDelay.Override(next)) },
+        onProRequested = onProRequested,
+      )
     }
   }
 }
@@ -345,11 +322,14 @@ fun GlobalDelayBottomSheet(
   ModalBottomSheet(
     onDismissRequest = onDismiss,
     sheetState = sheetState,
+    dragHandle = { BottomSheetDefaults.DragHandle() },
   ) {
     Column(
       modifier =
         Modifier
           .fillMaxWidth()
+          .navigationBarsPadding()
+          .imePadding()
           .verticalScroll(rememberScrollState())
           .padding(horizontal = 20.dp, vertical = 12.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -365,27 +345,31 @@ fun GlobalDelayBottomSheet(
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
-      DelayConfigEditor(
-        config = draftConfig,
-        isPro = isPro,
-        onConfigChange = { draftConfig = it },
-        onProRequested = onProRequested,
-      )
-      Spacer(modifier = Modifier.height(6.dp))
+      EditorSectionCard {
+        DelayConfigEditor(
+          config = draftConfig,
+          isPro = isPro,
+          onConfigChange = { draftConfig = it },
+          onProRequested = onProRequested,
+        )
+      }
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically,
       ) {
-        TextButton(onClick = onDismiss) { Text("Cancel") }
+        TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) {
+          Text("Cancel")
+        }
         Spacer(modifier = Modifier.width(8.dp))
         Button(
           onClick = { onSave(draftConfig.clamped()) },
-          modifier = Modifier.testTag("save_global_delay_button"),
+          modifier = Modifier.heightIn(min = 48.dp).testTag("save_global_delay_button"),
         ) {
           Text("Apply")
         }
       }
-      Spacer(modifier = Modifier.height(16.dp))
+      Spacer(modifier = Modifier.height(8.dp))
     }
   }
 }
@@ -407,9 +391,15 @@ fun DynamicVariablesBottomSheet(
   ModalBottomSheet(
     onDismissRequest = onDismiss,
     sheetState = sheetState,
+    dragHandle = { BottomSheetDefaults.DragHandle() },
   ) {
     Column(
-      modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+      modifier =
+        Modifier
+          .fillMaxWidth()
+          .navigationBarsPadding()
+          .imePadding()
+          .padding(horizontal = 20.dp, vertical = 12.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       Text(
@@ -423,92 +413,107 @@ fun DynamicVariablesBottomSheet(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
 
-      Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier.fillMaxWidth(),
+      EditorSectionCard(
+        title = if (editingKey == null) "Define Variable" else "Edit {$editingKey}",
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
       ) {
-        Column(
-          modifier = Modifier.padding(12.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          OutlinedTextField(
-            value = keyInput,
-            onValueChange = { keyInput = it.replace(" ", "_") },
-            label = { Text("Variable Key (e.g. loop_count)") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().testTag("variable_key_input"),
-          )
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            VariableType.entries.forEach { t ->
-              FilterChip(
-                selected = typeInput == t,
-                onClick = {
-                  typeInput = t
-                  if (t == VariableType.BOOLEAN && defaultInput != "true" && defaultInput != "false") {
-                    defaultInput = "false"
-                  }
-                },
-                label = { Text(t.displayLabel) },
-              )
+        OutlinedTextField(
+          value = keyInput,
+          onValueChange = { keyInput = it.replace(" ", "_") },
+          label = { Text("Variable Key (e.g. loop_count)") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth().testTag("variable_key_input"),
+        )
+
+        val types = VariableType.entries
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+          types.forEachIndexed { index, t ->
+            SegmentedButton(
+              selected = typeInput == t,
+              onClick = {
+                typeInput = t
+                if (t == VariableType.BOOLEAN && defaultInput != "true" && defaultInput != "false") {
+                  defaultInput = "false"
+                }
+              },
+              shape = SegmentedButtonDefaults.itemShape(index = index, count = types.size),
+            ) {
+              Text(t.displayLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
           }
-          OutlinedTextField(
-            value = defaultInput,
-            onValueChange = { defaultInput = it },
-            label = { Text("Default Value") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth().testTag("variable_default_input"),
-          )
-          Button(
-            onClick = {
-              if (keyInput.isNotBlank()) {
-                onUpsert(
-                  VariableDefinition(
-                    key = keyInput.trim(),
-                    type = typeInput,
-                    defaultValue = defaultInput,
-                  ),
-                  editingKey,
-                )
-                keyInput = ""
-                defaultInput = ""
-                editingKey = null
-              }
-            },
-            enabled = keyInput.isNotBlank(),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("add_variable_button"),
-          ) {
-            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(if (editingKey == null) "Add Variable" else "Update Variable")
-          }
+        }
+
+        OutlinedTextField(
+          value = defaultInput,
+          onValueChange = { defaultInput = it },
+          label = { Text("Default Value") },
+          singleLine = true,
+          modifier = Modifier.fillMaxWidth().testTag("variable_default_input"),
+        )
+        Button(
+          onClick = {
+            if (keyInput.isNotBlank()) {
+              onUpsert(
+                VariableDefinition(
+                  key = keyInput.trim(),
+                  type = typeInput,
+                  defaultValue = defaultInput,
+                ),
+                editingKey,
+              )
+              keyInput = ""
+              defaultInput = ""
+              editingKey = null
+            }
+          },
+          enabled = keyInput.isNotBlank(),
+          modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("add_variable_button"),
+        ) {
+          Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+          Spacer(modifier = Modifier.width(6.dp))
+          Text(if (editingKey == null) "Add Variable" else "Update Variable")
         }
       }
 
       if (variables.isNotEmpty()) {
-        HorizontalDivider()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         LazyColumn(
           modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp),
           verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           items(variables, key = { it.key }) { variable ->
-            Card(
-              colors =
-                CardDefaults.cardColors(
-                  containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                ),
+            Surface(
+              shape = RoundedCornerShape(14.dp),
+              color = MaterialTheme.colorScheme.surfaceContainerLow,
+              border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
             ) {
               Row(
-                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
               ) {
-                Column(modifier = Modifier.weight(1f)) {
-                  Text(
-                    text = "{${variable.key}} (${variable.type.displayLabel})",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                  )
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                  Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                  ) {
+                    Text(
+                      text = "{${variable.key}}",
+                      style = MaterialTheme.typography.titleSmall,
+                      fontFamily = FontFamily.Monospace,
+                      fontWeight = FontWeight.SemiBold,
+                    )
+                    Surface(
+                      shape = RoundedCornerShape(6.dp),
+                      color = MaterialTheme.colorScheme.secondaryContainer,
+                    ) {
+                      Text(
+                        text = variable.type.displayLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                      )
+                    }
+                  }
                   Text(
                     text = "Default: \"${variable.defaultValue}\"",
                     style = MaterialTheme.typography.bodySmall,
@@ -530,7 +535,7 @@ fun DynamicVariablesBottomSheet(
                   modifier = Modifier.size(48.dp),
                 ) {
                   Icon(
-                    imageVector = Icons.Filled.DeleteOutline,
+                    imageVector = Icons.Rounded.DeleteOutline,
                     contentDescription = "Delete variable",
                     tint = MaterialTheme.colorScheme.error,
                   )
@@ -541,7 +546,7 @@ fun DynamicVariablesBottomSheet(
         }
       }
 
-      Spacer(modifier = Modifier.height(12.dp))
+      Spacer(modifier = Modifier.height(8.dp))
     }
   }
 }
