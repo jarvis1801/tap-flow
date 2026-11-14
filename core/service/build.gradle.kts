@@ -16,6 +16,10 @@ android {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
   }
+
+  buildFeatures {
+    aidl = true
+  }
 }
 
 dependencies {
@@ -23,6 +27,7 @@ dependencies {
   implementation(project(":core:database"))
   implementation(project(":core:datastore"))
   implementation(libs.androidx.core.ktx)
+  implementation(libs.androidx.compose.runtime.annotation)
   implementation(libs.shizuku.api)
   implementation(libs.shizuku.provider)
   implementation(libs.kotlinx.coroutines.android)

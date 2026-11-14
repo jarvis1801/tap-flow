@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="media_projection_channel_name">Screen Capture Engine</string>
+    <string name="media_projection_channel_description">Keeps TapFlow visual color and template matching active.</string>
+    <string name="media_projection_notification_title">TapFlow Vision Active</string>
+    <string name="media_projection_notification_text">Screen capture engine is ready for color and image conditions.</string>
+    <string name="media_projection_stop_action">Stop</string>
+</resources>
