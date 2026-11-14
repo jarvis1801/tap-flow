@@ -457,6 +457,9 @@ class OverlayService :
 
     val captureContainer =
       FrameLayout(this).apply {
+        setViewTreeLifecycleOwner(this@OverlayService)
+        setViewTreeSavedStateRegistryOwner(this@OverlayService)
+        setViewTreeViewModelStoreOwner(this@OverlayService)
         visibility = View.GONE
         addView(
           feedbackCompose,
@@ -840,8 +843,13 @@ class OverlayService :
           touchPreview = null,
         )
       }
-      delay(40L)
-      preReplayBitmap = visionEngine.captureCleanBitmap(useShizukuFallback = prefs.shizuku.silentScreenshots)
+      captureFeedbackComposeView?.visibility = View.INVISIBLE
+      try {
+        delay(40L)
+        preReplayBitmap = visionEngine.captureCleanBitmap(useShizukuFallback = prefs.shizuku.silentScreenshots)
+      } finally {
+        captureFeedbackComposeView?.visibility = View.VISIBLE
+      }
     }
 
     // Step 3: Disable Passthrough (set FLAG_NOT_TOUCHABLE on capture layer)
