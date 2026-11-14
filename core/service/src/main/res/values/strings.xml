@@ -5,4 +5,9 @@
     <string name="media_projection_notification_title">TapFlow Vision Active</string>
     <string name="media_projection_notification_text">Screen capture engine is ready for color and image conditions.</string>
     <string name="media_projection_stop_action">Stop</string>
+    <string name="overlay_channel_name">Floating Controls</string>
+    <string name="overlay_channel_description">Displays TapFlow floating runner dock and touch inspector overlay.</string>
+    <string name="overlay_notification_title">TapFlow Overlay Active</string>
+    <string name="overlay_notification_text">Floating automation controls are running.</string>
+    <string name="overlay_stop_action">Close Overlay</string>
 </resources>
