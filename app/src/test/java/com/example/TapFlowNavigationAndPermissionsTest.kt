@@ -1,9 +1,9 @@
-package com.example
+package com.jarvis.tapflow
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.example.navigation.HomeTab
-import com.example.navigation.Route
+import com.jarvis.tapflow.navigation.HomeTab
+import com.jarvis.tapflow.navigation.Route
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals

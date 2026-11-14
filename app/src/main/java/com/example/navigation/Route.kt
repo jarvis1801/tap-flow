@@ -1,4 +1,4 @@
-package com.example.navigation
+package com.jarvis.tapflow.navigation
 
 import kotlinx.serialization.Serializable
 

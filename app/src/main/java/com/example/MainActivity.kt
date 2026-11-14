@@ -1,4 +1,4 @@
-package com.example
+package com.jarvis.tapflow
 
 import android.Manifest
 import android.accessibilityservice.AccessibilityServiceInfo
@@ -35,9 +35,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import com.example.navigation.HomeTab
-import com.example.navigation.Route
-import com.example.ui.theme.TapFlowTheme
+import com.jarvis.tapflow.navigation.HomeTab
+import com.jarvis.tapflow.navigation.Route
+import com.jarvis.tapflow.ui.theme.TapFlowTheme
 import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.datastore.AppPreferences
 import com.tapflow.core.datastore.TapFlowPreferencesRepository

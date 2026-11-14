@@ -1,4 +1,4 @@
-package com.example.ui.theme
+package com.jarvis.tapflow.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
@@ -6,7 +6,7 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import com.example.R
+import com.jarvis.tapflow.R
 
 val PlusJakartaSansFamily = FontFamily(
   Font(R.font.plus_jakarta_sans, FontWeight.Normal),

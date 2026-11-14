@@ -149,7 +149,7 @@ class ActionTreeAndConditionTest {
             listOf(
               ScriptAction.LaunchApp(
                 id = "else_launch",
-                packageName = "com.example.app",
+                packageName = "com.jarvis.tapflow.app",
                 postDelay = PostActionDelay.Off,
               ),
             ),

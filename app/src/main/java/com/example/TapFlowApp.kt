@@ -1,4 +1,4 @@
-package com.example
+package com.jarvis.tapflow
 
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp

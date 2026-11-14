@@ -10,10 +10,10 @@ plugins {
 }
 
 android {
-  namespace = "com.example"
+  namespace = "com.jarvis.tapflow"
 
   defaultConfig {
-    applicationId = "com.aistudio.tapflow.qkzmtr"
+    applicationId = "com.jarvis.tapflow"
     versionCode = 1
     versionName = "1.0.0"
 

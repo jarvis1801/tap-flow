@@ -1,4 +1,4 @@
-package com.example.ui.theme
+package com.jarvis.tapflow.ui.theme
 
 import androidx.compose.runtime.Composable
 import com.tapflow.core.datastore.DarkModeOption
