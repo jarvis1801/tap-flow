@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.media.Image
 import android.media.ImageReader
+import android.media.projection.MediaProjectionConfig
+import android.media.projection.MediaProjectionManager
+import android.os.Build
 import androidx.compose.runtime.Immutable
 import java.util.concurrent.locks.ReentrantLock
 import javax.inject.Inject
@@ -45,6 +48,15 @@ class MediaProjectionBridge @Inject constructor() {
 
   val isCaptureActive: Boolean
     get() = _captureState.value is ScreenCaptureState.Active
+
+  fun createWholeScreenCaptureIntent(manager: MediaProjectionManager): Intent =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      manager.createScreenCaptureIntent(
+        MediaProjectionConfig.createConfigForDefaultDisplay(),
+      )
+    } else {
+      manager.createScreenCaptureIntent()
+    }
 
   fun createStartIntent(
     context: Context,

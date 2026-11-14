@@ -183,7 +183,9 @@ fun HomeScreen(
             pendingConsentTarget = effect.target
             val mgr =
               context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-            mediaProjectionLauncher.launch(mgr.createScreenCaptureIntent())
+            mediaProjectionLauncher.launch(
+              mediaProjectionBridge.createWholeScreenCaptureIntent(mgr),
+            )
           }
         }
         is HomeUiEffect.LaunchOverlayAndMinimize -> {

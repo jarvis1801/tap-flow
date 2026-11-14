@@ -155,7 +155,7 @@ class MainActivity : AppCompatActivity() {
     }
     pendingProjectionTarget = target
     pendingProjectionDeniedCallback = onDenied
-    mediaProjectionLauncher.launch(manager.createScreenCaptureIntent())
+    mediaProjectionLauncher.launch(mediaProjectionBridge.createWholeScreenCaptureIntent(manager))
   }
 
   private fun launchOverlayForTarget(target: PendingMediaProjectionTarget) {
