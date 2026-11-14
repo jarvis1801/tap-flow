@@ -21,10 +21,17 @@ import com.example.navigation.HomeTab
 import com.example.navigation.Route
 import com.example.ui.boot.Phase1BootScreen
 import com.example.ui.theme.TapFlowTheme
+import androidx.lifecycle.lifecycleScope
+import com.tapflow.core.billing.EntitlementRepository
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
+
+  @Inject lateinit var entitlementRepository: EntitlementRepository
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
@@ -32,6 +39,13 @@ class MainActivity : AppCompatActivity() {
       TapFlowTheme {
         TapFlowBootNavHost()
       }
+    }
+  }
+
+  override fun onResume() {
+    super.onResume()
+    lifecycleScope.launch {
+      entitlementRepository.refreshEntitlement()
     }
   }
 }

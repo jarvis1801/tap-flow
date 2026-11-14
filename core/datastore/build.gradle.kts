@@ -22,6 +22,7 @@ android {
 dependencies {
   implementation(project(":core:model"))
   implementation(libs.androidx.core.ktx)
+  implementation(libs.androidx.compose.runtime.annotation)
   implementation(libs.androidx.datastore.preferences)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.kotlinx.serialization.json)
