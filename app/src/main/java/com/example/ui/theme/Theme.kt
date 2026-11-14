@@ -11,6 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
+import com.tapflow.core.datastore.DarkModeOption
+import com.tapflow.core.datastore.ThemePaletteOption
+
 private val TapFlowDarkColorScheme =
   darkColorScheme(
     primary = CyanPulse,
@@ -61,10 +64,61 @@ private val TapFlowLightColorScheme =
     outline = OutlineLight,
   )
 
+private val CobaltDarkColorScheme =
+  TapFlowDarkColorScheme.copy(
+    primary = CobaltAccent,
+    onPrimary = Color(0xFF001D47),
+    primaryContainer = CobaltContainerDark,
+    onPrimaryContainer = CobaltContainerLight,
+    secondary = CyanPulse,
+    secondaryContainer = CyanContainerDark,
+    onSecondaryContainer = CyanContainerLight,
+  )
+
+private val CobaltLightColorScheme =
+  TapFlowLightColorScheme.copy(
+    primary = CobaltDeep,
+    onPrimary = Color.White,
+    primaryContainer = CobaltContainerLight,
+    onPrimaryContainer = Color(0xFF001A41),
+    secondary = CyanDeep,
+    secondaryContainer = CyanContainerLight,
+    onSecondaryContainer = Color(0xFF001F24),
+  )
+
+private val AmberDarkColorScheme =
+  TapFlowDarkColorScheme.copy(
+    primary = AmberPro,
+    onPrimary = Color(0xFF3E2900),
+    primaryContainer = AmberProDark,
+    onPrimaryContainer = AmberProLight,
+    secondary = CyanPulse,
+    secondaryContainer = CyanContainerDark,
+    onSecondaryContainer = CyanContainerLight,
+  )
+
+private val AmberLightColorScheme =
+  TapFlowLightColorScheme.copy(
+    primary = AmberProDark,
+    onPrimary = Color.White,
+    primaryContainer = AmberProLight,
+    onPrimaryContainer = Color(0xFF281800),
+    secondary = CyanDeep,
+    secondaryContainer = CyanContainerLight,
+    onSecondaryContainer = Color(0xFF001F24),
+  )
+
 @Composable
 fun TapFlowTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
-  dynamicColor: Boolean = true,
+  darkMode: DarkModeOption = DarkModeOption.SYSTEM,
+  themePalette: ThemePaletteOption = ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
+  darkTheme: Boolean =
+    when (darkMode) {
+      DarkModeOption.SYSTEM -> isSystemInDarkTheme()
+      DarkModeOption.LIGHT -> false
+      DarkModeOption.DARK -> true
+    },
+  dynamicColor: Boolean = themePalette == ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
   content: @Composable () -> Unit,
 ) {
   val colorScheme =
@@ -73,8 +127,11 @@ fun TapFlowTheme(
         val context = LocalContext.current
         if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
       }
-      darkTheme -> TapFlowDarkColorScheme
-      else -> TapFlowLightColorScheme
+      themePalette == ThemePaletteOption.COBALT_TACTICAL ->
+        if (darkTheme) CobaltDarkColorScheme else CobaltLightColorScheme
+      themePalette == ThemePaletteOption.AMBER_INDUSTRIAL ->
+        if (darkTheme) AmberDarkColorScheme else AmberLightColorScheme
+      else -> if (darkTheme) TapFlowDarkColorScheme else TapFlowLightColorScheme
     }
 
   MaterialTheme(
