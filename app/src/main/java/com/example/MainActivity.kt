@@ -34,6 +34,8 @@ import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.datastore.AppPreferences
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
 import com.tapflow.core.service.projection.MediaProjectionBridge
+import com.tapflow.feature.editor.PipelineEditorScreen
+import com.tapflow.feature.editor.ScriptEditorScreen
 import com.tapflow.feature.home.HomeScreen
 import com.tapflow.feature.home.HomeTabType
 import com.tapflow.feature.onboarding.OnboardingScreen
@@ -146,20 +148,24 @@ fun TapFlowNavHost(
         onNavigateBack = { navController.popBackStack() },
       )
     }
-    composable<Route.ScriptEditor> { backStackEntry ->
-      val route = backStackEntry.toRoute<Route.ScriptEditor>()
-      UpcomingPhaseDestinationScreen(
-        title = "Script Editor",
-        detail = "Editing script: ${route.scriptId ?: "New Script"} (Phase 7)",
-        onBack = { navController.popBackStack() },
+    composable<Route.ScriptEditor> {
+      ScriptEditorScreen(
+        onNavigateBack = { navController.popBackStack() },
+        onNavigateToPaywall = { sourceFeature ->
+          navController.navigate(Route.Paywall(sourceFeature)) {
+            launchSingleTop = true
+          }
+        },
       )
     }
-    composable<Route.PipelineEditor> { backStackEntry ->
-      val route = backStackEntry.toRoute<Route.PipelineEditor>()
-      UpcomingPhaseDestinationScreen(
-        title = "Pipeline Editor",
-        detail = "Editing pipeline: ${route.pipelineId ?: "New Pipeline"} (Phase 8)",
-        onBack = { navController.popBackStack() },
+    composable<Route.PipelineEditor> {
+      PipelineEditorScreen(
+        onNavigateBack = { navController.popBackStack() },
+        onNavigateToPaywall = { sourceFeature ->
+          navController.navigate(Route.Paywall(sourceFeature)) {
+            launchSingleTop = true
+          }
+        },
       )
     }
     composable<Route.ScriptLog> { backStackEntry ->
