@@ -30,6 +30,7 @@ class TapFlowPreferencesRepository @Inject constructor(
     val SHIZUKU_FORCE_STOP = booleanPreferencesKey("shizuku_rootless_force_stop")
     val SHIZUKU_ENHANCED_KEYS = booleanPreferencesKey("shizuku_enhanced_key_events")
     val SHIZUKU_SILENT_SCREENSHOTS = booleanPreferencesKey("shizuku_silent_screenshots")
+    val SHIZUKU_AUTO_GRANT_PROJECT_MEDIA = booleanPreferencesKey("shizuku_auto_grant_project_media")
 
     val DOCK_POS_X = intPreferencesKey("floating_dock_pos_x")
     val DOCK_POS_Y = intPreferencesKey("floating_dock_pos_y")
@@ -66,6 +67,7 @@ class TapFlowPreferencesRepository @Inject constructor(
             rootlessForceStop = prefs[Keys.SHIZUKU_FORCE_STOP] ?: false,
             enhancedKeyEvents = prefs[Keys.SHIZUKU_ENHANCED_KEYS] ?: false,
             silentScreenshots = prefs[Keys.SHIZUKU_SILENT_SCREENSHOTS] ?: false,
+            autoGrantProjectMedia = prefs[Keys.SHIZUKU_AUTO_GRANT_PROJECT_MEDIA] ?: false,
           ),
         dockPosition =
           FloatingDockPosition(
@@ -119,6 +121,10 @@ class TapFlowPreferencesRepository @Inject constructor(
 
   suspend fun setShizukuSilentScreenshots(enabled: Boolean) {
     dataStore.edit { prefs -> prefs[Keys.SHIZUKU_SILENT_SCREENSHOTS] = enabled }
+  }
+
+  suspend fun setShizukuAutoGrantProjectMedia(enabled: Boolean) {
+    dataStore.edit { prefs -> prefs[Keys.SHIZUKU_AUTO_GRANT_PROJECT_MEDIA] = enabled }
   }
 
   suspend fun saveFloatingDockPosition(x: Int, y: Int) {

@@ -21,6 +21,7 @@ data class ShizukuPreferences(
   val rootlessForceStop: Boolean = false,
   val enhancedKeyEvents: Boolean = false,
   val silentScreenshots: Boolean = false,
+  val autoGrantProjectMedia: Boolean = false,
 )
 
 @Immutable

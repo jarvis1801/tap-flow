@@ -261,6 +261,7 @@ class HomeViewModel @Inject constructor(
           _localState.update { it.copy(activeTab = intent.tab) }
           if (intent.tab == HomeTabType.SEAMLESS) {
             shizukuManager.refreshDiagnostics()
+            viewModelScope.launch { shizukuManager.isProjectMediaAllowed() }
           }
         }
       }
@@ -277,6 +278,7 @@ class HomeViewModel @Inject constructor(
         }
         if (intent.tab == HomeTabType.SEAMLESS) {
           shizukuManager.refreshDiagnostics()
+          viewModelScope.launch { shizukuManager.isProjectMediaAllowed() }
         }
       }
       is HomeUiIntent.SetSearchExpanded -> {
@@ -606,6 +608,7 @@ class HomeViewModel @Inject constructor(
       // Seamless Tab
       HomeUiIntent.RefreshShizukuStatus -> {
         shizukuManager.refreshDiagnostics()
+        viewModelScope.launch { shizukuManager.isProjectMediaAllowed() }
       }
       HomeUiIntent.RequestShizukuPermission -> {
         val diag = shizukuManager.refreshDiagnostics()
@@ -635,6 +638,47 @@ class HomeViewModel @Inject constructor(
       is HomeUiIntent.ToggleShizukuSilentScreenshots -> {
         if (!requireShizukuProAndReady()) return
         viewModelScope.launch { preferencesRepository.setShizukuSilentScreenshots(intent.enabled) }
+      }
+      is HomeUiIntent.ToggleShizukuAutoGrantProjectMedia -> {
+        if (!requireShizukuProAndReady()) return
+        viewModelScope.launch {
+          if (intent.enabled) {
+            shizukuManager.grantProjectMediaAppOp().fold(
+              onSuccess = { allowed ->
+                if (allowed) {
+                  preferencesRepository.setShizukuAutoGrantProjectMedia(true)
+                  sendEffect(
+                    HomeUiEffect.ShowSnackbar("PROJECT_MEDIA AppOp allowed via Shizuku."),
+                  )
+                } else {
+                  preferencesRepository.setShizukuAutoGrantProjectMedia(false)
+                  sendEffect(
+                    HomeUiEffect.ShowSnackbar(
+                      "OEM ROM ignored PROJECT_MEDIA AppOp grant; standard prompt will be used.",
+                    ),
+                  )
+                }
+              },
+              onFailure = { err ->
+                preferencesRepository.setShizukuAutoGrantProjectMedia(false)
+                sendEffect(
+                  HomeUiEffect.ShowSnackbar(
+                    err.message ?: "Failed to grant PROJECT_MEDIA via Shizuku.",
+                  ),
+                )
+              },
+            )
+          } else {
+            shizukuManager.revokeProjectMediaAppOp().onFailure { err ->
+              sendEffect(
+                HomeUiEffect.ShowSnackbar(
+                  err.message ?: "Unable to revoke PROJECT_MEDIA via Shizuku.",
+                ),
+              )
+            }
+            preferencesRepository.setShizukuAutoGrantProjectMedia(false)
+          }
+        }
       }
 
       // Settings Tab
@@ -810,17 +854,37 @@ class HomeViewModel @Inject constructor(
     target: PendingMediaProjectionTarget,
     requiresVision: Boolean,
   ) {
-    val state = _uiState.value
-    val shizukuSilentReady =
-      state.isPro &&
-        state.preferences.shizuku.silentScreenshots &&
-        state.shizukuStatus.isFullyReady
-    val hasActiveProjection =
-      mediaProjectionBridge.captureState.value is ScreenCaptureState.Active
+    viewModelScope.launch {
+      val prefs = preferencesRepository.getPreferencesOnce()
+      val isPro = entitlementRepository.isPro()
+      val shizukuReady =
+        isPro &&
+          (shizukuManager.diagnosticState.value.isFullyReady ||
+            shizukuManager.refreshDiagnostics().isFullyReady)
 
-    if (!requiresVision || shizukuSilentReady || hasActiveProjection) {
-      sendEffect(HomeUiEffect.LaunchOverlayAndMinimize(target))
-    } else {
+      // 1) If Shizuku Silent Screenshots is enabled & ready -> skip MediaProjection completely.
+      val shizukuSilentReady = shizukuReady && prefs.shizuku.silentScreenshots
+      // 2) If MediaProjectionService already holds an active projection -> launch Overlay directly.
+      val hasActiveProjection =
+        mediaProjectionBridge.captureState.value is ScreenCaptureState.Active
+
+      if (!requiresVision || shizukuSilentReady || hasActiveProjection) {
+        sendEffect(HomeUiEffect.LaunchOverlayAndMinimize(target))
+        return@launch
+      }
+
+      // 3) If Shizuku Auto-Grant PROJECT_MEDIA is enabled & Shizuku is ready ->
+      //    re-verify/re-grant PROJECT_MEDIA AppOp, skip TapFlow's in-app confirmation dialog,
+      //    and immediately launch MediaProjection ActivityResultLauncher.
+      if (shizukuReady && prefs.shizuku.autoGrantProjectMedia) {
+        if (!shizukuManager.isProjectMediaAllowed()) {
+          shizukuManager.grantProjectMediaAppOp()
+        }
+        sendEffect(HomeUiEffect.RequestMediaProjectionPermission(target))
+        return@launch
+      }
+
+      // 4) Normal non-Shizuku mode -> show TapFlow's in-app "Screen Capture Required" dialog.
       _localState.update { it.copy(pendingProjectionTarget = target) }
     }
   }

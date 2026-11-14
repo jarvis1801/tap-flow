@@ -219,6 +219,7 @@ Tabs:
         - Enable Rootless App Force-Stop (`am force-stop` crash recovery).
         - Enhanced Key Event Injection (Direct physical key events).
         - Silent Background Screenshots (Screencap via shell; bypasses MediaProjection when active).
+        - Auto-Grant Screen Capture (`PROJECT_MEDIA`): Grants `PROJECT_MEDIA` AppOp via Shizuku (`cmd appops set <pkg> PROJECT_MEDIA allow`), verifies `Allowed ✓`, skips TapFlow's pre-consent dialog so `createScreenCaptureIntent()` resolves silently on supported ROMs (falling back safely if blocked by OEM), and helps prevent Android 15+ screen-lock capture interruption.
       State Guardrail:
         - All feature toggles are strictly Disabled & Greyed Out if Shizuku is not installed, not running, permission is ungranted, OR Pro entitlement is inactive.
 

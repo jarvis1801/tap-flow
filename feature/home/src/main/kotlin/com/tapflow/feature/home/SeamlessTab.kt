@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -284,6 +285,16 @@ fun SeamlessTabContent(
               testTag = "toggle_shizuku_silent_screenshots",
               onCheckedChange = { onIntent(HomeUiIntent.ToggleShizukuSilentScreenshots(it)) },
             )
+            HorizontalDivider()
+            ShizukuToggleRow(
+              title = "Auto-Grant Screen Capture (PROJECT_MEDIA)",
+              subtitle = "Skips confirmation prompts via Shizuku AppOps and prevents Android 15+ screen-lock capture interruption (falls back safely if blocked by OEM ROM).",
+              checked = state.preferences.shizuku.autoGrantProjectMedia,
+              enabled = togglesEnabled,
+              statusBadge = if (shizuku.isProjectMediaAllowed) "Allowed ✓" else null,
+              testTag = "toggle_shizuku_auto_grant_project_media",
+              onCheckedChange = { onIntent(HomeUiIntent.ToggleShizukuAutoGrantProjectMedia(it)) },
+            )
           }
         }
       }
@@ -335,6 +346,7 @@ private fun ShizukuToggleRow(
   checked: Boolean,
   enabled: Boolean,
   testTag: String,
+  statusBadge: String? = null,
   onCheckedChange: (Boolean) -> Unit,
 ) {
   Row(
@@ -342,13 +354,37 @@ private fun ShizukuToggleRow(
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(12.dp),
   ) {
-    Column(modifier = Modifier.weight(1f)) {
-      Text(
-        text = title,
-        style = MaterialTheme.typography.bodyLarge,
-        fontWeight = FontWeight.Medium,
-        color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f),
-      )
+    Column(
+      modifier = Modifier.weight(1f),
+      verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Text(
+          text = title,
+          style = MaterialTheme.typography.bodyLarge,
+          fontWeight = FontWeight.Medium,
+          color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f),
+          modifier = Modifier.weight(1f, fill = false),
+        )
+        if (!statusBadge.isNullOrBlank()) {
+          Surface(
+            shape = MaterialTheme.shapes.extraSmall,
+            color = MaterialTheme.colorScheme.primaryContainer,
+            modifier = Modifier.testTag("project_media_allowed_badge"),
+          ) {
+            Text(
+              text = statusBadge,
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.SemiBold,
+              color = MaterialTheme.colorScheme.onPrimaryContainer,
+              modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+          }
+        }
+      }
       Text(
         text = subtitle,
         style = MaterialTheme.typography.bodySmall,

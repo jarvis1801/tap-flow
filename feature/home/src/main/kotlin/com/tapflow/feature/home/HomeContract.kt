@@ -224,6 +224,8 @@ sealed interface HomeUiIntent {
 
   data class ToggleShizukuSilentScreenshots(val enabled: Boolean) : HomeUiIntent
 
+  data class ToggleShizukuAutoGrantProjectMedia(val enabled: Boolean) : HomeUiIntent
+
   // Settings Tab
   data object ActivateSevenDayTrialClicked : HomeUiIntent
 

@@ -1,11 +1,14 @@
 package com.tapflow.core.service.shizuku
 
+import android.app.AppOpsManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
+import android.os.Process
 import androidx.compose.runtime.Immutable
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayOutputStream
@@ -29,6 +32,7 @@ data class ShizukuDiagnosticState(
   val isServiceRunning: Boolean = false,
   val isPermissionGranted: Boolean = false,
   val isUserServiceBound: Boolean = false,
+  val isProjectMediaAllowed: Boolean = false,
 ) {
   val isFullyReady: Boolean
     get() = isInstalled && isServiceRunning && isPermissionGranted
@@ -42,8 +46,12 @@ class ShizukuManager @Inject constructor(
     const val SHIZUKU_PACKAGE_NAME = "moe.shizuku.privileged.api"
     const val REQUEST_CODE_PERMISSION = 4201
     private const val USER_SERVICE_TAG = "TapFlowShizukuShell"
+    private const val APP_OP_PROJECT_MEDIA_STR = "android:project_media"
     private val RESUMED_ACTIVITY_PKG_REGEX =
       Regex("""ActivityRecord\{[^}]*\s+(?:u\d+\s+)?([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)/""")
+
+    internal fun parseAppOpsGetAllowed(output: String): Boolean =
+      output.contains("allow", ignoreCase = true)
 
     internal fun parseResumedActivityPackage(output: String): String? {
       if (output.isBlank()) return null
@@ -144,6 +152,8 @@ class ShizukuManager @Inject constructor(
         isServiceRunning = running,
         isPermissionGranted = granted,
         isUserServiceBound = shellService?.asBinder()?.isBinderAlive == true,
+        isProjectMediaAllowed =
+          checkProjectMediaViaAppOpsManager() || _diagnosticState.value.isProjectMediaAllowed,
       )
     _diagnosticState.value = updated
     return updated
@@ -210,6 +220,89 @@ class ShizukuManager @Inject constructor(
       } ?: return null
     return parseResumedActivityPackage(output)
   }
+
+  suspend fun grantProjectMediaAppOp(): Result<Boolean> =
+    withContext(Dispatchers.IO) {
+      runCatching {
+        if (!refreshDiagnostics().isFullyReady) {
+          error("Shizuku is not ready.")
+        }
+        val pkg = context.packageName
+        var exitCode = execShellCode("cmd appops set $pkg PROJECT_MEDIA allow")
+        if (exitCode != 0) {
+          exitCode = execShellCode("appops set $pkg PROJECT_MEDIA allow")
+        }
+        if (exitCode != 0) {
+          error("Shizuku shell failed to grant PROJECT_MEDIA (exit=$exitCode).")
+        }
+        val output =
+          execShellOutput("cmd appops get $pkg PROJECT_MEDIA")
+            ?.takeIf { it.isNotBlank() }
+            ?: execShellOutput("appops get $pkg PROJECT_MEDIA")
+            .orEmpty()
+        val allowed = parseAppOpsGetAllowed(output) || checkProjectMediaViaAppOpsManager()
+        _diagnosticState.update { it.copy(isProjectMediaAllowed = allowed) }
+        allowed
+      }
+    }
+
+  suspend fun revokeProjectMediaAppOp(): Result<Unit> =
+    withContext(Dispatchers.IO) {
+      runCatching {
+        if (!refreshDiagnostics().isFullyReady) {
+          error("Shizuku is not ready.")
+        }
+        val pkg = context.packageName
+        var exitCode = execShellCode("cmd appops set $pkg PROJECT_MEDIA default")
+        if (exitCode != 0) {
+          exitCode = execShellCode("appops set $pkg PROJECT_MEDIA default")
+        }
+        if (exitCode != 0) {
+          error("Shizuku shell failed to revoke PROJECT_MEDIA (exit=$exitCode).")
+        }
+        val stillAllowed =
+          execShellOutput("cmd appops get $pkg PROJECT_MEDIA")
+            ?.takeIf { it.isNotBlank() }
+            ?.let { parseAppOpsGetAllowed(it) }
+            ?: checkProjectMediaViaAppOpsManager()
+        _diagnosticState.update { it.copy(isProjectMediaAllowed = stillAllowed) }
+      }
+    }
+
+  suspend fun isProjectMediaAllowed(): Boolean =
+    withContext(Dispatchers.IO) {
+      val pkg = context.packageName
+      val allowed =
+        if (refreshDiagnostics().isFullyReady) {
+          val output =
+            execShellOutput("cmd appops get $pkg PROJECT_MEDIA")
+              ?.takeIf { it.isNotBlank() }
+              ?: execShellOutput("appops get $pkg PROJECT_MEDIA")
+          if (!output.isNullOrBlank()) {
+            parseAppOpsGetAllowed(output)
+          } else {
+            checkProjectMediaViaAppOpsManager()
+          }
+        } else {
+          checkProjectMediaViaAppOpsManager()
+        }
+      _diagnosticState.update { it.copy(isProjectMediaAllowed = allowed) }
+      allowed
+    }
+
+  private fun checkProjectMediaViaAppOpsManager(): Boolean =
+    runCatching {
+      val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
+      val uid = Process.myUid()
+      val mode =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+          appOps.unsafeCheckOpNoThrow(APP_OP_PROJECT_MEDIA_STR, uid, context.packageName)
+        } else {
+          @Suppress("DEPRECATION")
+          appOps.checkOpNoThrow(APP_OP_PROJECT_MEDIA_STR, uid, context.packageName)
+        }
+      mode == AppOpsManager.MODE_ALLOWED
+    }.getOrDefault(false)
 
   suspend fun captureSilentScreenshotPngBytes(): ByteArray? =
     withContext(Dispatchers.IO) {
