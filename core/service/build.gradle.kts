@@ -1,26 +1,14 @@
 plugins {
-  alias(libs.plugins.android.library)
-  alias(libs.plugins.kotlin.compose)
-  alias(libs.plugins.google.devtools.ksp)
-  alias(libs.plugins.hilt.android)
+  alias(libs.plugins.tapflow.android.library)
+  alias(libs.plugins.tapflow.android.library.compose)
+  alias(libs.plugins.tapflow.android.hilt)
 }
 
 android {
   namespace = "com.tapflow.core.service"
-  compileSdk = 36
-
-  defaultConfig {
-    minSdk = 28
-  }
-
-  compileOptions {
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
-  }
 
   buildFeatures {
     aidl = true
-    compose = true
   }
 }
 
@@ -29,7 +17,6 @@ dependencies {
   implementation(project(":core:database"))
   implementation(project(":core:datastore"))
   implementation(project(":core:billing"))
-  implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.material3)
@@ -40,8 +27,6 @@ dependencies {
   implementation(libs.shizuku.api)
   implementation(libs.shizuku.provider)
   implementation(libs.kotlinx.coroutines.android)
-  implementation(libs.hilt.android)
-  ksp(libs.hilt.compiler)
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
 }

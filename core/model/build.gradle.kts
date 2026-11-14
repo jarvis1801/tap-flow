@@ -1,10 +1,5 @@
 plugins {
-  alias(libs.plugins.kotlin.jvm)
-  alias(libs.plugins.kotlin.serialization)
-}
-
-kotlin {
-  jvmToolchain(11)
+  alias(libs.plugins.tapflow.jvm.library)
 }
 
 dependencies {

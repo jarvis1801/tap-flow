@@ -1,23 +1,19 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 
 plugins {
-  alias(libs.plugins.android.application)
-  alias(libs.plugins.kotlin.compose)
+  alias(libs.plugins.tapflow.android.application)
+  alias(libs.plugins.tapflow.android.application.compose)
+  alias(libs.plugins.tapflow.android.hilt)
   alias(libs.plugins.kotlin.serialization)
-  alias(libs.plugins.google.devtools.ksp)
-  alias(libs.plugins.hilt.android)
   alias(libs.plugins.secrets)
   alias(libs.plugins.google.services)
 }
 
 android {
   namespace = "com.example"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
     applicationId = "com.aistudio.tapflow.qkzmtr"
-    minSdk = 28
-    targetSdk = 35
     versionCode = 1
     versionName = "1.0.0"
 
@@ -61,7 +57,6 @@ android {
     targetCompatibility = JavaVersion.VERSION_11
   }
   buildFeatures {
-    compose = true
     buildConfig = true
   }
   testOptions { unitTests { isIncludeAndroidResources = true } }
@@ -94,7 +89,6 @@ dependencies {
   implementation(project(":feature:studio"))
   implementation(project(":feature:overlay"))
 
-  implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.appcompat)
   implementation(libs.androidx.activity.compose)
@@ -103,7 +97,6 @@ dependencies {
   implementation(libs.androidx.lifecycle.viewmodel.compose)
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.ui.graphics)
-  implementation(libs.androidx.compose.ui.tooling.preview)
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
@@ -112,12 +105,8 @@ dependencies {
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.coil.compose)
-
-  implementation(libs.hilt.android)
-  ksp(libs.hilt.compiler)
   implementation(libs.androidx.hilt.navigation.compose)
 
-  testImplementation(platform(libs.androidx.compose.bom))
   testImplementation(libs.junit)
   testImplementation(libs.androidx.junit)
   testImplementation(libs.androidx.core)
@@ -125,12 +114,10 @@ dependencies {
   testImplementation(libs.robolectric)
   testImplementation(libs.androidx.compose.ui.test.junit4)
 
-  androidTestImplementation(platform(libs.androidx.compose.bom))
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(libs.androidx.runner)
   androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 
-  debugImplementation(libs.androidx.compose.ui.tooling)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
