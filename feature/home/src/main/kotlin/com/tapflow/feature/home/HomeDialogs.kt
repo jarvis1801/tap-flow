@@ -30,7 +30,7 @@ internal fun HomeDialogs(
       title = { Text("Screen Capture Required") },
       text = {
         Text(
-          "This automation uses screen vision or live screenshot capture. When Android asks what to share, select \"Entire screen\" so coordinates match 1:1.",
+          "Full-screen capture is required to inspect screen pixels, evaluate Color/Image conditions, and capture lossless screenshots accurately across apps.",
         )
       },
       confirmButton = {

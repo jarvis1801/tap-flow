@@ -25,6 +25,8 @@ import com.tapflow.core.model.pipeline.PipelineRepeatMode
 import com.tapflow.core.model.script.Script
 import com.tapflow.core.server.ServerUiStatus
 import com.tapflow.core.server.TapFlowLocalServer
+import com.tapflow.core.service.projection.MediaProjectionBridge
+import com.tapflow.core.service.projection.ScreenCaptureState
 import com.tapflow.core.service.shizuku.ShizukuDiagnosticState
 import com.tapflow.core.service.shizuku.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -52,6 +54,7 @@ class HomeViewModel @Inject constructor(
   private val entitlementRepository: EntitlementRepository,
   private val localServer: TapFlowLocalServer,
   private val shizukuManager: ShizukuManager,
+  private val mediaProjectionBridge: MediaProjectionBridge,
   private val backupManager: TapFlowBackupManager,
   private val inspectImageImporter: InspectImageImporter,
 ) : ViewModel() {
@@ -783,9 +786,7 @@ class HomeViewModel @Inject constructor(
       }
       HomeUiIntent.MediaProjectionDenied -> {
         sendEffect(
-          HomeUiEffect.ShowSnackbar(
-            "Screen capture permission is required for vision actions or live recording.",
-          ),
+          HomeUiEffect.ShowSnackbar("Screen capture permission is required."),
         )
       }
     }
@@ -800,8 +801,10 @@ class HomeViewModel @Inject constructor(
       state.isPro &&
         state.preferences.shizuku.silentScreenshots &&
         state.shizukuStatus.isFullyReady
+    val hasActiveProjection =
+      mediaProjectionBridge.captureState.value is ScreenCaptureState.Active
 
-    if (!requiresVision || shizukuSilentReady) {
+    if (!requiresVision || shizukuSilentReady || hasActiveProjection) {
       sendEffect(HomeUiEffect.LaunchOverlayAndMinimize(target))
     } else {
       _localState.update { it.copy(pendingProjectionTarget = target) }
