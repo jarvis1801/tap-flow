@@ -72,7 +72,11 @@ internal fun HomeDialogs(
       confirmButton = {
         Button(
           onClick = { onIntent(HomeUiIntent.ConfirmDeleteScript) },
-          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+          colors =
+            ButtonDefaults.buttonColors(
+              containerColor = MaterialTheme.colorScheme.error,
+              contentColor = MaterialTheme.colorScheme.onError,
+            ),
           modifier = Modifier.testTag("confirm_delete_script_button"),
         ) {
           Text("Delete")
@@ -96,7 +100,11 @@ internal fun HomeDialogs(
       confirmButton = {
         Button(
           onClick = { onIntent(HomeUiIntent.ConfirmDeletePipeline) },
-          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+          colors =
+            ButtonDefaults.buttonColors(
+              containerColor = MaterialTheme.colorScheme.error,
+              contentColor = MaterialTheme.colorScheme.onError,
+            ),
           modifier = Modifier.testTag("confirm_delete_pipeline_button"),
         ) {
           Text("Delete")
@@ -122,7 +130,11 @@ internal fun HomeDialogs(
       confirmButton = {
         Button(
           onClick = { onIntent(HomeUiIntent.ConfirmDeleteInspectGroup) },
-          colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+          colors =
+            ButtonDefaults.buttonColors(
+              containerColor = MaterialTheme.colorScheme.error,
+              contentColor = MaterialTheme.colorScheme.onError,
+            ),
           modifier = Modifier.testTag("confirm_delete_inspect_group_button"),
         ) {
           Text("Delete All")

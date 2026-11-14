@@ -61,6 +61,7 @@ import com.tapflow.core.service.overlay.OverlayCallbacks
 import com.tapflow.core.service.overlay.OverlayMode
 import com.tapflow.core.service.overlay.OverlayUiState
 import com.tapflow.core.service.projection.ScreenCaptureState
+import com.tapflow.core.service.theme.TapFlowTheme
 
 @Composable
 internal fun OverlayDockView(
@@ -112,6 +113,7 @@ internal fun OverlayDockView(
           .testTag("overlay_vertical_strip_dock"),
       shape = RoundedCornerShape(22.dp),
       color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+      contentColor = MaterialTheme.colorScheme.onSurface,
       border = BorderStroke(1.2.dp, modeAccent.copy(alpha = 0.65f)),
       shadowElevation = 10.dp,
     ) {
@@ -220,6 +222,7 @@ private fun CollapsedEdgeBubble(
     modifier = modifier.size(54.dp).testTag("overlay_collapsed_bubble"),
     shape = CircleShape,
     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+    contentColor = MaterialTheme.colorScheme.onSurface,
     border = BorderStroke(2.dp, accentColor),
     shadowElevation = 10.dp,
   ) {
@@ -317,7 +320,7 @@ private fun RunnerModeControls(
     }
   val badgeBg =
     when (snap.phase) {
-      RunnerPhase.RUNNING -> OverlayTokens.EmeraldActive.copy(alpha = 0.2f)
+      RunnerPhase.RUNNING -> MaterialTheme.colorScheme.primaryContainer
       RunnerPhase.PAUSED -> MaterialTheme.colorScheme.tertiaryContainer
       RunnerPhase.FAILED,
       RunnerPhase.PAYWALL_BLOCKED -> MaterialTheme.colorScheme.errorContainer
@@ -325,10 +328,10 @@ private fun RunnerModeControls(
     }
   val badgeFg =
     when (snap.phase) {
-      RunnerPhase.RUNNING -> OverlayTokens.EmeraldActive
-      RunnerPhase.PAUSED -> MaterialTheme.colorScheme.tertiary
+      RunnerPhase.RUNNING -> MaterialTheme.colorScheme.onPrimaryContainer
+      RunnerPhase.PAUSED -> MaterialTheme.colorScheme.onTertiaryContainer
       RunnerPhase.FAILED,
-      RunnerPhase.PAYWALL_BLOCKED -> MaterialTheme.colorScheme.error
+      RunnerPhase.PAYWALL_BLOCKED -> MaterialTheme.colorScheme.onErrorContainer
       else -> MaterialTheme.colorScheme.onSurface
     }
 
@@ -413,7 +416,7 @@ private fun RunnerModeControls(
   DockActionIconButton(
     icon = Icons.Filled.Stop,
     contentDescription = "Stop execution",
-    tint = MaterialTheme.colorScheme.error,
+    tint = MaterialTheme.colorScheme.onErrorContainer,
     containerColor = MaterialTheme.colorScheme.errorContainer,
     testTag = "overlay_runner_stop_button",
     onClick = callbacks::onStopExecution,
@@ -457,10 +460,10 @@ private fun GesturePickerModeControls(
       if (state.isCaptureActive) "Pause pick interception" else "Resume gesture picking",
     tint =
       if (state.isCaptureActive) MaterialTheme.colorScheme.onPrimary
-      else MaterialTheme.colorScheme.primary,
+      else MaterialTheme.colorScheme.onPrimaryContainer,
     containerColor =
       if (state.isCaptureActive) MaterialTheme.colorScheme.primary
-      else MaterialTheme.colorScheme.surfaceContainerHigh,
+      else MaterialTheme.colorScheme.primaryContainer,
     testTag = "overlay_picker_toggle_button",
     onClick = callbacks::onToggleCaptureListening,
   )
@@ -476,11 +479,20 @@ private fun LiveRecorderModeControls(
   state: OverlayUiState,
   callbacks: OverlayCallbacks,
 ) {
+  val badgeContainer =
+    if (state.isCaptureActive) MaterialTheme.colorScheme.errorContainer
+    else MaterialTheme.colorScheme.surfaceContainerHigh
+  val badgeTitleColor =
+    if (state.isCaptureActive) MaterialTheme.colorScheme.onErrorContainer
+    else MaterialTheme.colorScheme.primary
+  val badgeCountColor =
+    if (state.isCaptureActive) MaterialTheme.colorScheme.onErrorContainer
+    else MaterialTheme.colorScheme.onSurface
+
   Surface(
     shape = RoundedCornerShape(8.dp),
-    color =
-      if (state.isCaptureActive) MaterialTheme.colorScheme.errorContainer
-      else MaterialTheme.colorScheme.surfaceContainerHigh,
+    color = badgeContainer,
+    contentColor = badgeCountColor,
     modifier = Modifier.fillMaxWidth().testTag("overlay_recorder_count_badge"),
   ) {
     Column(
@@ -491,15 +503,13 @@ private fun LiveRecorderModeControls(
         text = if (state.isCaptureActive) "REC" else "SAVED",
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.Bold,
-        color =
-          if (state.isCaptureActive) MaterialTheme.colorScheme.error
-          else OverlayTokens.EmeraldActive,
+        color = badgeTitleColor,
       )
       Text(
         text = "${state.recordedActionCount}",
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
+        color = badgeCountColor,
       )
     }
   }
@@ -511,8 +521,8 @@ private fun LiveRecorderModeControls(
       if (state.isCaptureActive) "Stop recording and save script"
       else "Start new recording",
     tint =
-      if (state.isCaptureActive) Color.White
-      else MaterialTheme.colorScheme.error,
+      if (state.isCaptureActive) MaterialTheme.colorScheme.onError
+      else MaterialTheme.colorScheme.onErrorContainer,
     containerColor =
       if (state.isCaptureActive) MaterialTheme.colorScheme.error
       else MaterialTheme.colorScheme.errorContainer,
@@ -531,11 +541,20 @@ private fun LiveInspectorModeControls(
   state: OverlayUiState,
   callbacks: OverlayCallbacks,
 ) {
+  val badgeContainer =
+    if (state.isCaptureActive) MaterialTheme.colorScheme.secondaryContainer
+    else MaterialTheme.colorScheme.surfaceContainerHigh
+  val badgeTitleColor =
+    if (state.isCaptureActive) MaterialTheme.colorScheme.onSecondaryContainer
+    else MaterialTheme.colorScheme.onSurfaceVariant
+  val badgeCountColor =
+    if (state.isCaptureActive) MaterialTheme.colorScheme.onSecondaryContainer
+    else MaterialTheme.colorScheme.onSurface
+
   Surface(
     shape = RoundedCornerShape(8.dp),
-    color =
-      if (state.isCaptureActive) MaterialTheme.colorScheme.secondaryContainer
-      else MaterialTheme.colorScheme.surfaceContainerHigh,
+    color = badgeContainer,
+    contentColor = badgeCountColor,
     modifier = Modifier.fillMaxWidth().testTag("overlay_inspector_count_badge"),
   ) {
     Column(
@@ -546,15 +565,13 @@ private fun LiveInspectorModeControls(
         text = if (state.isCaptureActive) "INSP" else "PAUSE",
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.Bold,
-        color =
-          if (state.isCaptureActive) MaterialTheme.colorScheme.secondary
-          else MaterialTheme.colorScheme.onSurfaceVariant,
+        color = badgeTitleColor,
       )
       Text(
         text = "${state.inspectedItemCount}",
         style = MaterialTheme.typography.labelLarge,
         fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.onSurface,
+        color = badgeCountColor,
       )
     }
   }
@@ -567,10 +584,10 @@ private fun LiveInspectorModeControls(
       else "Resume screen inspection",
     tint =
       if (state.isCaptureActive) MaterialTheme.colorScheme.onSecondary
-      else MaterialTheme.colorScheme.secondary,
+      else MaterialTheme.colorScheme.onSecondaryContainer,
     containerColor =
       if (state.isCaptureActive) MaterialTheme.colorScheme.secondary
-      else MaterialTheme.colorScheme.surfaceContainerHigh,
+      else MaterialTheme.colorScheme.secondaryContainer,
     testTag = "overlay_inspector_toggle_button",
     onClick = callbacks::onToggleCaptureListening,
   )
@@ -591,6 +608,7 @@ private fun CaptureAlertSideCard(
     Surface(
       shape = RoundedCornerShape(16.dp),
       color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+      contentColor = MaterialTheme.colorScheme.onSurface,
       border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary),
       shadowElevation = 8.dp,
       modifier = Modifier.widthIn(max = 220.dp).testTag("overlay_stopped_by_system_card"),
@@ -676,16 +694,17 @@ private fun DockActionIconButton(
   }
 }
 
+@Composable
 private fun resolveModeAccentColor(state: OverlayUiState): Color =
   when {
-    state.captureAlertMessage != null -> OverlayTokens.AmberAlert
-    state.mode == OverlayMode.LIVE_RECORDER -> OverlayTokens.RecordCrimson
-    state.mode == OverlayMode.LIVE_INSPECTOR -> OverlayTokens.CobaltAccent
-    state.mode == OverlayMode.GESTURE_PICKER -> OverlayTokens.CyanPulse
-    state.runnerSnapshot.phase == RunnerPhase.RUNNING -> OverlayTokens.EmeraldActive
+    state.captureAlertMessage != null -> MaterialTheme.colorScheme.tertiary
+    state.mode == OverlayMode.LIVE_RECORDER -> MaterialTheme.colorScheme.error
+    state.mode == OverlayMode.LIVE_INSPECTOR -> MaterialTheme.colorScheme.secondary
+    state.mode == OverlayMode.GESTURE_PICKER -> MaterialTheme.colorScheme.primary
+    state.runnerSnapshot.phase == RunnerPhase.RUNNING -> MaterialTheme.colorScheme.primary
     state.runnerSnapshot.phase == RunnerPhase.FAILED ||
-      state.runnerSnapshot.phase == RunnerPhase.PAYWALL_BLOCKED -> OverlayTokens.RecordCrimson
-    else -> OverlayTokens.CyanPulse
+      state.runnerSnapshot.phase == RunnerPhase.PAYWALL_BLOCKED -> MaterialTheme.colorScheme.error
+    else -> MaterialTheme.colorScheme.primary
   }
 
 private val PreviewNoOpCallbacks =
@@ -707,80 +726,88 @@ private val PreviewNoOpCallbacks =
 @Preview(showBackground = true, backgroundColor = 0xFF0F172A)
 @Composable
 private fun OverlayDockPipelineRunnerPreview() {
-  TapFlowOverlayTheme {
-    OverlayDockView(
-      state =
-        OverlayUiState(
-          mode = OverlayMode.RUNNER_PIPELINE,
-          runnerSnapshot =
-            RunnerExecutionSnapshot(
-              phase = RunnerPhase.RUNNING,
-              title = "Farm Loop • Collect",
-              isPipeline = true,
-              currentTopLevelAction = 3,
-              totalTopLevelActions = 9,
-              currentPipelineStep = 2,
-              totalPipelineSteps = 4,
-              currentStepIteration = 2,
-              totalStepIterations = 5,
-            ),
-          captureState = ScreenCaptureState.StoppedBySystem("Screen capture stopped by system."),
-          captureAlertMessage = "Screen capture stopped by system.",
-        ),
-      callbacks = PreviewNoOpCallbacks,
-    )
+  TapFlowTheme {
+    TapFlowOverlayTheme {
+      OverlayDockView(
+        state =
+          OverlayUiState(
+            mode = OverlayMode.RUNNER_PIPELINE,
+            runnerSnapshot =
+              RunnerExecutionSnapshot(
+                phase = RunnerPhase.RUNNING,
+                title = "Farm Loop • Collect",
+                isPipeline = true,
+                currentTopLevelAction = 3,
+                totalTopLevelActions = 9,
+                currentPipelineStep = 2,
+                totalPipelineSteps = 4,
+                currentStepIteration = 2,
+                totalStepIterations = 5,
+              ),
+            captureState = ScreenCaptureState.StoppedBySystem("Screen capture stopped by system."),
+            captureAlertMessage = "Screen capture stopped by system.",
+          ),
+        callbacks = PreviewNoOpCallbacks,
+      )
+    }
   }
 }
 
 @Preview(showBackground = true, backgroundColor = 0xFF0F172A)
 @Composable
 private fun OverlayDockRecorderPreview() {
-  TapFlowOverlayTheme {
-    OverlayDockView(
-      state =
-        OverlayUiState(
-          mode = OverlayMode.LIVE_RECORDER,
-          isCaptureActive = true,
-          recordedActionCount = 7,
-        ),
-      callbacks = PreviewNoOpCallbacks,
-    )
+  TapFlowTheme {
+    TapFlowOverlayTheme {
+      OverlayDockView(
+        state =
+          OverlayUiState(
+            mode = OverlayMode.LIVE_RECORDER,
+            isCaptureActive = true,
+            recordedActionCount = 7,
+          ),
+        callbacks = PreviewNoOpCallbacks,
+      )
+    }
   }
 }
 
 @Preview(showBackground = true, backgroundColor = 0xFF0F172A)
 @Composable
 private fun OverlayDockInspectorPreview() {
-  TapFlowOverlayTheme {
-    OverlayDockView(
-      state =
-        OverlayUiState(
-          mode = OverlayMode.LIVE_INSPECTOR,
-          isCaptureActive = true,
-          inspectedItemCount = 4,
-        ),
-      callbacks = PreviewNoOpCallbacks,
-    )
+  TapFlowTheme {
+    TapFlowOverlayTheme {
+      OverlayDockView(
+        state =
+          OverlayUiState(
+            mode = OverlayMode.LIVE_INSPECTOR,
+            isCaptureActive = true,
+            inspectedItemCount = 4,
+          ),
+        callbacks = PreviewNoOpCallbacks,
+      )
+    }
   }
 }
 
 @Preview(showBackground = true, backgroundColor = 0xFF0F172A)
 @Composable
 private fun OverlayDockCollapsedPreview() {
-  TapFlowOverlayTheme {
-    OverlayDockView(
-      state =
-        OverlayUiState(
-          mode = OverlayMode.RUNNER_SCRIPT,
-          isBubbleCollapsed = true,
-          runnerSnapshot =
-            RunnerExecutionSnapshot(
-              phase = RunnerPhase.RUNNING,
-              currentTopLevelAction = 4,
-              totalTopLevelActions = 12,
-            ),
-        ),
-      callbacks = PreviewNoOpCallbacks,
-    )
+  TapFlowTheme {
+    TapFlowOverlayTheme {
+      OverlayDockView(
+        state =
+          OverlayUiState(
+            mode = OverlayMode.RUNNER_SCRIPT,
+            isBubbleCollapsed = true,
+            runnerSnapshot =
+              RunnerExecutionSnapshot(
+                phase = RunnerPhase.RUNNING,
+                currentTopLevelAction = 4,
+                totalTopLevelActions = 12,
+              ),
+          ),
+        callbacks = PreviewNoOpCallbacks,
+      )
+    }
   }
 }

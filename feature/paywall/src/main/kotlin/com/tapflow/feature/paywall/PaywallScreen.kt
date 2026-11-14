@@ -284,7 +284,11 @@ private fun PaywallHeroCard(state: PaywallUiState) {
   when (val entitlement = state.entitlementState) {
     is EntitlementState.ProLifetime -> {
       Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        colors =
+          CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+          ),
         modifier = Modifier.fillMaxWidth(),
       ) {
         Row(
@@ -295,7 +299,7 @@ private fun PaywallHeroCard(state: PaywallUiState) {
           Icon(
             imageVector = Icons.Filled.Verified,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
             modifier = Modifier.size(34.dp),
           )
           Column(modifier = Modifier.weight(1f)) {
@@ -308,7 +312,7 @@ private fun PaywallHeroCard(state: PaywallUiState) {
             Text(
               text = "All automation, vision matching, Shizuku, and Desktop Studio features are permanently unlocked.",
               style = MaterialTheme.typography.bodyMedium,
-              color = MaterialTheme.colorScheme.onPrimaryContainer,
+              color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.88f),
             )
           }
         }
@@ -319,7 +323,11 @@ private fun PaywallHeroCard(state: PaywallUiState) {
       val leftHours = (entitlement.remainingDays * 24 + entitlement.remainingHours).coerceAtLeast(1)
       val progress = (leftHours / totalHours).coerceIn(0.05f, 1f)
       Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)),
+        colors =
+          CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+          ),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
         modifier = Modifier.fillMaxWidth(),
       ) {
@@ -334,28 +342,31 @@ private fun PaywallHeroCard(state: PaywallUiState) {
             Icon(
               imageVector = Icons.Filled.AutoAwesome,
               contentDescription = null,
-              tint = MaterialTheme.colorScheme.primary,
+              tint = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Text(
               text = "7-Day Free Trial Active",
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
           }
           Text(
             text = "${entitlement.remainingDays}d ${entitlement.remainingHours}h remaining of full Pro access.",
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.primary,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
           )
           LinearProgressIndicator(
             progress = { progress },
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.24f),
             modifier = Modifier.fillMaxWidth().height(6.dp),
           )
           Text(
             text = "Upgrade once to keep every Pro feature permanently with zero subscription fees.",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.88f),
           )
         }
       }
@@ -386,15 +397,22 @@ private fun PaywallHeroCard(state: PaywallUiState) {
       val isExpiredOrTampered =
         entitlement.trialStatus == TrialStatus.EXPIRED ||
           entitlement.trialStatus == TrialStatus.EXPIRED_TAMPERED
+      val cardContentColor =
+        if (isExpiredOrTampered) {
+          MaterialTheme.colorScheme.onErrorContainer
+        } else {
+          MaterialTheme.colorScheme.onSurface
+        }
       Card(
         colors =
           CardDefaults.cardColors(
             containerColor =
               if (isExpiredOrTampered) {
-                MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                MaterialTheme.colorScheme.errorContainer
               } else {
                 MaterialTheme.colorScheme.surfaceContainerHigh
               },
+            contentColor = cardContentColor,
           ),
         modifier = Modifier.fillMaxWidth(),
       ) {
@@ -412,7 +430,7 @@ private fun PaywallHeroCard(state: PaywallUiState) {
               contentDescription = null,
               tint =
                 if (isExpiredOrTampered) {
-                  MaterialTheme.colorScheme.error
+                  MaterialTheme.colorScheme.onErrorContainer
                 } else {
                   MaterialTheme.colorScheme.primary
                 },
@@ -427,6 +445,7 @@ private fun PaywallHeroCard(state: PaywallUiState) {
                 },
               style = MaterialTheme.typography.titleLarge,
               fontWeight = FontWeight.Bold,
+              color = cardContentColor,
             )
           }
           Text(
@@ -441,7 +460,12 @@ private fun PaywallHeroCard(state: PaywallUiState) {
                 TrialStatus.ACTIVE -> ""
               },
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color =
+              if (isExpiredOrTampered) {
+                MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.88f)
+              } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+              },
           )
         }
       }

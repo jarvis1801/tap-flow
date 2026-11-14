@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsApplications
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -433,7 +434,7 @@ private fun PermissionChecklistCard(
       CardDefaults.cardColors(
         containerColor =
           if (isGranted) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
+            MaterialTheme.colorScheme.surfaceContainerHigh
           } else {
             MaterialTheme.colorScheme.surfaceContainer
           },
@@ -503,6 +504,7 @@ private fun PermissionChecklistCard(
           Surface(
             shape = MaterialTheme.shapes.small,
             color = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
           ) {
             Row(
               modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -512,7 +514,7 @@ private fun PermissionChecklistCard(
               Icon(
                 imageVector = Icons.Filled.CheckCircle,
                 contentDescription = "Permission granted",
-                tint = MaterialTheme.colorScheme.primary,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
                 modifier = Modifier.size(18.dp),
               )
               Text(
@@ -549,9 +551,10 @@ private fun RestrictedSettingsHelperCard(
     modifier = Modifier.fillMaxWidth(),
     colors =
       CardDefaults.cardColors(
-        containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
+        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
       ),
-    border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.4f)),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.5f)),
   ) {
     Column(
       modifier = Modifier.padding(16.dp),
@@ -570,16 +573,21 @@ private fun RestrictedSettingsHelperCard(
           Icon(
             imageVector = Icons.Filled.SettingsApplications,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.tertiary,
+            tint = MaterialTheme.colorScheme.onTertiaryContainer,
           )
           Text(
             text = "Blocked by \"Restricted Setting\"?",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
           )
         }
         TextButton(
           onClick = onToggleGuide,
+          colors =
+            ButtonDefaults.textButtonColors(
+              contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            ),
           modifier = Modifier.testTag("toggle_restricted_guide_button"),
         ) {
           Text(if (expanded) "Hide" else "Guide")
@@ -594,7 +602,7 @@ private fun RestrictedSettingsHelperCard(
         text =
           "On Android 13–16+, sideloaded builds may lock Accessibility or Overlay toggles until restricted settings are allowed in App Info.",
         style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.88f),
       )
 
       AnimatedVisibility(visible = expanded) {
@@ -606,22 +614,30 @@ private fun RestrictedSettingsHelperCard(
             text = "1. Tap Open App Info below.",
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
           )
           Text(
             text = "2. Tap the top-right ⋮ overflow menu.",
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
           )
           Text(
             text = "3. Choose \"Allow restricted settings\", then return and enable Accessibility/Overlay.",
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
           )
         }
       }
 
       FilledTonalButton(
         onClick = onOpenAppInfo,
+        colors =
+          ButtonDefaults.filledTonalButtonColors(
+            containerColor = MaterialTheme.colorScheme.tertiary,
+            contentColor = MaterialTheme.colorScheme.onTertiary,
+          ),
         modifier =
           Modifier
             .fillMaxWidth()

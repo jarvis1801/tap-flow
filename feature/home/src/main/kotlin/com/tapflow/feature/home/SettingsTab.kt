@@ -367,6 +367,12 @@ private fun SettingsProBannerCard(
           } else {
             MaterialTheme.colorScheme.surfaceContainerHigh
           },
+        contentColor =
+          if (state.isPro) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+          } else {
+            MaterialTheme.colorScheme.onSurface
+          },
       ),
   ) {
     Column(
@@ -380,7 +386,12 @@ private fun SettingsProBannerCard(
         Icon(
           imageVector = if (state.isPro) Icons.Filled.Verified else Icons.Filled.AutoAwesome,
           contentDescription = null,
-          tint = MaterialTheme.colorScheme.primary,
+          tint =
+            if (state.isPro) {
+              MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+              MaterialTheme.colorScheme.primary
+            },
         )
         Column(modifier = Modifier.weight(1f)) {
           Text(
@@ -413,7 +424,12 @@ private fun SettingsProBannerCard(
                   }
               },
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color =
+              if (state.isPro) {
+                MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+              } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+              },
           )
         }
       }

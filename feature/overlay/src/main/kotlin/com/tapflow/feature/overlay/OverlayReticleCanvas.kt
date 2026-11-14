@@ -46,6 +46,7 @@ import com.tapflow.core.service.overlay.OverlayCapturePhase
 import com.tapflow.core.service.overlay.OverlayMode
 import com.tapflow.core.service.overlay.OverlayTouchPreview
 import com.tapflow.core.service.overlay.OverlayUiState
+import com.tapflow.core.service.theme.TapFlowTheme
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.min
@@ -120,7 +121,8 @@ internal fun OverlayCaptureFeedbackLayer(state: OverlayUiState) {
             .padding(top = 64.dp, start = 20.dp, end = 20.dp)
             .testTag("overlay_capture_alert_banner"),
         shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.96f),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary),
         shadowElevation = 6.dp,
       ) {
@@ -132,7 +134,7 @@ internal fun OverlayCaptureFeedbackLayer(state: OverlayUiState) {
           Icon(
             imageVector = Icons.Filled.WarningAmber,
             contentDescription = "Screen capture alert",
-            tint = MaterialTheme.colorScheme.tertiary,
+            tint = MaterialTheme.colorScheme.onTertiaryContainer,
             modifier = Modifier.size(18.dp),
           )
           Text(
@@ -226,6 +228,7 @@ private fun CaptureBorderAndReticleCanvas(
   touchPreview: OverlayTouchPreview?,
   accentColor: Color,
 ) {
+  val secondaryReticleColor = MaterialTheme.colorScheme.tertiary
   Canvas(modifier = Modifier.fillMaxSize()) {
     val frameStroke = 2.dp.toPx()
     drawRect(
@@ -315,7 +318,7 @@ private fun CaptureBorderAndReticleCanvas(
         strokeWidth = 2.dp.toPx(),
         pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f),
       )
-      drawReticle(center = secOffset, color = OverlayTokens.AmberAlert, radiusPx = 18.dp.toPx())
+      drawReticle(center = secOffset, color = secondaryReticleColor, radiusPx = 18.dp.toPx())
     }
   }
 }
@@ -414,27 +417,29 @@ private fun TouchCoordinateReadoutBadge(
 @Preview(showBackground = true, backgroundColor = 0xFF1E293B)
 @Composable
 private fun OverlayCaptureFeedbackSwipePreview() {
-  TapFlowOverlayTheme {
-    OverlayCaptureFeedbackLayer(
-      state =
-        OverlayUiState(
-          mode = OverlayMode.GESTURE_PICKER,
-          isCaptureActive = true,
-          capturePhase = OverlayCapturePhase.INTERCEPTING,
-          pickerTargetType = GesturePickerTargetType.SWIPE_PATH,
-          statusHint = "Touch or drag on target location",
-          touchPreview =
-            OverlayTouchPreview(
-              isTouching = true,
-              startX = 180f,
-              startY = 380f,
-              currentX = 520f,
-              currentY = 640f,
-              pathPoints = listOf(Point2D(180, 380), Point2D(340, 480), Point2D(520, 640)),
-              durationMs = 420L,
-              isDrag = true,
-            ),
-        ),
-    )
+  TapFlowTheme {
+    TapFlowOverlayTheme {
+      OverlayCaptureFeedbackLayer(
+        state =
+          OverlayUiState(
+            mode = OverlayMode.GESTURE_PICKER,
+            isCaptureActive = true,
+            capturePhase = OverlayCapturePhase.INTERCEPTING,
+            pickerTargetType = GesturePickerTargetType.SWIPE_PATH,
+            statusHint = "Touch or drag on target location",
+            touchPreview =
+              OverlayTouchPreview(
+                isTouching = true,
+                startX = 180f,
+                startY = 380f,
+                currentX = 520f,
+                currentY = 640f,
+                pathPoints = listOf(Point2D(180, 380), Point2D(340, 480), Point2D(520, 640)),
+                durationMs = 420L,
+                isDrag = true,
+              ),
+          ),
+      )
+    }
   }
 }

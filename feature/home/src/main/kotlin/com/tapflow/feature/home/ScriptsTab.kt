@@ -359,13 +359,14 @@ private fun ScriptSpeedDialFab(
         }
         SmallFloatingActionButton(
           onClick = onRecord,
-          containerColor = MaterialTheme.colorScheme.secondaryContainer,
+          containerColor = MaterialTheme.colorScheme.errorContainer,
+          contentColor = MaterialTheme.colorScheme.onErrorContainer,
           modifier = Modifier.size(48.dp).testTag("fab_record_script"),
         ) {
           Icon(
             imageVector = Icons.Filled.FiberManualRecord,
             contentDescription = "Start live recording",
-            tint = MaterialTheme.colorScheme.error,
+            tint = MaterialTheme.colorScheme.onErrorContainer,
           )
         }
       }

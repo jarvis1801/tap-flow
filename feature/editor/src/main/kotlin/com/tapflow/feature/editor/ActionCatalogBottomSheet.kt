@@ -483,9 +483,21 @@ private fun ActionCatalogTile(
 ) {
   val containerColor =
     if (selected) {
-      MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+      MaterialTheme.colorScheme.primaryContainer
     } else {
       MaterialTheme.colorScheme.surfaceContainerLow
+    }
+  val titleColor =
+    if (selected) {
+      MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+      MaterialTheme.colorScheme.onSurface
+    }
+  val subtitleColor =
+    if (selected) {
+      MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+    } else {
+      MaterialTheme.colorScheme.onSurfaceVariant
     }
   val border =
     if (selected) {
@@ -497,6 +509,7 @@ private fun ActionCatalogTile(
   Surface(
     shape = RoundedCornerShape(14.dp),
     color = containerColor,
+    contentColor = titleColor,
     border = border,
     modifier =
       modifier
@@ -540,13 +553,14 @@ private fun ActionCatalogTile(
           text = spec.label,
           style = MaterialTheme.typography.labelLarge,
           fontWeight = FontWeight.SemiBold,
+          color = titleColor,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
         )
         Text(
           text = spec.hint,
           style = MaterialTheme.typography.bodySmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          color = subtitleColor,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
         )

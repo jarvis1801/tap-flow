@@ -35,7 +35,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -224,10 +223,7 @@ fun SeamlessTabContent(
 
       item(key = "shizuku_toggles_card") {
         Card(
-          modifier =
-            Modifier
-              .fillMaxWidth()
-              .alpha(if (togglesEnabled) 1f else 0.58f),
+          modifier = Modifier.fillMaxWidth(),
           colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         ) {
           Column(
@@ -351,11 +347,12 @@ private fun ShizukuToggleRow(
         text = title,
         style = MaterialTheme.typography.bodyLarge,
         fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 1f else 0.38f),
       )
       Text(
         text = subtitle,
         style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = if (enabled) 1f else 0.38f),
       )
     }
     Switch(

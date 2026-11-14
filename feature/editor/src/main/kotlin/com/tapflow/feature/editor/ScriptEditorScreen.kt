@@ -245,9 +245,9 @@ fun ScriptEditorContent(
                   is EditorTreeRow.BranchLabel -> {
                     val containerColor =
                       when (row.branchKind) {
-                        BranchKind.IF_THEN -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
-                        BranchKind.IF_ELSE -> MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f)
-                        BranchKind.LOOP_BODY -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                        BranchKind.IF_THEN -> MaterialTheme.colorScheme.primaryContainer
+                        BranchKind.IF_ELSE -> MaterialTheme.colorScheme.tertiaryContainer
+                        BranchKind.LOOP_BODY -> MaterialTheme.colorScheme.secondaryContainer
                         BranchKind.ROOT -> MaterialTheme.colorScheme.surfaceContainerHigh
                       }
                     val contentColor =

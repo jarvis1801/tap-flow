@@ -164,7 +164,7 @@ fun ConsoleTabContent(
                   fontWeight = FontWeight.Bold,
                   color =
                     if (server.isRunning) {
-                      MaterialTheme.colorScheme.primary
+                      MaterialTheme.colorScheme.onPrimaryContainer
                     } else {
                       MaterialTheme.colorScheme.onSurfaceVariant
                     },

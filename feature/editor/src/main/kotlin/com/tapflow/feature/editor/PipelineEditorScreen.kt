@@ -662,13 +662,19 @@ private fun PipelineStepCard(
 
   val containerColor =
     if (isMissing) {
-      MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)
+      MaterialTheme.colorScheme.errorContainer
     } else {
       MaterialTheme.colorScheme.surfaceContainerLow
     }
+  val cardContentColor =
+    if (isMissing) {
+      MaterialTheme.colorScheme.onErrorContainer
+    } else {
+      MaterialTheme.colorScheme.onSurface
+    }
   val borderColor =
     if (isMissing) {
-      MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+      MaterialTheme.colorScheme.error
     } else {
       MaterialTheme.colorScheme.outlineVariant
     }
@@ -676,6 +682,7 @@ private fun PipelineStepCard(
   Surface(
     shape = RoundedCornerShape(16.dp),
     color = containerColor,
+    contentColor = cardContentColor,
     border = BorderStroke(if (isMissing) 1.dp else 0.5.dp, borderColor),
     modifier = Modifier.fillMaxWidth().testTag("pipeline_step_card_${step.id}"),
   ) {
@@ -692,7 +699,7 @@ private fun PipelineStepCard(
           shape = RoundedCornerShape(10.dp),
           color =
             if (isMissing) {
-              MaterialTheme.colorScheme.errorContainer
+              MaterialTheme.colorScheme.error
             } else {
               MaterialTheme.colorScheme.primaryContainer
             },
@@ -704,7 +711,7 @@ private fun PipelineStepCard(
             fontWeight = FontWeight.Bold,
             color =
               if (isMissing) {
-                MaterialTheme.colorScheme.onErrorContainer
+                MaterialTheme.colorScheme.onError
               } else {
                 MaterialTheme.colorScheme.onPrimaryContainer
               },
@@ -721,14 +728,14 @@ private fun PipelineStepCard(
               Icon(
                 imageVector = Icons.Rounded.WarningAmber,
                 contentDescription = "Missing script",
-                tint = MaterialTheme.colorScheme.error,
+                tint = MaterialTheme.colorScheme.onErrorContainer,
                 modifier = Modifier.size(18.dp),
               )
               Text(
                 text = "Missing Script",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.error,
+                color = MaterialTheme.colorScheme.onErrorContainer,
               )
             }
           } else {

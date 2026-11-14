@@ -34,6 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
@@ -57,17 +58,17 @@ internal fun categoryToneColors(category: ActionCategoryGroup): CategoryToneColo
     ActionCategoryGroup.TOUCH_GESTURES ->
       CategoryToneColors(
         container = MaterialTheme.colorScheme.primaryContainer,
-        content = MaterialTheme.colorScheme.primary,
+        content = MaterialTheme.colorScheme.onPrimaryContainer,
       )
     ActionCategoryGroup.FLOW_CONTROL ->
       CategoryToneColors(
         container = MaterialTheme.colorScheme.tertiaryContainer,
-        content = MaterialTheme.colorScheme.tertiary,
+        content = MaterialTheme.colorScheme.onTertiaryContainer,
       )
     ActionCategoryGroup.SYSTEM_HARDWARE ->
       CategoryToneColors(
         container = MaterialTheme.colorScheme.secondaryContainer,
-        content = MaterialTheme.colorScheme.secondary,
+        content = MaterialTheme.colorScheme.onSecondaryContainer,
       )
     ActionCategoryGroup.VARIABLE_OPS ->
       CategoryToneColors(
@@ -113,6 +114,7 @@ internal fun ActionIconBadge(
   Surface(
     shape = RoundedCornerShape(cornerRadius),
     color = tone.container,
+    contentColor = tone.content,
     modifier = modifier.size(boxSize),
   ) {
     Box(contentAlignment = Alignment.Center) {
@@ -138,6 +140,7 @@ internal fun EditorSectionCard(
   Surface(
     shape = RoundedCornerShape(14.dp),
     color = containerColor,
+    contentColor = contentColorFor(containerColor),
     border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
     modifier = modifier.fillMaxWidth(),
   ) {

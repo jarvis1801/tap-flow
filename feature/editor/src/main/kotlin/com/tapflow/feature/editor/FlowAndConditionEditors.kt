@@ -357,7 +357,8 @@ fun SimpleFlowControlNotice(action: ScriptAction) {
     }
   Surface(
     shape = RoundedCornerShape(14.dp),
-    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f),
+    color = MaterialTheme.colorScheme.tertiaryContainer,
+    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
     modifier = Modifier.fillMaxWidth(),
   ) {
     Text(
