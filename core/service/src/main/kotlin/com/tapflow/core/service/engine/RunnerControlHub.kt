@@ -2,13 +2,18 @@ package com.tapflow.core.service.engine
 
 import androidx.compose.runtime.Immutable
 import com.tapflow.core.model.entitlement.ProFeatureGate
+import com.tapflow.core.model.log.ActionLogEntry
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ReceiveChannel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
@@ -52,6 +57,14 @@ class RunnerControlHub @Inject constructor() {
   private val _isPaused = MutableStateFlow(false)
   val isPaused: StateFlow<Boolean> = _isPaused.asStateFlow()
 
+  private val _liveLogEvents =
+    MutableSharedFlow<ActionLogEntry>(
+      replay = 0,
+      extraBufferCapacity = 64,
+      onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+  val liveLogEvents: SharedFlow<ActionLogEntry> = _liveLogEvents.asSharedFlow()
+
   @Volatile
   private var activeSessionJob: Job? = null
 
@@ -78,6 +91,10 @@ class RunnerControlHub @Inject constructor() {
 
   fun updateSnapshot(transform: (RunnerExecutionSnapshot) -> RunnerExecutionSnapshot) {
     _snapshot.update(transform)
+  }
+
+  fun emitActionLog(entry: ActionLogEntry) {
+    _liveLogEvents.tryEmit(entry)
   }
 
   fun play() {

@@ -22,7 +22,11 @@ android {
 dependencies {
   implementation(project(":core:model"))
   implementation(project(":core:database"))
+  implementation(project(":core:datastore"))
+  implementation(project(":core:billing"))
+  implementation(project(":core:service"))
   implementation(libs.androidx.core.ktx)
+  implementation(libs.androidx.compose.runtime.annotation)
   implementation(libs.ktor.server.core)
   implementation(libs.ktor.server.cio)
   implementation(libs.ktor.server.websockets)
@@ -33,4 +37,5 @@ dependencies {
   implementation(libs.hilt.android)
   ksp(libs.hilt.compiler)
   testImplementation(libs.junit)
+  testImplementation(libs.kotlinx.coroutines.test)
 }

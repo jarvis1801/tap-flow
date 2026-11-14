@@ -504,7 +504,7 @@ class AutomationRunnerEngine @Inject constructor(
         val eval = conditionEvaluator.evaluate(action.conditionRoot, variables, shizukuPrefs.silentScreenshots)
         condTrace = eval.trace
         summary = "${action.name}: ${if (eval.passed) "THEN" else "ELSE"}"
-        entries +=
+        val ifEntry =
           ActionLogEntry(
             id = UUID.randomUUID().toString(),
             stepLabel = stepLabel,
@@ -515,6 +515,8 @@ class AutomationRunnerEngine @Inject constructor(
             status = ExecutionStatus.SUCCESS,
             conditionTrace = condTrace,
           )
+        entries += ifEntry
+        controlHub.emitActionLog(ifEntry)
         onCountExecuted()
 
         val branch = if (eval.passed) action.thenActions else action.elseActions
@@ -651,7 +653,7 @@ class AutomationRunnerEngine @Inject constructor(
       }
     }
 
-    entries +=
+    val entry =
       ActionLogEntry(
         id = UUID.randomUUID().toString(),
         stepLabel = stepLabel,
@@ -662,6 +664,8 @@ class AutomationRunnerEngine @Inject constructor(
         status = ExecutionStatus.SUCCESS,
         conditionTrace = condTrace,
       )
+    entries += entry
+    controlHub.emitActionLog(entry)
 
     if (signal == ControlSignal.None) {
       val postDelayMs = DelayResolver.resolvePostActionDelayMs(action, script.globalDelay)
