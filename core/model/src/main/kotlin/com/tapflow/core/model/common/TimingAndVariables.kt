@@ -7,21 +7,22 @@ import kotlinx.serialization.Serializable
 @Immutable
 @Serializable
 sealed interface DelayConfig {
-  fun clamped(): DelayConfig
+  fun clamped(minFloorMs: Long = 0L): DelayConfig
 
   @Immutable
   @Serializable
   @SerialName("fixed")
-  data class Fixed(val durationMs: Long = 100L) : DelayConfig {
-    override fun clamped(): Fixed = copy(durationMs = durationMs.coerceAtLeast(MIN_DELAY_MS))
+  data class Fixed(val durationMs: Long = 0L) : DelayConfig {
+    override fun clamped(minFloorMs: Long): Fixed =
+      copy(durationMs = durationMs.coerceAtLeast(minFloorMs))
   }
 
   @Immutable
   @Serializable
   @SerialName("random_range")
   data class RandomRange(val minMs: Long = 100L, val maxMs: Long = 300L) : DelayConfig {
-    override fun clamped(): RandomRange {
-      val safeMin = minMs.coerceAtLeast(MIN_DELAY_MS)
+    override fun clamped(minFloorMs: Long): RandomRange {
+      val safeMin = minMs.coerceAtLeast(minFloorMs)
       val safeMax = maxMs.coerceAtLeast(safeMin)
       return RandomRange(minMs = safeMin, maxMs = safeMax)
     }
@@ -31,23 +32,25 @@ sealed interface DelayConfig {
   @Serializable
   @SerialName("deviation")
   data class Deviation(val baseMs: Long = 200L, val deltaMs: Long = 50L) : DelayConfig {
-    override fun clamped(): Deviation {
-      val safeBase = baseMs.coerceAtLeast(MIN_DELAY_MS)
+    override fun clamped(minFloorMs: Long): Deviation {
+      val safeBase = baseMs.coerceAtLeast(minFloorMs)
       val safeDelta = deltaMs.coerceAtLeast(0L)
       return Deviation(baseMs = safeBase, deltaMs = safeDelta)
     }
   }
 
   companion object {
-    const val MIN_DELAY_MS: Long = 50L
+    const val MIN_STANDALONE_DELAY_MS: Long = 50L
+    val ZERO: Fixed = Fixed(0L)
 
-    fun fixed(durationMs: Long): Fixed = Fixed(durationMs.coerceAtLeast(MIN_DELAY_MS))
+    fun fixed(durationMs: Long, minFloorMs: Long = 0L): Fixed =
+      Fixed(durationMs.coerceAtLeast(minFloorMs))
 
-    fun randomRange(minMs: Long, maxMs: Long): RandomRange =
-      RandomRange(minMs, maxMs).clamped()
+    fun randomRange(minMs: Long, maxMs: Long, minFloorMs: Long = 0L): RandomRange =
+      RandomRange(minMs, maxMs).clamped(minFloorMs)
 
-    fun deviation(baseMs: Long, deltaMs: Long): Deviation =
-      Deviation(baseMs, deltaMs).clamped()
+    fun deviation(baseMs: Long, deltaMs: Long, minFloorMs: Long = 0L): Deviation =
+      Deviation(baseMs, deltaMs).clamped(minFloorMs)
   }
 }
 

@@ -56,6 +56,7 @@ import coil.compose.AsyncImage
 import com.tapflow.core.model.action.LoopMode
 import com.tapflow.core.model.action.LoopTimeoutAction
 import com.tapflow.core.model.action.ScriptAction
+import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
 import com.tapflow.core.model.common.VariableDefinition
 import com.tapflow.core.model.common.VariableType
@@ -338,6 +339,7 @@ fun DelayActionEditor(
     DelayConfigEditor(
       config = action.config,
       isPro = isPro,
+      minDelayMs = DelayConfig.MIN_STANDALONE_DELAY_MS,
       onConfigChange = { cfg -> onChange(action.copy(config = cfg)) },
       onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
     )

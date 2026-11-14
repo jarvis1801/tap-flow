@@ -10,17 +10,20 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 
 internal object DelayResolver {
-  private const val MIN_DELAY_MS = DelayConfig.MIN_DELAY_MS
 
-  fun resolveDelayMs(config: DelayConfig, random: Random = Random.Default): Long {
-    return when (val safe = config.clamped()) {
+  fun resolveDelayMs(
+    config: DelayConfig,
+    random: Random = Random.Default,
+    minFloorMs: Long = 0L,
+  ): Long {
+    return when (val safe = config.clamped(minFloorMs)) {
       is DelayConfig.Fixed -> safe.durationMs
       is DelayConfig.RandomRange -> {
         if (safe.minMs == safe.maxMs) safe.minMs
         else random.nextLong(safe.minMs, safe.maxMs + 1L)
       }
       is DelayConfig.Deviation -> {
-        val low = (safe.baseMs - safe.deltaMs).coerceAtLeast(MIN_DELAY_MS)
+        val low = (safe.baseMs - safe.deltaMs).coerceAtLeast(minFloorMs)
         val high = (safe.baseMs + safe.deltaMs).coerceAtLeast(low)
         if (low == high) low else random.nextLong(low, high + 1L)
       }
@@ -61,8 +64,8 @@ internal object DelayResolver {
 
     return when (policy) {
       PostActionDelay.Off -> 0L
-      PostActionDelay.Global -> resolveDelayMs(globalDelay, random)
-      is PostActionDelay.Override -> resolveDelayMs(policy.config, random)
+      PostActionDelay.Global -> resolveDelayMs(globalDelay, random, minFloorMs = 0L)
+      is PostActionDelay.Override -> resolveDelayMs(policy.config, random, minFloorMs = 0L)
     }
   }
 

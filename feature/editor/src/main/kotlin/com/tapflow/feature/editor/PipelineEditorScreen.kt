@@ -1,9 +1,11 @@
 package com.tapflow.feature.editor
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -39,12 +42,11 @@ import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.ExpandLess
-import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Tag
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.AlertDialog
@@ -74,7 +76,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -85,6 +86,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -132,70 +134,22 @@ fun PipelineEditorScreen(
   )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PipelineEditorContent(
   state: PipelineEditorUiState,
   snackbarHostState: SnackbarHostState,
   onIntent: (PipelineEditorUiIntent) -> Unit,
 ) {
+  var showTagsDialog by remember { mutableStateOf(false) }
   var tagDraft by remember { mutableStateOf("") }
-  var showDetailsSection by remember(state.pipelineId) {
-    mutableStateOf(state.description.isNotBlank() || state.tags.isNotEmpty())
-  }
 
   Scaffold(
     snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     topBar = {
-      TopAppBar(
-        navigationIcon = {
-          IconButton(
-            onClick = { onIntent(PipelineEditorUiIntent.BackClicked) },
-            modifier = Modifier.testTag("pipeline_editor_back_button"),
-          ) {
-            Icon(
-              imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-              contentDescription = "Navigate back",
-            )
-          }
-        },
-        title = {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-          ) {
-            Text(
-              text = if (state.isExistingPipeline) "Edit Pipeline" else "New Pipeline",
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-              style = MaterialTheme.typography.titleLarge,
-              fontWeight = FontWeight.SemiBold,
-            )
-            if (state.isDirty) {
-              Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer,
-              ) {
-                Text(
-                  text = "Unsaved",
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onSecondaryContainer,
-                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                )
-              }
-            }
-          }
-        },
-        actions = {
-          FilledTonalButton(
-            onClick = { onIntent(PipelineEditorUiIntent.SavePipelineClicked) },
-            enabled = !state.isSaving,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-            modifier = Modifier.padding(end = 8.dp).testTag("save_pipeline_button"),
-          ) {
-            Text(if (state.isSaving) "Saving…" else "Save")
-          }
-        },
+      PipelineEditorTopHeaderBar(
+        state = state,
+        onIntent = onIntent,
+        onOpenTagsDialog = { showTagsDialog = true },
       )
     },
   ) { innerPadding ->
@@ -216,159 +170,6 @@ fun PipelineEditorContent(
           contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
           verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-          item(key = "pipeline_metadata_card") {
-            val repeatLabel =
-              when (val m = state.repeatMode) {
-                PipelineRepeatMode.RunOnce -> "Run Once"
-                is PipelineRepeatMode.Count -> "Loop ×${m.iterations}"
-                PipelineRepeatMode.Unlimited -> "Unlimited Loop"
-              }
-            val strategyLabel =
-              if (state.errorStrategy == PipelineErrorStrategy.SKIP_AND_CONTINUE) {
-                "Skip & Continue"
-              } else {
-                "Abort on Error"
-              }
-
-            Surface(
-              shape = RoundedCornerShape(16.dp),
-              color = MaterialTheme.colorScheme.surfaceContainerLow,
-              border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-              modifier = Modifier.fillMaxWidth(),
-            ) {
-              Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-              ) {
-                OutlinedTextField(
-                  value = state.title,
-                  onValueChange = { onIntent(PipelineEditorUiIntent.UpdateTitle(it)) },
-                  label = { Text("Pipeline Title") },
-                  singleLine = true,
-                  modifier = Modifier.fillMaxWidth().testTag("pipeline_title_input"),
-                )
-
-                Row(
-                  modifier = Modifier.fillMaxWidth(),
-                  verticalAlignment = Alignment.CenterVertically,
-                  horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                  Text(
-                    text = "${state.steps.size} Scripts • ${state.steps.sumOf { it.repeatCount }} Total Runs",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                  )
-                  TextButton(
-                    onClick = { showDetailsSection = !showDetailsSection },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                  ) {
-                    Text(if (showDetailsSection) "Hide Notes & Tags" else "Notes & Tags")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                      imageVector = if (showDetailsSection) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                      contentDescription = null,
-                      modifier = Modifier.size(18.dp),
-                    )
-                  }
-                }
-
-                AnimatedVisibility(visible = showDetailsSection) {
-                  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                      value = state.description,
-                      onValueChange = { onIntent(PipelineEditorUiIntent.UpdateDescription(it)) },
-                      label = { Text("Description (Optional)") },
-                      minLines = 1,
-                      maxLines = 4,
-                      modifier = Modifier.fillMaxWidth().testTag("pipeline_description_input"),
-                    )
-                    Row(
-                      verticalAlignment = Alignment.CenterVertically,
-                      horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                      OutlinedTextField(
-                        value = tagDraft,
-                        onValueChange = { tagDraft = it },
-                        label = { Text("Add Tag") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                      )
-                      FilledTonalButton(
-                        onClick = {
-                          if (tagDraft.isNotBlank()) {
-                            onIntent(PipelineEditorUiIntent.AddTag(tagDraft))
-                            tagDraft = ""
-                          }
-                        },
-                        modifier = Modifier.heightIn(min = 48.dp),
-                      ) {
-                        Text("Add")
-                      }
-                    }
-                    if (state.tags.isNotEmpty()) {
-                      FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        state.tags.forEach { tag ->
-                          InputChip(
-                            selected = false,
-                            onClick = { onIntent(PipelineEditorUiIntent.RemoveTag(tag)) },
-                            label = { Text(tag) },
-                            trailingIcon = {
-                              Icon(
-                                imageVector = Icons.Rounded.Close,
-                                contentDescription = "Remove tag $tag",
-                                modifier = Modifier.size(16.dp),
-                              )
-                            },
-                          )
-                        }
-                      }
-                    }
-                  }
-                }
-
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                FlowRow(
-                  horizontalArrangement = Arrangement.spacedBy(8.dp),
-                  verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                  Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                  ) {
-                    Text(
-                      text = repeatLabel,
-                      style = MaterialTheme.typography.labelMedium,
-                      color = MaterialTheme.colorScheme.onSurfaceVariant,
-                      modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    )
-                  }
-                  Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                  ) {
-                    Text(
-                      text = strategyLabel,
-                      style = MaterialTheme.typography.labelMedium,
-                      color = MaterialTheme.colorScheme.onSurfaceVariant,
-                      modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    )
-                  }
-                }
-
-                FilledTonalButton(
-                  onClick = { onIntent(PipelineEditorUiIntent.SetSettingsSheetVisible(true)) },
-                  contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                  modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).testTag("pipeline_settings_button"),
-                ) {
-                  Icon(Icons.Rounded.Tune, contentDescription = null, modifier = Modifier.size(18.dp))
-                  Spacer(modifier = Modifier.width(8.dp))
-                  Text("Pipeline Settings")
-                }
-              }
-            }
-          }
-
           if (state.steps.isEmpty()) {
             item(key = "empty_pipeline_steps") {
               EmptyPipelineStepsCard(
@@ -448,6 +249,72 @@ fun PipelineEditorContent(
     )
   }
 
+  if (showTagsDialog) {
+    AlertDialog(
+      onDismissRequest = { showTagsDialog = false },
+      title = { Text("Pipeline Tags") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            OutlinedTextField(
+              value = tagDraft,
+              onValueChange = { tagDraft = it },
+              label = { Text("New Tag") },
+              singleLine = true,
+              modifier = Modifier.weight(1f),
+            )
+            FilledTonalButton(
+              onClick = {
+                if (tagDraft.isNotBlank()) {
+                  onIntent(PipelineEditorUiIntent.AddTag(tagDraft))
+                  tagDraft = ""
+                }
+              },
+              modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+              Text("Add")
+            }
+          }
+          if (state.tags.isEmpty()) {
+            Text(
+              text = "No tags yet. Tags help filter pipelines in your library.",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          } else {
+            FlowRow(
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+              verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+              state.tags.forEach { tag ->
+                InputChip(
+                  selected = false,
+                  onClick = { onIntent(PipelineEditorUiIntent.RemoveTag(tag)) },
+                  label = { Text(tag) },
+                  trailingIcon = {
+                    Icon(
+                      imageVector = Icons.Rounded.Close,
+                      contentDescription = "Remove tag $tag",
+                      modifier = Modifier.size(16.dp),
+                    )
+                  },
+                )
+              }
+            }
+          }
+        }
+      },
+      confirmButton = {
+        TextButton(onClick = { showTagsDialog = false }) {
+          Text("Done")
+        }
+      },
+    )
+  }
+
   if (state.showSettingsSheet) {
     PipelineSettingsBottomSheet(
       state = state,
@@ -484,6 +351,206 @@ fun PipelineEditorContent(
       onSelect = { pkg, _ -> onIntent(PipelineEditorUiIntent.SelectCrashRecoveryApp(pkg)) },
       onDismiss = { onIntent(PipelineEditorUiIntent.DismissCrashAppPicker) },
     )
+  }
+}
+
+@Composable
+private fun PipelineEditorTopHeaderBar(
+  state: PipelineEditorUiState,
+  onIntent: (PipelineEditorUiIntent) -> Unit,
+  onOpenTagsDialog: () -> Unit,
+) {
+  var descriptionFocused by remember { mutableStateOf(false) }
+
+  val repeatLabel =
+    when (val m = state.repeatMode) {
+      PipelineRepeatMode.RunOnce -> "Run Once"
+      is PipelineRepeatMode.Count -> "Loop ×${m.iterations}"
+      PipelineRepeatMode.Unlimited -> "Unlimited Loop"
+    }
+  val strategyLabel =
+    if (state.errorStrategy == PipelineErrorStrategy.SKIP_AND_CONTINUE) {
+      "Skip & Continue"
+    } else {
+      "Abort on Error"
+    }
+
+  Surface(
+    color = MaterialTheme.colorScheme.surfaceContainer,
+    tonalElevation = 2.dp,
+    modifier = Modifier.fillMaxWidth(),
+  ) {
+    Column(modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
+      Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.TopCenter,
+      ) {
+        Column(modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth()) {
+          // Row 1: Back Navigation, Borderless Editable Title, Save Button
+          Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            IconButton(
+              onClick = { onIntent(PipelineEditorUiIntent.BackClicked) },
+              modifier = Modifier.size(48.dp).testTag("pipeline_editor_back_button"),
+            ) {
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Navigate back",
+              )
+            }
+
+            Box(
+              modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+              contentAlignment = Alignment.CenterStart,
+            ) {
+              BasicTextField(
+                value = state.title,
+                onValueChange = { onIntent(PipelineEditorUiIntent.UpdateTitle(it)) },
+                singleLine = true,
+                textStyle =
+                  MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                  ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                modifier = Modifier.fillMaxWidth().testTag("pipeline_title_input"),
+                decorationBox = { innerTextField ->
+                  if (state.title.isEmpty()) {
+                    Text(
+                      text = "Untitled Pipeline...",
+                      style = MaterialTheme.typography.titleLarge,
+                      fontWeight = FontWeight.SemiBold,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                    )
+                  }
+                  innerTextField()
+                },
+              )
+            }
+
+            if (state.isDirty) {
+              Box(
+                modifier =
+                  Modifier
+                    .padding(end = 8.dp)
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+              )
+            }
+
+            FilledTonalButton(
+              onClick = { onIntent(PipelineEditorUiIntent.SavePipelineClicked) },
+              enabled = !state.isSaving,
+              contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+              modifier = Modifier.heightIn(min = 40.dp).testTag("save_pipeline_button"),
+            ) {
+              Text(if (state.isSaving) "Saving…" else "Save")
+            }
+          }
+
+          // Row 2: Expandable Borderless Description + Policy Pill, Live Step/Run Badge, Tags
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            Box(
+              modifier = Modifier.fillMaxWidth().animateContentSize(),
+              contentAlignment = Alignment.CenterStart,
+            ) {
+              BasicTextField(
+                value = state.description,
+                onValueChange = { onIntent(PipelineEditorUiIntent.UpdateDescription(it)) },
+                singleLine = !descriptionFocused,
+                maxLines = if (descriptionFocused) 3 else 1,
+                textStyle =
+                  MaterialTheme.typography.bodySmall.copy(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                modifier =
+                  Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { descriptionFocused = it.isFocused }
+                    .testTag("pipeline_description_input"),
+                decorationBox = { innerTextField ->
+                  if (state.description.isEmpty()) {
+                    Text(
+                      text = "Add description...",
+                      style = MaterialTheme.typography.bodySmall,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                    )
+                  }
+                  innerTextField()
+                },
+              )
+            }
+
+            Row(
+              modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              AssistChip(
+                onClick = { onIntent(PipelineEditorUiIntent.SetSettingsSheetVisible(true)) },
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Rounded.Tune,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                  )
+                },
+                label = {
+                  Text(
+                    text = "$repeatLabel • $strategyLabel",
+                    maxLines = 1,
+                  )
+                },
+                modifier = Modifier.testTag("pipeline_settings_button"),
+              )
+
+              Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+              ) {
+                Text(
+                  text = "${state.steps.size} Steps • ${state.steps.sumOf { it.repeatCount }} Runs",
+                  style = MaterialTheme.typography.labelMedium,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  maxLines = 1,
+                  modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                )
+              }
+
+              AssistChip(
+                onClick = onOpenTagsDialog,
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Rounded.Tag,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                  )
+                },
+                label = {
+                  Text(
+                    text = if (state.tags.isEmpty()) "Tags" else "Tags (${state.tags.size})",
+                    maxLines = 1,
+                  )
+                },
+                modifier = Modifier.testTag("pipeline_tags_button"),
+              )
+            }
+          }
+        }
+      }
+      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+    }
   }
 }
 

@@ -115,10 +115,17 @@ class VariableAndDelayEngineTest {
 
   @Test
   fun delayResolver_clampsMinimumAndEnforcesZeroOnExcludedCategories() {
-    assertEquals(50L, DelayResolver.resolveDelayMs(DelayConfig.Fixed(10L)))
+    assertEquals(
+      50L,
+      DelayResolver.resolveDelayMs(
+        DelayConfig.Fixed(10L),
+        minFloorMs = DelayConfig.MIN_STANDALONE_DELAY_MS,
+      ),
+    )
 
     val tapAction = ScriptAction.Tap(id = "t1", postDelay = PostActionDelay.Global)
-    assertEquals(50L, DelayResolver.resolvePostActionDelayMs(tapAction, DelayConfig.Fixed(5L)))
+    assertEquals(0L, DelayResolver.resolvePostActionDelayMs(tapAction, DelayConfig.Fixed(0L)))
+    assertEquals(5L, DelayResolver.resolvePostActionDelayMs(tapAction, DelayConfig.Fixed(5L)))
 
     val offTap = ScriptAction.Tap(id = "t2", postDelay = PostActionDelay.Off)
     assertEquals(0L, DelayResolver.resolvePostActionDelayMs(offTap, DelayConfig.Fixed(250L)))

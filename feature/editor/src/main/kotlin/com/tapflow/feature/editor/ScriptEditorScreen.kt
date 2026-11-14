@@ -2,10 +2,11 @@ package com.tapflow.feature.editor
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,12 +23,15 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.rounded.Add
@@ -41,9 +45,11 @@ import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Tag
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.TouchApp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -65,7 +71,6 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -75,6 +80,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -181,71 +188,23 @@ fun ScriptEditorScreen(
   )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScriptEditorContent(
   state: ScriptEditorUiState,
   snackbarHostState: SnackbarHostState,
   onIntent: (ScriptEditorUiIntent) -> Unit,
 ) {
+  var showTagsDialog by remember { mutableStateOf(false) }
   var tagDraft by remember { mutableStateOf("") }
-  var showDetailsSection by remember(state.scriptId) {
-    mutableStateOf(state.description.isNotBlank() || state.tags.isNotEmpty())
-  }
   val treeRows = remember(state.actions) { flattenActionTree(state.actions) }
 
   Scaffold(
     snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     topBar = {
-      TopAppBar(
-        navigationIcon = {
-          IconButton(
-            onClick = { onIntent(ScriptEditorUiIntent.BackClicked) },
-            modifier = Modifier.testTag("script_editor_back_button"),
-          ) {
-            Icon(
-              imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-              contentDescription = "Navigate back",
-            )
-          }
-        },
-        title = {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-          ) {
-            Text(
-              text = if (state.isExistingScript) "Edit Script" else "New Script",
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-              style = MaterialTheme.typography.titleLarge,
-              fontWeight = FontWeight.SemiBold,
-            )
-            if (state.isDirty) {
-              Surface(
-                shape = RoundedCornerShape(999.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer,
-              ) {
-                Text(
-                  text = "Unsaved",
-                  style = MaterialTheme.typography.labelSmall,
-                  color = MaterialTheme.colorScheme.onSecondaryContainer,
-                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                )
-              }
-            }
-          }
-        },
-        actions = {
-          FilledTonalButton(
-            onClick = { onIntent(ScriptEditorUiIntent.SaveScriptClicked) },
-            enabled = !state.isSaving,
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-            modifier = Modifier.padding(end = 8.dp).testTag("save_script_button"),
-          ) {
-            Text(if (state.isSaving) "Saving…" else "Save")
-          }
-        },
+      ScriptEditorTopHeaderBar(
+        state = state,
+        onIntent = onIntent,
+        onOpenTagsDialog = { showTagsDialog = true },
       )
     },
   ) { innerPadding ->
@@ -266,147 +225,6 @@ fun ScriptEditorContent(
           contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
           verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-          item(key = "script_metadata_card") {
-            Surface(
-              shape = RoundedCornerShape(16.dp),
-              color = MaterialTheme.colorScheme.surfaceContainerLow,
-              border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-              modifier = Modifier.fillMaxWidth(),
-            ) {
-              Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-              ) {
-                OutlinedTextField(
-                  value = state.title,
-                  onValueChange = { onIntent(ScriptEditorUiIntent.UpdateTitle(it)) },
-                  label = { Text("Script Title") },
-                  singleLine = true,
-                  modifier = Modifier.fillMaxWidth().testTag("script_title_input"),
-                )
-
-                Row(
-                  modifier = Modifier.fillMaxWidth(),
-                  verticalAlignment = Alignment.CenterVertically,
-                  horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                  Text(
-                    text = "${state.actions.size} top-level steps",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                  )
-                  TextButton(
-                    onClick = { showDetailsSection = !showDetailsSection },
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                  ) {
-                    Text(if (showDetailsSection) "Hide Notes & Tags" else "Notes & Tags")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                      imageVector = if (showDetailsSection) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                      contentDescription = null,
-                      modifier = Modifier.size(18.dp),
-                    )
-                  }
-                }
-
-                AnimatedVisibility(visible = showDetailsSection) {
-                  Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
-                      value = state.description,
-                      onValueChange = { onIntent(ScriptEditorUiIntent.UpdateDescription(it)) },
-                      label = { Text("Description (Optional)") },
-                      minLines = 1,
-                      maxLines = 4,
-                      modifier = Modifier.fillMaxWidth().testTag("script_description_input"),
-                    )
-                    Row(
-                      verticalAlignment = Alignment.CenterVertically,
-                      horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                      OutlinedTextField(
-                        value = tagDraft,
-                        onValueChange = { tagDraft = it },
-                        label = { Text("Add Tag") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                      )
-                      FilledTonalButton(
-                        onClick = {
-                          if (tagDraft.isNotBlank()) {
-                            onIntent(ScriptEditorUiIntent.AddTag(tagDraft))
-                            tagDraft = ""
-                          }
-                        },
-                        modifier = Modifier.heightIn(min = 48.dp),
-                      ) {
-                        Text("Add")
-                      }
-                    }
-                    if (state.tags.isNotEmpty()) {
-                      FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        state.tags.forEach { tag ->
-                          InputChip(
-                            selected = false,
-                            onClick = { onIntent(ScriptEditorUiIntent.RemoveTag(tag)) },
-                            label = { Text(tag) },
-                            trailingIcon = {
-                              Icon(
-                                imageVector = Icons.Rounded.Close,
-                                contentDescription = "Remove tag $tag",
-                                modifier = Modifier.size(16.dp),
-                              )
-                            },
-                          )
-                        }
-                      }
-                    }
-                  }
-                }
-
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                FlowRow(
-                  horizontalArrangement = Arrangement.spacedBy(8.dp),
-                  verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                  FilledTonalButton(
-                    onClick = { onIntent(ScriptEditorUiIntent.SetGlobalDelaySheetVisible(true)) },
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    modifier = Modifier.heightIn(min = 40.dp).testTag("global_delay_button"),
-                  ) {
-                    Icon(
-                      imageVector = Icons.Rounded.Timer,
-                      contentDescription = null,
-                      modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                      text = "Global Delay: ${ActionTreeUtils.formatDelayConfig(state.globalDelay)}",
-                      style = MaterialTheme.typography.labelLarge,
-                    )
-                  }
-
-                  FilledTonalButton(
-                    onClick = { onIntent(ScriptEditorUiIntent.SetVariablesSheetVisible(true)) },
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    modifier = Modifier.heightIn(min = 40.dp).testTag("dynamic_variables_button"),
-                  ) {
-                    Icon(
-                      imageVector = if (!state.isPro) Icons.Rounded.Lock else Icons.Rounded.DataObject,
-                      contentDescription = null,
-                      modifier = Modifier.size(16.dp),
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                      text = "Variables (${state.variables.size})",
-                      style = MaterialTheme.typography.labelLarge,
-                    )
-                  }
-                }
-              }
-            }
-          }
-
           if (state.actions.isEmpty()) {
             item(key = "empty_actions_state") {
               EmptyActionsCard(
@@ -530,12 +348,79 @@ fun ScriptEditorContent(
     )
   }
 
+  if (showTagsDialog) {
+    AlertDialog(
+      onDismissRequest = { showTagsDialog = false },
+      title = { Text("Script Tags") },
+      text = {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            OutlinedTextField(
+              value = tagDraft,
+              onValueChange = { tagDraft = it },
+              label = { Text("New Tag") },
+              singleLine = true,
+              modifier = Modifier.weight(1f),
+            )
+            FilledTonalButton(
+              onClick = {
+                if (tagDraft.isNotBlank()) {
+                  onIntent(ScriptEditorUiIntent.AddTag(tagDraft))
+                  tagDraft = ""
+                }
+              },
+              modifier = Modifier.heightIn(min = 48.dp),
+            ) {
+              Text("Add")
+            }
+          }
+          if (state.tags.isEmpty()) {
+            Text(
+              text = "No tags yet. Tags help filter scripts in your library.",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          } else {
+            FlowRow(
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+              verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+              state.tags.forEach { tag ->
+                InputChip(
+                  selected = false,
+                  onClick = { onIntent(ScriptEditorUiIntent.RemoveTag(tag)) },
+                  label = { Text(tag) },
+                  trailingIcon = {
+                    Icon(
+                      imageVector = Icons.Rounded.Close,
+                      contentDescription = "Remove tag $tag",
+                      modifier = Modifier.size(16.dp),
+                    )
+                  },
+                )
+              }
+            }
+          }
+        }
+      },
+      confirmButton = {
+        TextButton(onClick = { showTagsDialog = false }) {
+          Text("Done")
+        }
+      },
+    )
+  }
+
   if (state.showGlobalDelaySheet) {
     GlobalDelayBottomSheet(
       initialConfig = state.globalDelay,
       isPro = state.isPro,
       onDismiss = { onIntent(ScriptEditorUiIntent.SetGlobalDelaySheetVisible(false)) },
       onSave = { onIntent(ScriptEditorUiIntent.SaveGlobalDelay(it)) },
+      onApplyToAll = { onIntent(ScriptEditorUiIntent.ApplyGlobalDelayToAllActions(it)) },
       onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
     )
   }
@@ -581,6 +466,198 @@ fun ScriptEditorContent(
       onSelectCrop = { crop -> onIntent(ScriptEditorUiIntent.ImportInspectCrop(crop)) },
       onDismiss = { onIntent(ScriptEditorUiIntent.DismissInspectPicker) },
     )
+  }
+}
+
+@Composable
+private fun ScriptEditorTopHeaderBar(
+  state: ScriptEditorUiState,
+  onIntent: (ScriptEditorUiIntent) -> Unit,
+  onOpenTagsDialog: () -> Unit,
+) {
+  var descriptionFocused by remember { mutableStateOf(false) }
+
+  Surface(
+    color = MaterialTheme.colorScheme.surfaceContainer,
+    tonalElevation = 2.dp,
+    modifier = Modifier.fillMaxWidth(),
+  ) {
+    Column(modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
+      Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.TopCenter,
+      ) {
+        Column(modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth()) {
+          // Row 1: Back Navigation, Borderless Editable Title, Save Button
+          Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 6.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+          ) {
+            IconButton(
+              onClick = { onIntent(ScriptEditorUiIntent.BackClicked) },
+              modifier = Modifier.size(48.dp).testTag("script_editor_back_button"),
+            ) {
+              Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Navigate back",
+              )
+            }
+
+            Box(
+              modifier = Modifier.weight(1f).padding(horizontal = 4.dp),
+              contentAlignment = Alignment.CenterStart,
+            ) {
+              BasicTextField(
+                value = state.title,
+                onValueChange = { onIntent(ScriptEditorUiIntent.UpdateTitle(it)) },
+                singleLine = true,
+                textStyle =
+                  MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                  ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                modifier = Modifier.fillMaxWidth().testTag("script_title_input"),
+                decorationBox = { innerTextField ->
+                  if (state.title.isEmpty()) {
+                    Text(
+                      text = "Untitled Script...",
+                      style = MaterialTheme.typography.titleLarge,
+                      fontWeight = FontWeight.SemiBold,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                    )
+                  }
+                  innerTextField()
+                },
+              )
+            }
+
+            if (state.isDirty) {
+              Box(
+                modifier =
+                  Modifier
+                    .padding(end = 8.dp)
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+              )
+            }
+
+            FilledTonalButton(
+              onClick = { onIntent(ScriptEditorUiIntent.SaveScriptClicked) },
+              enabled = !state.isSaving,
+              contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
+              modifier = Modifier.heightIn(min = 40.dp).testTag("save_script_button"),
+            ) {
+              Text(if (state.isSaving) "Saving…" else "Save")
+            }
+          }
+
+          // Row 2: Expandable Borderless Description + Text-Labeled Quick Configuration Pills
+          Column(
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            Box(
+              modifier = Modifier.fillMaxWidth().animateContentSize(),
+              contentAlignment = Alignment.CenterStart,
+            ) {
+              BasicTextField(
+                value = state.description,
+                onValueChange = { onIntent(ScriptEditorUiIntent.UpdateDescription(it)) },
+                singleLine = !descriptionFocused,
+                maxLines = if (descriptionFocused) 3 else 1,
+                textStyle =
+                  MaterialTheme.typography.bodySmall.copy(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  ),
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                modifier =
+                  Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { descriptionFocused = it.isFocused }
+                    .testTag("script_description_input"),
+                decorationBox = { innerTextField ->
+                  if (state.description.isEmpty()) {
+                    Text(
+                      text = "Add description...",
+                      style = MaterialTheme.typography.bodySmall,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                    )
+                  }
+                  innerTextField()
+                },
+              )
+            }
+
+            Row(
+              modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              AssistChip(
+                onClick = { onIntent(ScriptEditorUiIntent.SetGlobalDelaySheetVisible(true)) },
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Rounded.Timer,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                  )
+                },
+                label = {
+                  Text(
+                    text = "Global Delay: ${ActionTreeUtils.formatDelayConfig(state.globalDelay)}",
+                    maxLines = 1,
+                  )
+                },
+                modifier = Modifier.testTag("global_delay_button"),
+              )
+
+              AssistChip(
+                onClick = { onIntent(ScriptEditorUiIntent.SetVariablesSheetVisible(true)) },
+                leadingIcon = {
+                  Icon(
+                    imageVector = if (!state.isPro) Icons.Rounded.Lock else Icons.Rounded.DataObject,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                  )
+                },
+                label = {
+                  Text(
+                    text = "Variables (${state.variables.size})",
+                    maxLines = 1,
+                  )
+                },
+                modifier = Modifier.testTag("dynamic_variables_button"),
+              )
+
+              AssistChip(
+                onClick = onOpenTagsDialog,
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Rounded.Tag,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                  )
+                },
+                label = {
+                  Text(
+                    text = if (state.tags.isEmpty()) "Tags" else "Tags (${state.tags.size})",
+                    maxLines = 1,
+                  )
+                },
+                modifier = Modifier.testTag("script_tags_button"),
+              )
+            }
+          }
+        }
+      }
+      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+    }
   }
 }
 
@@ -806,15 +883,27 @@ private fun ActionTreeItemCard(
             overflow = TextOverflow.Ellipsis,
           )
           if (action.supportsPostActionDelay()) {
-            val delayPillText = formatPostDelayBadge(action, globalDelay)
+            val postDelay = extractActionPostDelay(action)
+            val isCustomOverride = postDelay is PostActionDelay.Override
+            val delayPillText = formatPostDelayBadge(postDelay, globalDelay)
             Surface(
               shape = RoundedCornerShape(6.dp),
-              color = MaterialTheme.colorScheme.surfaceContainerHighest,
+              color =
+                if (isCustomOverride) {
+                  MaterialTheme.colorScheme.secondaryContainer
+                } else {
+                  MaterialTheme.colorScheme.surfaceContainerHighest
+                },
             ) {
               Text(
                 text = delayPillText,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color =
+                  if (isCustomOverride) {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                  } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                  },
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
               )
             }
@@ -913,28 +1002,27 @@ private fun ActionTreeItemCard(
   }
 }
 
-private fun formatPostDelayBadge(action: ScriptAction, globalDelay: DelayConfig): String {
-  if (!action.supportsPostActionDelay()) return "0ms"
-  val postDelay =
-    when (action) {
-      is ScriptAction.Tap -> action.postDelay
-      is ScriptAction.DoubleTap -> action.postDelay
-      is ScriptAction.LongPress -> action.postDelay
-      is ScriptAction.MultiTouch -> action.postDelay
-      is ScriptAction.SwipeDrag -> action.postDelay
-      is ScriptAction.InputText -> action.postDelay
-      is ScriptAction.KeyEvent -> action.postDelay
-      is ScriptAction.LaunchApp -> action.postDelay
-      is ScriptAction.ForceStopApp -> action.postDelay
-      is ScriptAction.ClipboardOp -> action.postDelay
-      else -> PostActionDelay.Off
-    }
-  return when (postDelay) {
-    PostActionDelay.Global -> "Global (${ActionTreeUtils.formatDelayConfig(globalDelay)})"
-    is PostActionDelay.Override -> "Delay ${ActionTreeUtils.formatDelayConfig(postDelay.config)}"
-    PostActionDelay.Off -> "Delay 0ms"
+private fun extractActionPostDelay(action: ScriptAction): PostActionDelay =
+  when (action) {
+    is ScriptAction.Tap -> action.postDelay
+    is ScriptAction.DoubleTap -> action.postDelay
+    is ScriptAction.LongPress -> action.postDelay
+    is ScriptAction.MultiTouch -> action.postDelay
+    is ScriptAction.SwipeDrag -> action.postDelay
+    is ScriptAction.InputText -> action.postDelay
+    is ScriptAction.KeyEvent -> action.postDelay
+    is ScriptAction.LaunchApp -> action.postDelay
+    is ScriptAction.ForceStopApp -> action.postDelay
+    is ScriptAction.ClipboardOp -> action.postDelay
+    else -> PostActionDelay.Off
   }
-}
+
+private fun formatPostDelayBadge(postDelay: PostActionDelay, globalDelay: DelayConfig): String =
+  when (postDelay) {
+    PostActionDelay.Global -> "Global (${ActionTreeUtils.formatDelayConfig(globalDelay)})"
+    is PostActionDelay.Override -> "Custom: ${ActionTreeUtils.formatDelayConfig(postDelay.config)}"
+    PostActionDelay.Off -> "Off (0ms)"
+  }
 
 private fun flattenActionTree(actions: List<ScriptAction>): List<EditorTreeRow> {
   val rows = mutableListOf<EditorTreeRow>()

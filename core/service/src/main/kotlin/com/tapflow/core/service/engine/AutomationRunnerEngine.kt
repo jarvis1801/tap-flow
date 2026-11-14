@@ -26,6 +26,7 @@ import com.tapflow.core.model.action.SwipeTrajectoryMode
 import com.tapflow.core.model.action.SystemKeyType
 import com.tapflow.core.model.action.TextInjectionEngine
 import com.tapflow.core.model.action.VibratePattern
+import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.VariableType
 import com.tapflow.core.model.log.ActionLogEntry
 import com.tapflow.core.model.log.ConditionEvalTrace
@@ -544,7 +545,11 @@ class AutomationRunnerEngine @Inject constructor(
       }
 
       is ScriptAction.Delay -> {
-        val delayMs = DelayResolver.resolveDelayMs(action.config)
+        val delayMs =
+          DelayResolver.resolveDelayMs(
+            action.config,
+            minFloorMs = DelayConfig.MIN_STANDALONE_DELAY_MS,
+          )
         DelayResolver.delayPauseAware(delayMs, controlHub.isPaused)
         summary = "Delay ${delayMs}ms"
         onCountExecuted()

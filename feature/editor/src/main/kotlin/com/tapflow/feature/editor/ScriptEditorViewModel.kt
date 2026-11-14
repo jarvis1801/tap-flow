@@ -202,6 +202,28 @@ class ScriptEditorViewModel @Inject constructor(
           )
         }
       }
+      is ScriptEditorUiIntent.ApplyGlobalDelayToAllActions -> {
+        val clamped = intent.config.clamped()
+        if (clamped !is DelayConfig.Fixed && !entitlementRepository.isPro()) {
+          sendEffect(
+            ScriptEditorUiEffect.NavigateToPaywall(
+              ProFeatureGate.RANDOM_DEVIATION_DELAY.displayName,
+            ),
+          )
+          return
+        }
+        _uiState.update { state ->
+          state.copy(
+            globalDelay = clamped,
+            actions = ActionTreeUtils.applyGlobalDelayToAllPhysicalActions(state.actions),
+            showGlobalDelaySheet = false,
+            isDirty = true,
+          )
+        }
+        sendEffect(
+          ScriptEditorUiEffect.ShowSnackbar("Applied Global Delay to all physical actions"),
+        )
+      }
 
       // Dynamic Variables
       is ScriptEditorUiIntent.SetVariablesSheetVisible -> {

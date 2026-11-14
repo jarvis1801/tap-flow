@@ -6,6 +6,7 @@ import com.tapflow.core.model.action.MathOperator
 import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
+import com.tapflow.core.model.common.PostActionDelay
 import com.tapflow.core.model.condition.ColorTarget
 import com.tapflow.core.model.condition.ConditionGroup
 import com.tapflow.core.model.condition.ConditionLeaf
@@ -122,5 +123,63 @@ class ActionTreeAndConditionTest {
     val preview = ConditionValidator.formatNaturalLanguagePreview(withLeaf)
     assertTrue(preview.startsWith("When "))
     assertTrue(preview.contains("[Ready]"))
+  }
+
+  @Test
+  fun applyGlobalDelayToAllPhysicalActions_resetsNestedOverridesAndOffToGlobal() {
+    val tree =
+      listOf(
+        ScriptAction.Tap(
+          id = "root_tap",
+          postDelay = PostActionDelay.Override(DelayConfig.Fixed(300L)),
+        ),
+        ScriptAction.IfBlock(
+          id = "if1",
+          conditionRoot = ConditionGroup("g1"),
+          thenActions =
+            listOf(
+              ScriptAction.DoubleTap(id = "then_dt", postDelay = PostActionDelay.Off),
+              ScriptAction.ClipboardOp(
+                id = "then_paste",
+                operation = ClipboardActionType.PASTE,
+                postDelay = PostActionDelay.Override(DelayConfig.Fixed(120L)),
+              ),
+            ),
+          elseActions =
+            listOf(
+              ScriptAction.LaunchApp(
+                id = "else_launch",
+                packageName = "com.example.app",
+                postDelay = PostActionDelay.Off,
+              ),
+            ),
+        ),
+        ScriptAction.LoopBlock(
+          id = "loop1",
+          mode = LoopMode.Count(),
+          bodyActions =
+            listOf(
+              ScriptAction.SwipeDrag(
+                id = "loop_swipe",
+                postDelay = PostActionDelay.Override(DelayConfig.Fixed(500L)),
+              ),
+              ScriptAction.Delay(id = "loop_delay", config = DelayConfig.Fixed(250L)),
+            ),
+        ),
+      )
+
+    val updated = ActionTreeUtils.applyGlobalDelayToAllPhysicalActions(tree)
+
+    val rootTap = updated[0] as ScriptAction.Tap
+    assertEquals(PostActionDelay.Global, rootTap.postDelay)
+
+    val ifBlock = updated[1] as ScriptAction.IfBlock
+    assertEquals(PostActionDelay.Global, (ifBlock.thenActions[0] as ScriptAction.DoubleTap).postDelay)
+    assertEquals(PostActionDelay.Global, (ifBlock.thenActions[1] as ScriptAction.ClipboardOp).postDelay)
+    assertEquals(PostActionDelay.Global, (ifBlock.elseActions[0] as ScriptAction.LaunchApp).postDelay)
+
+    val loopBlock = updated[2] as ScriptAction.LoopBlock
+    assertEquals(PostActionDelay.Global, (loopBlock.bodyActions[0] as ScriptAction.SwipeDrag).postDelay)
+    assertEquals(DelayConfig.Fixed(250L), (loopBlock.bodyActions[1] as ScriptAction.Delay).config)
   }
 }

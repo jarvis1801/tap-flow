@@ -58,7 +58,7 @@ data class ScriptEditorUiState(
   val title: String = "New Script",
   val description: String = "",
   val tags: List<String> = emptyList(),
-  val globalDelay: DelayConfig = DelayConfig.Fixed(150L),
+  val globalDelay: DelayConfig = DelayConfig.Fixed(0L),
   val variables: List<VariableDefinition> = emptyList(),
   val actions: List<ScriptAction> = emptyList(),
   val undoRecord: RemovedActionRecord? = null,
@@ -98,6 +98,8 @@ sealed interface ScriptEditorUiIntent {
   data class SetGlobalDelaySheetVisible(val visible: Boolean) : ScriptEditorUiIntent
 
   data class SaveGlobalDelay(val config: DelayConfig) : ScriptEditorUiIntent
+
+  data class ApplyGlobalDelayToAllActions(val config: DelayConfig) : ScriptEditorUiIntent
 
   // Dynamic Variables Sheet
   data class SetVariablesSheetVisible(val visible: Boolean) : ScriptEditorUiIntent

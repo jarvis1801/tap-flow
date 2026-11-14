@@ -987,7 +987,7 @@ class OverlayService :
     val now = System.currentTimeMillis()
     // Inter-action delay timer starts ONLY after the 1st gesture executes
     lastRecordedActionCompletedAtMs?.let { prevDone ->
-      val gapMs = (now - prevDone).coerceAtLeast(DelayConfig.MIN_DELAY_MS)
+      val gapMs = (now - prevDone).coerceAtLeast(DelayConfig.MIN_STANDALONE_DELAY_MS)
       recordedActions +=
         ScriptAction.Delay(
           id = UUID.randomUUID().toString(),

@@ -18,7 +18,7 @@ data class Script(
   val title: String,
   val description: String = "",
   val tags: List<String> = emptyList(),
-  val globalDelay: DelayConfig = DelayConfig.Fixed(150L),
+  val globalDelay: DelayConfig = DelayConfig.Fixed(0L),
   val variables: List<VariableDefinition> = emptyList(),
   val actions: List<ScriptAction> = emptyList(),
   val createdAtMs: Long = 0L,

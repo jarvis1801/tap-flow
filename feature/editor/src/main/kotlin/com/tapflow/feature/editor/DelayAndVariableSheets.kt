@@ -22,10 +22,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -69,6 +71,7 @@ private enum class DelayModeTab(val label: String, val requiresPro: Boolean) {
 fun DelayConfigEditor(
   config: DelayConfig,
   isPro: Boolean,
+  minDelayMs: Long = 0L,
   onConfigChange: (DelayConfig) -> Unit,
   onProRequested: (String) -> Unit,
   modifier: Modifier = Modifier,
@@ -101,10 +104,17 @@ fun DelayConfigEditor(
                   is DelayConfig.Deviation -> config.baseMs
                 }
               when (tab) {
-                DelayModeTab.FIXED -> onConfigChange(DelayConfig.fixed(baseMs))
+                DelayModeTab.FIXED -> onConfigChange(DelayConfig.fixed(baseMs, minDelayMs))
                 DelayModeTab.RANDOM_RANGE ->
-                  onConfigChange(DelayConfig.randomRange(baseMs, (baseMs + 150L).coerceAtLeast(baseMs)))
-                DelayModeTab.DEVIATION -> onConfigChange(DelayConfig.deviation(baseMs, 50L))
+                  onConfigChange(
+                    DelayConfig.randomRange(
+                      minMs = baseMs,
+                      maxMs = (baseMs + 150L).coerceAtLeast(baseMs),
+                      minFloorMs = minDelayMs,
+                    ),
+                  )
+                DelayModeTab.DEVIATION ->
+                  onConfigChange(DelayConfig.deviation(baseMs, 50L, minFloorMs = minDelayMs))
               }
             }
           },
@@ -125,41 +135,57 @@ fun DelayConfigEditor(
     when (config) {
       is DelayConfig.Fixed -> {
         HmsMsDurationRow(
-          label = "Duration (min 50ms)",
+          label = if (minDelayMs > 0L) "Duration (min ${minDelayMs}ms)" else "Duration",
           totalMs = config.durationMs,
-          onDurationChange = { ms -> onConfigChange(DelayConfig.fixed(ms)) },
+          minClampMs = minDelayMs,
+          onDurationChange = { ms -> onConfigChange(DelayConfig.fixed(ms, minDelayMs)) },
         )
       }
       is DelayConfig.RandomRange -> {
         HmsMsDurationRow(
-          label = "Min Delay (min 50ms)",
+          label = if (minDelayMs > 0L) "Min Delay (min ${minDelayMs}ms)" else "Min Delay",
           totalMs = config.minMs,
+          minClampMs = minDelayMs,
           onDurationChange = { min ->
-            onConfigChange(DelayConfig.randomRange(min, config.maxMs.coerceAtLeast(min)))
+            onConfigChange(
+              DelayConfig.randomRange(
+                minMs = min,
+                maxMs = config.maxMs.coerceAtLeast(min),
+                minFloorMs = minDelayMs,
+              ),
+            )
           },
         )
         HmsMsDurationRow(
           label = "Max Delay",
           totalMs = config.maxMs,
+          minClampMs = minDelayMs,
           onDurationChange = { max ->
-            onConfigChange(DelayConfig.randomRange(config.minMs, max))
+            onConfigChange(
+              DelayConfig.randomRange(
+                minMs = config.minMs,
+                maxMs = max,
+                minFloorMs = minDelayMs,
+              ),
+            )
           },
         )
       }
       is DelayConfig.Deviation -> {
         HmsMsDurationRow(
-          label = "Base Delay (min 50ms)",
+          label = if (minDelayMs > 0L) "Base Delay (min ${minDelayMs}ms)" else "Base Delay",
           totalMs = config.baseMs,
+          minClampMs = minDelayMs,
           onDurationChange = { base ->
-            onConfigChange(DelayConfig.deviation(base, config.deltaMs))
+            onConfigChange(DelayConfig.deviation(base, config.deltaMs, minFloorMs = minDelayMs))
           },
         )
         HmsMsDurationRow(
-          label = "Jitter ± Delta (ms)",
+          label = "Jitter ± Delta",
           totalMs = config.deltaMs,
           minClampMs = 0L,
           onDurationChange = { delta ->
-            onConfigChange(DelayConfig.deviation(config.baseMs, delta))
+            onConfigChange(DelayConfig.deviation(config.baseMs, delta, minFloorMs = minDelayMs))
           },
         )
       }
@@ -171,7 +197,7 @@ fun DelayConfigEditor(
 fun HmsMsDurationRow(
   label: String,
   totalMs: Long,
-  minClampMs: Long = DelayConfig.MIN_DELAY_MS,
+  minClampMs: Long = 0L,
   onDurationChange: (Long) -> Unit,
 ) {
   val safe = totalMs.coerceAtLeast(minClampMs)
@@ -268,12 +294,13 @@ fun PostActionDelaySection(
       PostActionDelay.Off -> 2
     }
 
+  val globalLabel = "Global (${ActionTreeUtils.formatDelayConfig(globalDelay)})"
   EditorSectionCard(
     title = "Post-Action Delay",
     subtitle = "Global default: ${ActionTreeUtils.formatDelayConfig(globalDelay)}",
     containerColor = MaterialTheme.colorScheme.surfaceContainer,
   ) {
-    val options = listOf("Global", "Override", "Off (0ms)")
+    val options = listOf(globalLabel, "Override", "Off (0ms)")
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
       options.forEachIndexed { index, label ->
         SegmentedButton(
@@ -283,7 +310,7 @@ fun PostActionDelaySection(
               0 -> onPostDelayChange(PostActionDelay.Global)
               1 -> {
                 if (postDelay !is PostActionDelay.Override) {
-                  onPostDelayChange(PostActionDelay.Override(globalDelay.clamped()))
+                  onPostDelayChange(PostActionDelay.Override(globalDelay.clamped(0L)))
                 }
               }
               2 -> onPostDelayChange(PostActionDelay.Off)
@@ -300,6 +327,7 @@ fun PostActionDelaySection(
       DelayConfigEditor(
         config = postDelay.config,
         isPro = isPro,
+        minDelayMs = 0L,
         onConfigChange = { next -> onPostDelayChange(PostActionDelay.Override(next)) },
         onProRequested = onProRequested,
       )
@@ -314,9 +342,10 @@ fun GlobalDelayBottomSheet(
   isPro: Boolean,
   onDismiss: () -> Unit,
   onSave: (DelayConfig) -> Unit,
+  onApplyToAll: (DelayConfig) -> Unit,
   onProRequested: (String) -> Unit,
 ) {
-  var draftConfig by remember(initialConfig) { mutableStateOf(initialConfig.clamped()) }
+  var draftConfig by remember(initialConfig) { mutableStateOf(initialConfig.clamped(0L)) }
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
   ModalBottomSheet(
@@ -341,7 +370,7 @@ fun GlobalDelayBottomSheet(
       )
       Text(
         text =
-          "Applied after every physical action set to Global delay. Minimum delay is strictly clamped to 50ms.",
+          "Applied after every physical action set to Global delay. Set to 0ms for instant execution without pause.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
@@ -349,9 +378,22 @@ fun GlobalDelayBottomSheet(
         DelayConfigEditor(
           config = draftConfig,
           isPro = isPro,
+          minDelayMs = 0L,
           onConfigChange = { draftConfig = it },
           onProRequested = onProRequested,
         )
+      }
+      FilledTonalButton(
+        onClick = { onApplyToAll(draftConfig.clamped(0L)) },
+        modifier =
+          Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .testTag("apply_global_delay_all_button"),
+      ) {
+        Icon(Icons.Rounded.DoneAll, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text("Apply to All Actions")
       }
       Row(
         modifier = Modifier.fillMaxWidth(),
@@ -363,10 +405,10 @@ fun GlobalDelayBottomSheet(
         }
         Spacer(modifier = Modifier.width(8.dp))
         Button(
-          onClick = { onSave(draftConfig.clamped()) },
+          onClick = { onSave(draftConfig.clamped(0L)) },
           modifier = Modifier.heightIn(min = 48.dp).testTag("save_global_delay_button"),
         ) {
-          Text("Apply")
+          Text("Save")
         }
       }
       Spacer(modifier = Modifier.height(8.dp))

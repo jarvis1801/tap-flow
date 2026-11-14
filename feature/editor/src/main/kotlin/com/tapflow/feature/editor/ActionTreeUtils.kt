@@ -7,6 +7,7 @@ import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.DurationInput
 import com.tapflow.core.model.common.NumericInput
+import com.tapflow.core.model.common.PostActionDelay
 import com.tapflow.core.model.condition.ConditionGroup
 import com.tapflow.core.model.condition.ConditionLeaf
 import com.tapflow.core.model.condition.ConditionNode
@@ -243,6 +244,42 @@ object ActionTreeUtils {
         action.id == actionId && action is ScriptAction.LoopBlock ->
           action.copy(isExpanded = !action.isExpanded)
         else -> recurseChildren(action) { branch -> toggleExpanded(branch, actionId) }
+      }
+    }
+  }
+
+  fun applyGlobalDelayToAllPhysicalActions(actions: List<ScriptAction>): List<ScriptAction> {
+    return actions.map { action ->
+      when (action) {
+        is ScriptAction.Tap -> action.copy(postDelay = PostActionDelay.Global)
+        is ScriptAction.DoubleTap -> action.copy(postDelay = PostActionDelay.Global)
+        is ScriptAction.LongPress -> action.copy(postDelay = PostActionDelay.Global)
+        is ScriptAction.MultiTouch -> action.copy(postDelay = PostActionDelay.Global)
+        is ScriptAction.SwipeDrag -> action.copy(postDelay = PostActionDelay.Global)
+        is ScriptAction.InputText -> action.copy(postDelay = PostActionDelay.Global)
+        is ScriptAction.KeyEvent -> action.copy(postDelay = PostActionDelay.Global)
+        is ScriptAction.LaunchApp -> action.copy(postDelay = PostActionDelay.Global)
+        is ScriptAction.ForceStopApp -> action.copy(postDelay = PostActionDelay.Global)
+        is ScriptAction.ClipboardOp ->
+          if (action.operation == ClipboardActionType.PASTE) {
+            action.copy(postDelay = PostActionDelay.Global)
+          } else {
+            action
+          }
+        is ScriptAction.IfBlock ->
+          action.copy(
+            thenActions = applyGlobalDelayToAllPhysicalActions(action.thenActions),
+            elseActions = applyGlobalDelayToAllPhysicalActions(action.elseActions),
+          )
+        is ScriptAction.LoopBlock ->
+          action.copy(bodyActions = applyGlobalDelayToAllPhysicalActions(action.bodyActions))
+        is ScriptAction.Delay,
+        is ScriptAction.Break,
+        is ScriptAction.Continue,
+        is ScriptAction.EndScript,
+        is ScriptAction.Vibrate,
+        is ScriptAction.PlayAlertSound,
+        is ScriptAction.VariableOp -> action
       }
     }
   }
