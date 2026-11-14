@@ -1,6 +1,10 @@
 package com.tapflow.feature.editor
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.util.LruCache
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -10,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -50,13 +55,18 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -64,6 +74,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.drawable.toBitmap
 import coil.compose.AsyncImage
 import com.tapflow.core.database.R as DbR
 import com.tapflow.core.database.repository.InspectGroupWithItems
@@ -77,6 +88,8 @@ import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.InspectPixel
 import com.tapflow.core.model.inspect.ScreenOrientation
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -497,12 +510,59 @@ fun InspectTargetPickerBottomSheet(
           verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
           items(flatItems, key = { it.second.id }) { (groupTitle, item) ->
+            val displayAppName = item.appName.ifBlank { "Screen Capture" }
             EditorSectionCard(
-              title = "$groupTitle • ${item.appName}",
-              subtitle = "${item.screenWidth} × ${item.screenHeight} px",
-              trailing = { PickerOrientationBadge(item = item) },
               containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+              ) {
+                Surface(
+                  shape = RoundedCornerShape(10.dp),
+                  color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                  border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+                  modifier = Modifier.size(52.dp),
+                ) {
+                  Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                  ) {
+                    AsyncImage(
+                      model = File(item.fullScreenPngPath),
+                      contentDescription = "Screenshot for $displayAppName",
+                      contentScale = ContentScale.Fit,
+                      modifier = Modifier.fillMaxSize(),
+                    )
+                  }
+                }
+
+                Column(
+                  modifier = Modifier.weight(1f),
+                  verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                  Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                  ) {
+                    PickerAppIcon(
+                      packageName = item.packageName,
+                      contentDescription = null,
+                    )
+                    Text(
+                      text = "$groupTitle • $displayAppName",
+                      style = MaterialTheme.typography.titleSmall,
+                      fontWeight = FontWeight.SemiBold,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                      modifier = Modifier.weight(1f),
+                    )
+                  }
+                  PickerOrientationBadge(item = item)
+                }
+              }
+              HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
               if (isCropMode) {
                 item.crops.forEach { crop ->
                   Row(
@@ -583,6 +643,67 @@ fun InspectTargetPickerBottomSheet(
   }
 }
 
+private object PickerAppIconCache {
+  private val cache = LruCache<String, ImageBitmap>(48)
+
+  suspend fun load(context: Context, packageName: String): ImageBitmap? {
+    if (packageName.isBlank()) return null
+    cache.get(packageName)?.let { return it }
+    return withContext(Dispatchers.IO) {
+      runCatching {
+        val drawable = context.packageManager.getApplicationIcon(packageName)
+        drawable.toBitmap(width = 64, height = 64, config = Bitmap.Config.ARGB_8888)
+          .asImageBitmap()
+          .also { cache.put(packageName, it) }
+      }.getOrNull()
+    }
+  }
+}
+
+@Composable
+private fun PickerAppIcon(
+  packageName: String,
+  contentDescription: String?,
+  modifier: Modifier = Modifier,
+) {
+  val context = LocalContext.current
+  val isPreview = LocalInspectionMode.current
+  val iconBitmap by
+    produceState<ImageBitmap?>(initialValue = null, packageName, isPreview) {
+      value =
+        if (isPreview || packageName.isBlank()) {
+          null
+        } else {
+          PickerAppIconCache.load(context, packageName)
+        }
+    }
+
+  val loaded = iconBitmap
+  if (loaded != null) {
+    Image(
+      bitmap = loaded,
+      contentDescription = contentDescription,
+      contentScale = ContentScale.Crop,
+      modifier = modifier.size(24.dp).clip(RoundedCornerShape(6.dp)),
+    )
+  } else {
+    Surface(
+      modifier = modifier.size(24.dp),
+      shape = RoundedCornerShape(6.dp),
+      color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+      Box(contentAlignment = Alignment.Center) {
+        Icon(
+          imageVector = Icons.Rounded.Apps,
+          contentDescription = contentDescription,
+          tint = MaterialTheme.colorScheme.onSecondaryContainer,
+          modifier = Modifier.size(15.dp),
+        )
+      }
+    }
+  }
+}
+
 @Composable
 private fun PickerOrientationBadge(
   item: InspectItem,
@@ -631,7 +752,7 @@ private fun PickerOrientationBadge(
         modifier = Modifier.size(13.dp),
       )
       Text(
-        text = label,
+        text = "$label • ${item.screenWidth} × ${item.screenHeight}",
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.SemiBold,
         color = contentColor,

@@ -1,7 +1,11 @@
 package com.tapflow.feature.home
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.util.LruCache
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,12 +15,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,6 +33,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.StayCurrentLandscape
 import androidx.compose.material.icons.rounded.StayCurrentPortrait
 import androidx.compose.material.icons.rounded.TabletAndroid
@@ -47,11 +50,17 @@ import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -59,6 +68,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.drawable.toBitmap
 import coil.compose.AsyncImage
 import com.tapflow.core.database.R as DbR
 import com.tapflow.core.database.repository.InspectGroupWithItems
@@ -68,6 +78,8 @@ import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.InspectPixel
 import com.tapflow.core.model.inspect.ScreenOrientation
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun InspectTabContent(
@@ -225,68 +237,73 @@ private fun InspectItemNestedCard(
       modifier = Modifier.padding(12.dp),
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+      val displayAppName = item.appName.ifBlank { "Screen Capture" }
+      val pixelWord = if (item.pixels.size == 1) "Pixel" else "Pixels"
+      val cropWord = if (item.crops.size == 1) "Crop" else "Crops"
+
       Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
       ) {
-        val thumbSizeModifier =
-          when (item.screenOrientation) {
-            ScreenOrientation.PORTRAIT -> Modifier.size(width = 60.dp, height = 88.dp)
-            ScreenOrientation.LANDSCAPE -> Modifier.size(width = 88.dp, height = 58.dp)
-            ScreenOrientation.SQUARE_UNFOLDED -> Modifier.size(width = 76.dp, height = 76.dp)
-          }
         Surface(
-          shape = MaterialTheme.shapes.small,
-          color = MaterialTheme.colorScheme.surface,
-          modifier = thumbSizeModifier,
+          shape = RoundedCornerShape(12.dp),
+          color = MaterialTheme.colorScheme.surfaceContainerHighest,
+          border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+          modifier = Modifier.size(92.dp),
         ) {
-          AsyncImage(
-            model = File(item.fullScreenPngPath),
-            contentDescription = "Screenshot for ${item.appName}",
-            contentScale = ContentScale.Crop,
+          Box(
             modifier = Modifier.fillMaxSize(),
-          )
+            contentAlignment = Alignment.Center,
+          ) {
+            AsyncImage(
+              model = File(item.fullScreenPngPath),
+              contentDescription = "Screenshot for $displayAppName",
+              contentScale = ContentScale.Fit,
+              modifier = Modifier.fillMaxSize(),
+            )
+          }
         }
 
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-          Text(
-            text = item.appName.ifBlank { item.packageName },
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            TargetAppIcon(
+              packageName = item.packageName,
+              contentDescription = null,
+            )
+            Text(
+              text = displayAppName,
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.Bold,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+              modifier = Modifier.weight(1f),
+            )
+            IconButton(
+              onClick = { onIntent(HomeUiIntent.ToggleInspectItemExpanded(item.id)) },
+              modifier = Modifier.size(48.dp).testTag("toggle_inspect_item_${item.id}"),
+            ) {
+              Icon(
+                imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = if (isExpanded) "Hide targets" else "Show targets",
+              )
+            }
+          }
+
+          InspectOrientationBadge(
+            item = item,
+            modifier = Modifier.testTag("orientation_badge_${item.id}"),
           )
+
           Text(
-            text = item.packageName,
-            style = MaterialTheme.typography.bodySmall,
+            text = "${item.pixels.size} $pixelWord • ${item.crops.size} $cropWord",
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-          )
-          FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-          ) {
-            InspectOrientationBadge(
-              item = item,
-              modifier = Modifier.testTag("orientation_badge_${item.id}"),
-            )
-            Text(
-              text = "${item.screenWidth} × ${item.screenHeight} px • ${item.pixels.size} px • ${item.crops.size} crops",
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.align(Alignment.CenterVertically),
-            )
-          }
-        }
-
-        IconButton(
-          onClick = { onIntent(HomeUiIntent.ToggleInspectItemExpanded(item.id)) },
-          modifier = Modifier.size(48.dp).testTag("toggle_inspect_item_${item.id}"),
-        ) {
-          Icon(
-            imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-            contentDescription = if (isExpanded) "Hide targets" else "Show targets",
           )
         }
       }
@@ -534,6 +551,67 @@ private fun InspectSpeedDialFab(
   }
 }
 
+private object InspectAppIconCache {
+  private val cache = LruCache<String, ImageBitmap>(48)
+
+  suspend fun load(context: Context, packageName: String): ImageBitmap? {
+    if (packageName.isBlank()) return null
+    cache.get(packageName)?.let { return it }
+    return withContext(Dispatchers.IO) {
+      runCatching {
+        val drawable = context.packageManager.getApplicationIcon(packageName)
+        drawable.toBitmap(width = 64, height = 64, config = Bitmap.Config.ARGB_8888)
+          .asImageBitmap()
+          .also { cache.put(packageName, it) }
+      }.getOrNull()
+    }
+  }
+}
+
+@Composable
+private fun TargetAppIcon(
+  packageName: String,
+  contentDescription: String?,
+  modifier: Modifier = Modifier,
+) {
+  val context = LocalContext.current
+  val isPreview = LocalInspectionMode.current
+  val iconBitmap by
+    produceState<ImageBitmap?>(initialValue = null, packageName, isPreview) {
+      value =
+        if (isPreview || packageName.isBlank()) {
+          null
+        } else {
+          InspectAppIconCache.load(context, packageName)
+        }
+    }
+
+  val loaded = iconBitmap
+  if (loaded != null) {
+    Image(
+      bitmap = loaded,
+      contentDescription = contentDescription,
+      contentScale = ContentScale.Crop,
+      modifier = modifier.size(24.dp).clip(RoundedCornerShape(6.dp)),
+    )
+  } else {
+    Surface(
+      modifier = modifier.size(24.dp),
+      shape = RoundedCornerShape(6.dp),
+      color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
+      Box(contentAlignment = Alignment.Center) {
+        Icon(
+          imageVector = Icons.Rounded.Apps,
+          contentDescription = contentDescription,
+          tint = MaterialTheme.colorScheme.onSecondaryContainer,
+          modifier = Modifier.size(15.dp),
+        )
+      }
+    }
+  }
+}
+
 @Composable
 private fun InspectOrientationBadge(
   item: InspectItem,
@@ -578,7 +656,7 @@ private fun InspectOrientationBadge(
     color = containerColor,
   ) {
     Row(
-      modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+      modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -589,7 +667,7 @@ private fun InspectOrientationBadge(
         modifier = Modifier.size(13.dp),
       )
       Text(
-        text = label,
+        text = "$label • ${item.screenWidth} × ${item.screenHeight}",
         style = MaterialTheme.typography.labelSmall,
         fontWeight = FontWeight.SemiBold,
         color = contentColor,
