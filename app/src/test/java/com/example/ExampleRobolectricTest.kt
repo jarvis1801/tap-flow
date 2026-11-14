@@ -1,4 +1,4 @@
-package com.jarvis
+package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider

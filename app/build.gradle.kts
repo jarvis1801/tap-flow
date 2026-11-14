@@ -11,11 +11,11 @@ plugins {
 }
 
 android {
-  namespace = "com.jarvis"
+  namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.jarvis.tapflow"
+    applicationId = "com.aistudio.tapflow.qkzmtr"
     minSdk = 28
     targetSdk = 35
     versionCode = 1
@@ -54,6 +54,11 @@ android {
       // Do not remove or modify this signingConfig assignment. It is necessary for Android apps in
       // AI Studio.
       signingConfig = signingConfigs.getByName("release")
+    }
+    debug {
+      // Do not remove or modify this signingConfig assignment. It is necessary for Android apps in
+      // AI Studio.
+      signingConfig = signingConfigs.getByName("debugConfig")
     }
   }
   compileOptions {
@@ -117,6 +122,7 @@ dependencies {
   ksp(libs.hilt.compiler)
   implementation(libs.androidx.hilt.navigation.compose)
 
+  testImplementation(platform(libs.androidx.compose.bom))
   testImplementation(libs.junit)
   testImplementation(libs.androidx.junit)
   testImplementation(libs.androidx.core)

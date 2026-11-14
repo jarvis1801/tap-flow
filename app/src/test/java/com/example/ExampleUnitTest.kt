@@ -1,4 +1,4 @@
-package com.jarvis
+package com.example
 
 import org.junit.Assert.*
 import org.junit.Test

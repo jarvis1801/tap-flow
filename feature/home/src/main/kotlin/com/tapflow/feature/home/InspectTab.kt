@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -115,7 +114,6 @@ fun InspectTabContent(
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InspectGroupCard(
   entry: InspectGroupWithItems,
@@ -545,7 +543,7 @@ private fun InspectTabPreview() {
                       screenWidth = 1080,
                       screenHeight = 2400,
                       appName = "Fantasy Quest",
-                      packageName = "com.jarvis.game",
+                      packageName = "com.example.game",
                       pixels =
                         listOf(
                           InspectPixel("px1", "Confirm Gold", 540, 1820, "#FFC107"),

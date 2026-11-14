@@ -25,6 +25,7 @@ dependencies {
   implementation(project(":core:datastore"))
   implementation(project(":core:billing"))
   implementation(project(":core:service"))
+  implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.compose.runtime.annotation)
   implementation(libs.ktor.server.core)

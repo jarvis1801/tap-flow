@@ -4,7 +4,6 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -52,7 +51,6 @@ import com.tapflow.core.datastore.ThemePaletteOption
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.TrialStatus
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsTabContent(
   state: HomeUiState,

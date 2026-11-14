@@ -2,7 +2,6 @@ package com.tapflow.feature.editor
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,7 +38,6 @@ import com.tapflow.core.model.action.TypeCastOperator
 import com.tapflow.core.model.action.VibratePattern
 import com.tapflow.core.model.common.VariableDefinition
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun KeyEventActionEditor(
   action: ScriptAction.KeyEvent,
@@ -92,7 +90,6 @@ fun AppLifecycleActionEditor(
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ClipboardActionEditor(
   action: ScriptAction.ClipboardOp,
@@ -164,7 +161,6 @@ fun ClipboardActionEditor(
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VibrateActionEditor(
   action: ScriptAction.Vibrate,
@@ -234,7 +230,6 @@ fun VibrateActionEditor(
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PlayAlertSoundActionEditor(
   action: ScriptAction.PlayAlertSound,
@@ -261,7 +256,6 @@ fun PlayAlertSoundActionEditor(
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun VariableOpActionEditor(
   action: ScriptAction.VariableOp,

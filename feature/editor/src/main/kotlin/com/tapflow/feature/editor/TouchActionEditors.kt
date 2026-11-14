@@ -2,7 +2,6 @@ package com.tapflow.feature.editor
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -214,7 +213,6 @@ fun DoubleTapActionEditor(
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LongPressActionEditor(
   action: ScriptAction.LongPress,
@@ -387,7 +385,6 @@ fun LongPressActionEditor(
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MultiTouchActionEditor(
   action: ScriptAction.MultiTouch,
@@ -674,7 +671,6 @@ fun MultiTouchActionEditor(
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SwipeDragActionEditor(
   action: ScriptAction.SwipeDrag,
@@ -911,7 +907,6 @@ fun SwipeDragActionEditor(
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun InputTextActionEditor(
   action: ScriptAction.InputText,

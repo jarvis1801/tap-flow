@@ -2,7 +2,6 @@ package com.tapflow.feature.editor
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -59,7 +58,6 @@ private enum class DelayModeTab {
   DEVIATION,
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DelayConfigEditor(
   config: DelayConfig,
@@ -274,7 +272,6 @@ fun HmsMsDurationRow(
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PostActionDelaySection(
   postDelay: PostActionDelay,
@@ -393,7 +390,7 @@ fun GlobalDelayBottomSheet(
   }
 }
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DynamicVariablesBottomSheet(
   variables: List<VariableDefinition>,

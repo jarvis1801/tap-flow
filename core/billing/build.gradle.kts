@@ -21,6 +21,7 @@ android {
 dependencies {
   implementation(project(":core:model"))
   implementation(project(":core:datastore"))
+  implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.compose.runtime.annotation)
   implementation(libs.billing.ktx)

@@ -1,9 +1,9 @@
-package com.jarvis
+package com.example
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import com.jarvis.navigation.HomeTab
-import com.jarvis.navigation.Route
+import com.example.navigation.HomeTab
+import com.example.navigation.Route
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
