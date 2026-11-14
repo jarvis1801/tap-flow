@@ -26,6 +26,8 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -227,12 +229,12 @@ fun TapFlowNavHost(
       PaywallScreen(
         sourceFeature = route.sourceFeature,
         entitlementRepository = entitlementRepository,
-        onNavigateBack = { navController.popBackStack() },
+        onNavigateBack = { navController.popBackStackSafely() },
       )
     }
     composable<Route.ScriptEditor> {
       ScriptEditorScreen(
-        onNavigateBack = { navController.popBackStack() },
+        onNavigateBack = { navController.popBackStackSafely() },
         onNavigateToPaywall = { sourceFeature ->
           navController.navigate(Route.Paywall(sourceFeature)) {
             launchSingleTop = true
@@ -242,7 +244,7 @@ fun TapFlowNavHost(
     }
     composable<Route.PipelineEditor> {
       PipelineEditorScreen(
-        onNavigateBack = { navController.popBackStack() },
+        onNavigateBack = { navController.popBackStackSafely() },
         onNavigateToPaywall = { sourceFeature ->
           navController.navigate(Route.Paywall(sourceFeature)) {
             launchSingleTop = true
@@ -252,7 +254,7 @@ fun TapFlowNavHost(
     }
     composable<Route.ScriptLog> {
       ScriptLogScreen(
-        onNavigateBack = { navController.popBackStack() },
+        onNavigateBack = { navController.popBackStackSafely() },
         onNavigateToPaywall = { sourceFeature ->
           navController.navigate(Route.Paywall(sourceFeature)) {
             launchSingleTop = true
@@ -262,7 +264,7 @@ fun TapFlowNavHost(
     }
     composable<Route.PipelineLog> {
       PipelineLogScreen(
-        onNavigateBack = { navController.popBackStack() },
+        onNavigateBack = { navController.popBackStackSafely() },
         onNavigateToPaywall = { sourceFeature ->
           navController.navigate(Route.Paywall(sourceFeature)) {
             launchSingleTop = true
@@ -272,7 +274,7 @@ fun TapFlowNavHost(
     }
     composable<Route.InspectStudio> {
       InspectStudioScreen(
-        onNavigateBack = { navController.popBackStack() },
+        onNavigateBack = { navController.popBackStackSafely() },
         onNavigateToPaywall = { sourceFeature ->
           navController.navigate(Route.Paywall(sourceFeature)) {
             launchSingleTop = true
@@ -280,6 +282,14 @@ fun TapFlowNavHost(
         },
       )
     }
+  }
+}
+
+private fun NavHostController.popBackStackSafely() {
+  if (previousBackStackEntry != null &&
+    currentDestination?.hasRoute<Route.Home>() == false
+  ) {
+    popBackStack()
   }
 }
 

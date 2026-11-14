@@ -94,7 +94,7 @@ fun HomeScreen(
   var pendingConsentTarget by remember { mutableStateOf<PendingMediaProjectionTarget?>(null) }
 
   LaunchedEffect(initialTab) {
-    viewModel.onIntent(HomeUiIntent.SelectTab(initialTab))
+    viewModel.onIntent(HomeUiIntent.InitializeTabIfUnset(initialTab))
   }
 
   LaunchedEffect(context) {

@@ -128,6 +128,8 @@ data class HomeUiState(
 }
 
 sealed interface HomeUiIntent {
+  data class InitializeTabIfUnset(val tab: HomeTabType) : HomeUiIntent
+
   data class SelectTab(val tab: HomeTabType) : HomeUiIntent
 
   data class SetSearchExpanded(val expanded: Boolean) : HomeUiIntent

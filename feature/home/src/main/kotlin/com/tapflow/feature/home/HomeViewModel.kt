@@ -1,6 +1,7 @@
 package com.tapflow.feature.home
 
 import android.os.Build
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tapflow.core.billing.BillingRestoreResult
@@ -43,6 +44,7 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
+  private val savedStateHandle: SavedStateHandle,
   private val scriptRepository: ScriptRepository,
   private val pipelineRepository: PipelineRepository,
   private val inspectRepository: InspectRepository,
@@ -53,6 +55,10 @@ class HomeViewModel @Inject constructor(
   private val backupManager: TapFlowBackupManager,
   private val inspectImageImporter: InspectImageImporter,
 ) : ViewModel() {
+
+  companion object {
+    internal const val KEY_ACTIVE_HOME_TAB = "active_home_tab"
+  }
 
   private data class LocalTransientState(
     val activeTab: HomeTabType = HomeTabType.SCRIPT,
@@ -87,7 +93,12 @@ class HomeViewModel @Inject constructor(
     val shizukuStatus: ShizukuDiagnosticState,
   )
 
-  private val _localState = MutableStateFlow(LocalTransientState())
+  private val _localState =
+    MutableStateFlow(
+      LocalTransientState(
+        activeTab = readSavedActiveTab() ?: HomeTabType.SCRIPT,
+      ),
+    )
   private val _uiState = MutableStateFlow(HomeUiState())
   val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
@@ -241,7 +252,17 @@ class HomeViewModel @Inject constructor(
 
   fun onIntent(intent: HomeUiIntent) {
     when (intent) {
+      is HomeUiIntent.InitializeTabIfUnset -> {
+        if (!savedStateHandle.contains(KEY_ACTIVE_HOME_TAB)) {
+          savedStateHandle[KEY_ACTIVE_HOME_TAB] = intent.tab.name
+          _localState.update { it.copy(activeTab = intent.tab) }
+          if (intent.tab == HomeTabType.SEAMLESS) {
+            shizukuManager.refreshDiagnostics()
+          }
+        }
+      }
       is HomeUiIntent.SelectTab -> {
+        savedStateHandle[KEY_ACTIVE_HOME_TAB] = intent.tab.name
         _localState.update {
           it.copy(
             activeTab = intent.tab,
@@ -805,6 +826,11 @@ class HomeViewModel @Inject constructor(
     viewModelScope.launch {
       _effects.send(effect)
     }
+  }
+
+  private fun readSavedActiveTab(): HomeTabType? {
+    val savedName = savedStateHandle.get<String>(KEY_ACTIVE_HOME_TAB) ?: return null
+    return runCatching { HomeTabType.valueOf(savedName) }.getOrNull()
   }
 
   private fun matchesInspectOrientationQuery(item: InspectItem, query: String): Boolean {
