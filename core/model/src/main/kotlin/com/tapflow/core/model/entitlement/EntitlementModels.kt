@@ -62,6 +62,12 @@ sealed interface EntitlementState {
   @Serializable
   @SerialName("pending_purchase")
   data object PendingPurchase : EntitlementState
+
+  val hasTrialOrLifetimeAccess: Boolean
+    get() = this is ProTrial || this is ProLifetime
+
+  val hasLifetimeProAccess: Boolean
+    get() = this is ProLifetime
 }
 
 @Serializable
@@ -84,11 +90,15 @@ enum class ProFeatureGate(val displayName: String) {
   RANDOM_DEVIATION_DELAY("Randomized & Deviation Delays"),
   SHIZUKU_INTEGRATION("Seamless Shizuku Integration"),
   DESKTOP_CONSOLE("Desktop Studio WebSocket Server"),
-  TAPFLOW_BACKUP("Backup Export / Import (.tapflow)"),
+  DATA_BACKUP("Backup Export / Import (.tapflow)"),
   PIPELINE_SKIP_CONTINUE("Pipeline Skip & Continue Recovery"),
   FULL_EXECUTION_LOGS("Full Execution History & Export"),
   FORCE_STOP_APP("Rootless App Force-Stop"),
   HOLD_GESTURE_MODES("Advanced Long Press Hold Modes"),
+  ;
+
+  val requiresLifetimePro: Boolean
+    get() = this == DESKTOP_CONSOLE || this == DATA_BACKUP
 }
 
 object EntitlementValidator {
@@ -99,16 +109,26 @@ object EntitlementValidator {
   const val CLOCK_ROLLBACK_TOLERANCE_MS: Long = 60_000L
   const val SKU_PRO_LIFETIME: String = "tapflow_pro_lifetime"
 
-  fun isPro(state: EntitlementState): Boolean =
-    state is EntitlementState.ProTrial || state is EntitlementState.ProLifetime
+  fun hasTrialOrLifetimeAccess(state: EntitlementState): Boolean =
+    state.hasTrialOrLifetimeAccess
 
-  fun canUseFeature(state: EntitlementState, gate: ProFeatureGate): Boolean = isPro(state)
+  fun hasLifetimeProAccess(state: EntitlementState): Boolean =
+    state.hasLifetimeProAccess
+
+  fun isPro(state: EntitlementState): Boolean = hasTrialOrLifetimeAccess(state)
+
+  fun canUseFeature(state: EntitlementState, gate: ProFeatureGate): Boolean =
+    if (gate.requiresLifetimePro) {
+      hasLifetimeProAccess(state)
+    } else {
+      hasTrialOrLifetimeAccess(state)
+    }
 
   fun canCreateScript(state: EntitlementState, existingScriptCount: Int): Boolean =
-    isPro(state) || existingScriptCount < FREE_MAX_SCRIPTS
+    hasTrialOrLifetimeAccess(state) || existingScriptCount < FREE_MAX_SCRIPTS
 
   fun canCreatePipeline(state: EntitlementState, existingPipelineCount: Int): Boolean =
-    isPro(state) || existingPipelineCount < FREE_MAX_PIPELINES
+    hasTrialOrLifetimeAccess(state) || existingPipelineCount < FREE_MAX_PIPELINES
 
   fun detectProFeaturesInScript(script: Script): Set<ProFeatureGate> {
     val gates = linkedSetOf<ProFeatureGate>()

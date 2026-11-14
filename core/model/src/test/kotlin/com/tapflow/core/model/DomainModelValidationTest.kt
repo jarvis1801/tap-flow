@@ -101,6 +101,56 @@ class DomainModelValidationTest {
   }
 
   @Test
+  fun entitlementValidatorSeparatesTrialAndLifetimeOnlyGates() {
+    val freeState = EntitlementState.Free(TrialStatus.NOT_STARTED)
+    val trialState = EntitlementState.ProTrial(expiresAtUtcMs = 1_900_000_000_000L, remainingDays = 6, remainingHours = 23)
+    val pendingState = EntitlementState.PendingPurchase
+    val lifetimeState = EntitlementState.ProLifetime(purchaseTokenHash = "abc", purchasedAtUtcMs = 1_700_000_000_000L)
+
+    assertFalse(freeState.hasTrialOrLifetimeAccess)
+    assertFalse(freeState.hasLifetimeProAccess)
+    assertTrue(trialState.hasTrialOrLifetimeAccess)
+    assertFalse(trialState.hasLifetimeProAccess)
+    assertFalse(pendingState.hasTrialOrLifetimeAccess)
+    assertFalse(pendingState.hasLifetimeProAccess)
+    assertTrue(lifetimeState.hasTrialOrLifetimeAccess)
+    assertTrue(lifetimeState.hasLifetimeProAccess)
+
+    val trialUnlockedGates =
+      listOf(
+        ProFeatureGate.IMAGE_MATCH,
+        ProFeatureGate.IF_BLOCK,
+        ProFeatureGate.ADVANCED_LOOPS,
+        ProFeatureGate.DYNAMIC_VARIABLES,
+        ProFeatureGate.ANTI_BAN_JITTER,
+        ProFeatureGate.SHIZUKU_INTEGRATION,
+        ProFeatureGate.LIVE_IMAGE_INSPECTOR,
+        ProFeatureGate.FULL_EXECUTION_LOGS,
+        ProFeatureGate.UNLIMITED_SCRIPTS,
+        ProFeatureGate.UNLIMITED_PIPELINES,
+      )
+    val lifetimeOnlyGates =
+      listOf(
+        ProFeatureGate.DESKTOP_CONSOLE,
+        ProFeatureGate.DATA_BACKUP,
+      )
+
+    trialUnlockedGates.forEach { gate ->
+      assertFalse(EntitlementValidator.canUseFeature(freeState, gate))
+      assertTrue(EntitlementValidator.canUseFeature(trialState, gate))
+      assertFalse(EntitlementValidator.canUseFeature(pendingState, gate))
+      assertTrue(EntitlementValidator.canUseFeature(lifetimeState, gate))
+    }
+
+    lifetimeOnlyGates.forEach { gate ->
+      assertFalse(EntitlementValidator.canUseFeature(freeState, gate))
+      assertFalse(EntitlementValidator.canUseFeature(trialState, gate))
+      assertFalse(EntitlementValidator.canUseFeature(pendingState, gate))
+      assertTrue(EntitlementValidator.canUseFeature(lifetimeState, gate))
+    }
+  }
+
+  @Test
   fun wsMessageRoundTripSerialization() {
     val msg =
       WsMessage(

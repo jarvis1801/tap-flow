@@ -90,6 +90,8 @@ class EntitlementRepository @Inject constructor(
 
   fun isPro(): Boolean = EntitlementValidator.isPro(entitlementState.value)
 
+  fun isLifetimePro(): Boolean = EntitlementValidator.hasLifetimeProAccess(entitlementState.value)
+
   fun canUseFeature(gate: ProFeatureGate): Boolean =
     EntitlementValidator.canUseFeature(entitlementState.value, gate)
 

@@ -11,6 +11,7 @@ data class PaywallComparisonRow(
   val feature: String,
   val freeTier: String,
   val proTier: String,
+  val lifetimeOnly: Boolean = false,
 )
 
 @Immutable

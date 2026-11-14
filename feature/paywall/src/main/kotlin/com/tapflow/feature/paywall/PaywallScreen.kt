@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -66,15 +67,28 @@ import com.tapflow.core.model.entitlement.TrialStatus
 
 private val PAYWALL_COMPARISON_ROWS =
   listOf(
-    PaywallComparisonRow("scripts", "Scripts & Actions", "3 Scripts / 15 Actions", "Unlimited"),
-    PaywallComparisonRow("pipelines", "Pipelines", "1 Pipeline", "Unlimited + Skip Recovery"),
-    PaywallComparisonRow("vision", "Vision Matching", "Single-Point Color", "ImageMatch + Multi-Point"),
-    PaywallComparisonRow("inspect", "Inspect Studio", "Pixel View Only", "Full Crop + Mode 4 Live"),
-    PaywallComparisonRow("logic", "Logic & Variables", "Fixed Delay & Count Loop", "Nested If + Loops + Vars"),
-    PaywallComparisonRow("human", "Anti-Ban Humanization", "Linear Swipes", "Jitter + Bezier + Deviation"),
-    PaywallComparisonRow("shizuku", "Shizuku Seamless", "Standard Accessibility", "Shell Input + Force-Stop"),
-    PaywallComparisonRow("console", "Desktop Studio & Backup", "Local Only", "Ktor WS Bridge + .tapflow"),
-    PaywallComparisonRow("logs", "Execution Logs", "Latest Summary", "Full History + Export"),
+    PaywallComparisonRow("scripts", "Scripts & Actions", "3 Scripts / 15 Actions", "Unlimited [7-Day Trial + Lifetime]"),
+    PaywallComparisonRow("pipelines", "Pipelines", "1 Pipeline", "Unlimited + Skip Recovery [7-Day Trial + Lifetime]"),
+    PaywallComparisonRow("vision", "Vision Matching", "Single-Point Color", "ImageMatch + Multi-Point [7-Day Trial + Lifetime]"),
+    PaywallComparisonRow("inspect", "Inspect Studio", "Pixel View Only", "Full Crop + Mode 4 Live [7-Day Trial + Lifetime]"),
+    PaywallComparisonRow("logic", "Logic & Variables", "Fixed Delay & Count Loop", "Nested If + Loops + Vars [7-Day Trial + Lifetime]"),
+    PaywallComparisonRow("human", "Anti-Ban Humanization", "Linear Swipes", "Jitter + Bezier + Deviation [7-Day Trial + Lifetime]"),
+    PaywallComparisonRow("shizuku", "Shizuku Seamless", "Standard Accessibility", "Shell Input + Force-Stop [7-Day Trial + Lifetime]"),
+    PaywallComparisonRow("logs", "Execution Logs", "Latest Summary", "Full History + Export [7-Day Trial + Lifetime]"),
+    PaywallComparisonRow(
+      id = "console",
+      feature = "Desktop Console Bridge",
+      freeTier = "Not Included",
+      proTier = "Ktor WS Bridge [Lifetime Only]",
+      lifetimeOnly = true,
+    ),
+    PaywallComparisonRow(
+      id = "backup",
+      feature = "Data Backup (.tapflow Export/Import)",
+      freeTier = "Not Included",
+      proTier = "Export / Import [Lifetime Only]",
+      lifetimeOnly = true,
+    ),
   )
 
 @Composable
@@ -345,29 +359,31 @@ private fun PaywallHeroCard(state: PaywallUiState) {
               tint = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Text(
-              text = "7-Day Free Trial Active",
+              text = "7-Day Trial Active (${entitlement.remainingDays}d ${entitlement.remainingHours}h left)",
               style = MaterialTheme.typography.titleMedium,
               fontWeight = FontWeight.Bold,
               color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
           }
-          Text(
-            text = "${entitlement.remainingDays}d ${entitlement.remainingHours}h remaining of full Pro access.",
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer,
-          )
           LinearProgressIndicator(
             progress = { progress },
             color = MaterialTheme.colorScheme.onPrimaryContainer,
             trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.24f),
             modifier = Modifier.fillMaxWidth().height(6.dp),
           )
-          Text(
-            text = "Upgrade once to keep every Pro feature permanently with zero subscription fees.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.88f),
-          )
+          Surface(
+            shape = MaterialTheme.shapes.small,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.12f),
+            modifier = Modifier.fillMaxWidth().testTag("paywall_trial_lifetime_callout"),
+          ) {
+            Text(
+              text = "Upgrade to Lifetime Pro to unlock Desktop Console & Data Backup",
+              style = MaterialTheme.typography.bodyMedium,
+              fontWeight = FontWeight.SemiBold,
+              color = MaterialTheme.colorScheme.onPrimaryContainer,
+              modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+          }
         }
       }
     }
@@ -452,7 +468,7 @@ private fun PaywallHeroCard(state: PaywallUiState) {
             text =
               when (entitlement.trialStatus) {
                 TrialStatus.NOT_STARTED ->
-                  "Unlock unlimited scripts, template matching, nested logic, Bezier humanization, Shizuku, and Desktop Studio with no credit card required."
+                  "Unlock unlimited scripts, template matching, nested logic, Bezier humanization, and Shizuku for 7 days with no credit card required. Desktop Console & Data Backup unlock with Lifetime Pro."
                 TrialStatus.EXPIRED ->
                   "Basic scripts remain free forever. Unlock Lifetime Pro with a single one-time purchase to continue using Pro automation tools."
                 TrialStatus.EXPIRED_TAMPERED ->
@@ -532,16 +548,27 @@ private fun ComparisonRowItem(row: PaywallComparisonRow) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
       ) {
         Icon(
-          imageVector = Icons.Filled.CheckCircle,
+          imageVector =
+            if (row.lifetimeOnly) Icons.Filled.WorkspacePremium else Icons.Filled.CheckCircle,
           contentDescription = null,
-          tint = MaterialTheme.colorScheme.primary,
+          tint =
+            if (row.lifetimeOnly) {
+              MaterialTheme.colorScheme.tertiary
+            } else {
+              MaterialTheme.colorScheme.primary
+            },
           modifier = Modifier.size(14.dp),
         )
         Text(
           text = row.proTier,
           style = MaterialTheme.typography.bodySmall,
           fontWeight = FontWeight.SemiBold,
-          color = MaterialTheme.colorScheme.onSurface,
+          color =
+            if (row.lifetimeOnly) {
+              MaterialTheme.colorScheme.tertiary
+            } else {
+              MaterialTheme.colorScheme.onSurface
+            },
         )
       }
     }

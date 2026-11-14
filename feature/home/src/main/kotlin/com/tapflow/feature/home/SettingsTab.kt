@@ -229,7 +229,7 @@ fun SettingsTabContent(
                 tint = MaterialTheme.colorScheme.primary,
               )
               Text(
-                text = "Data Backup & Transfer (.tapflow) [Pro]",
+                text = "Data Backup & Transfer (.tapflow) [Lifetime Pro]",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
               )
@@ -241,6 +241,16 @@ fun SettingsTabContent(
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            if (!state.isLifetimePro) {
+              Text(
+                text = "Requires Lifetime Pro purchase (not included in 7-day trial).",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.testTag("backup_lifetime_required_note"),
+              )
+            }
 
             Row(
               modifier = Modifier.fillMaxWidth(),
@@ -411,7 +421,7 @@ private fun SettingsProBannerCard(
               when (val ent = state.entitlementState) {
                 is EntitlementState.ProLifetime -> "All Pro modules permanently unlocked."
                 is EntitlementState.ProTrial ->
-                  "Enjoying full TapFlow Pro access during your local trial."
+                  "Enjoying Pro automation & vision during your local trial. Desktop Console & Data Backup require Lifetime Pro."
                 EntitlementState.PendingPurchase -> "Awaiting Google Play settlement."
                 is EntitlementState.Free ->
                   when (ent.trialStatus) {

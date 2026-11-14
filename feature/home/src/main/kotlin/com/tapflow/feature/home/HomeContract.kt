@@ -120,6 +120,9 @@ data class HomeUiState(
       entitlementState is EntitlementState.ProTrial ||
         entitlementState is EntitlementState.ProLifetime
 
+  val isLifetimePro: Boolean
+    get() = entitlementState is EntitlementState.ProLifetime
+
   val supportsSearch: Boolean
     get() =
       activeTab == HomeTabType.SCRIPT ||

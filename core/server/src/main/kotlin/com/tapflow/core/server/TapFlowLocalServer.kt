@@ -5,6 +5,8 @@ import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.database.TapFlowJson
 import com.tapflow.core.database.repository.ScriptRepository
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
+import com.tapflow.core.model.entitlement.EntitlementState
+import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.entitlement.ProFeatureGate
 import com.tapflow.core.model.ipc.WsMessage
 import com.tapflow.core.model.ipc.WsMessageType
@@ -104,12 +106,11 @@ class TapFlowLocalServer @Inject constructor(
 
     scope.launch {
       entitlementRepository.entitlementState.collectLatest { state ->
-        val hasPro = com.tapflow.core.model.entitlement.EntitlementValidator.canUseFeature(
-          state,
-          ProFeatureGate.DESKTOP_CONSOLE,
-        )
-        if (!hasPro && _status.value.isRunning) {
-          stopServer("Desktop Studio server stopped: TapFlow Pro entitlement is no longer active.")
+        val hasLifetimePro =
+          state is EntitlementState.ProLifetime &&
+            EntitlementValidator.canUseFeature(state, ProFeatureGate.DESKTOP_CONSOLE)
+        if (!hasLifetimePro && _status.value.isRunning) {
+          stopServer("Desktop Studio server stopped: Lifetime Pro purchase is required.")
         }
       }
     }
@@ -123,11 +124,14 @@ class TapFlowLocalServer @Inject constructor(
 
   suspend fun startServer(requestedPort: Int? = null): Boolean =
     serverMutex.withLock {
-      if (!entitlementRepository.canUseFeature(ProFeatureGate.DESKTOP_CONSOLE)) {
+      val currentEntitlement = entitlementRepository.entitlementState.value
+      if (currentEntitlement !is EntitlementState.ProLifetime ||
+        !EntitlementValidator.canUseFeature(currentEntitlement, ProFeatureGate.DESKTOP_CONSOLE)
+      ) {
         _status.update {
           it.copy(
             isRunning = false,
-            lastError = "TapFlow Pro (Trial or Lifetime) is required to start the Desktop Console server.",
+            lastError = "Lifetime Pro purchase is required to start the Desktop Console server (excluded from 7-day trial).",
           )
         }
         return@withLock false
@@ -287,8 +291,11 @@ class TapFlowLocalServer @Inject constructor(
   }
 
   override suspend fun startRemoteRun(scriptId: String): Result<Script> {
-    if (!entitlementRepository.canUseFeature(ProFeatureGate.DESKTOP_CONSOLE)) {
-      return Result.failure(IllegalStateException("TapFlow Pro is required for remote execution."))
+    val currentEntitlement = entitlementRepository.entitlementState.value
+    if (currentEntitlement !is EntitlementState.ProLifetime ||
+      !EntitlementValidator.canUseFeature(currentEntitlement, ProFeatureGate.DESKTOP_CONSOLE)
+    ) {
+      return Result.failure(IllegalStateException("TapFlow Lifetime Pro is required for remote execution."))
     }
     val script = scriptRepository.getScriptById(scriptId)
       ?: return Result.failure(IllegalArgumentException("Script '$scriptId' not found."))

@@ -563,7 +563,15 @@ class HomeViewModel @Inject constructor(
 
       // Console Tab
       HomeUiIntent.ToggleLocalServer -> {
-        if (!entitlementRepository.canUseFeature(ProFeatureGate.DESKTOP_CONSOLE)) {
+        val isLifetimePro =
+          entitlementRepository.entitlementState.value is EntitlementState.ProLifetime &&
+            entitlementRepository.canUseFeature(ProFeatureGate.DESKTOP_CONSOLE)
+        if (!isLifetimePro) {
+          if (localServer.status.value.isRunning) {
+            viewModelScope.launch {
+              localServer.stopServer("Lifetime Pro purchase is required for Desktop Console.")
+            }
+          }
           sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.DESKTOP_CONSOLE.displayName))
           return
         }
@@ -666,8 +674,11 @@ class HomeViewModel @Inject constructor(
         sendEffect(HomeUiEffect.ApplyAppLocale(intent.locale.languageTag))
       }
       HomeUiIntent.ExportBackupClicked -> {
-        if (!entitlementRepository.canUseFeature(ProFeatureGate.TAPFLOW_BACKUP)) {
-          sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.TAPFLOW_BACKUP.displayName))
+        val isLifetimePro =
+          entitlementRepository.entitlementState.value is EntitlementState.ProLifetime &&
+            entitlementRepository.canUseFeature(ProFeatureGate.DATA_BACKUP)
+        if (!isLifetimePro) {
+          sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.DATA_BACKUP.displayName))
           return
         }
         val dateStamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
@@ -692,8 +703,11 @@ class HomeViewModel @Inject constructor(
         }
       }
       HomeUiIntent.ImportBackupClicked -> {
-        if (!entitlementRepository.canUseFeature(ProFeatureGate.TAPFLOW_BACKUP)) {
-          sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.TAPFLOW_BACKUP.displayName))
+        val isLifetimePro =
+          entitlementRepository.entitlementState.value is EntitlementState.ProLifetime &&
+            entitlementRepository.canUseFeature(ProFeatureGate.DATA_BACKUP)
+        if (!isLifetimePro) {
+          sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.DATA_BACKUP.displayName))
           return
         }
         sendEffect(HomeUiEffect.LaunchBackupImportPicker)

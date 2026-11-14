@@ -84,7 +84,8 @@ class PaywallViewModel @Inject constructor(
           _isProcessing.value = false
           val msg =
             when (eval.status) {
-              TrialStatus.ACTIVE -> "7-Day Pro Trial activated. All Pro features are unlocked!"
+              TrialStatus.ACTIVE ->
+                "7-Day Pro Trial activated! Desktop Console & Data Backup require Lifetime Pro."
               TrialStatus.EXPIRED, TrialStatus.EXPIRED_TAMPERED ->
                 "Free trial has already been used or expired on this device."
               TrialStatus.NOT_STARTED -> "Unable to activate trial."

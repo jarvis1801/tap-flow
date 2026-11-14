@@ -56,6 +56,7 @@ fun ConsoleTabContent(
   modifier: Modifier = Modifier,
 ) {
   val server = state.serverStatus
+  val isServerRunning = state.isLifetimePro && server.isRunning
   var portInput by remember(server.port) { mutableStateOf(server.port.toString()) }
 
   Column(
@@ -67,14 +68,14 @@ fun ConsoleTabContent(
       contentPadding = PaddingValues(16.dp),
       verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-      if (!state.isPro) {
+      if (!state.isLifetimePro) {
         item(key = "console_pro_banner") {
           Card(
             colors =
               CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.tertiaryContainer,
               ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("console_lifetime_pro_banner"),
           ) {
             Row(
               modifier = Modifier.padding(16.dp),
@@ -86,22 +87,37 @@ fun ConsoleTabContent(
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onTertiaryContainer,
               )
-              Column(modifier = Modifier.weight(1f)) {
+              Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+              ) {
                 Text(
-                  text = "Desktop Studio Bridge (Pro)",
+                  text = "Desktop Studio Bridge",
                   style = MaterialTheme.typography.titleSmall,
                   fontWeight = FontWeight.Bold,
                   color = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
+                Surface(
+                  shape = MaterialTheme.shapes.extraSmall,
+                  color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.14f),
+                ) {
+                  Text(
+                    text = "Lifetime Pro Required • Excluded from 7-Day Trial",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                  )
+                }
                 Text(
-                  text = "Upgrade or activate your 7-day trial to run the local Ktor WebSocket server for Desktop Studio.",
+                  text = "Upgrade to Lifetime Pro to run the local Ktor WebSocket server for Desktop Studio.",
                   style = MaterialTheme.typography.bodySmall,
                   color = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
               }
               FilledTonalButton(
                 onClick = { onIntent(HomeUiIntent.OpenPaywallClicked) },
-                modifier = Modifier.testTag("console_upgrade_button"),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("console_upgrade_button"),
               ) {
                 Text("Unlock")
               }
@@ -117,7 +133,7 @@ fun ConsoleTabContent(
           border =
             BorderStroke(
               1.dp,
-              if (server.isRunning) {
+              if (isServerRunning) {
                 MaterialTheme.colorScheme.primary
               } else {
                 MaterialTheme.colorScheme.outlineVariant
@@ -152,18 +168,18 @@ fun ConsoleTabContent(
               Surface(
                 shape = MaterialTheme.shapes.small,
                 color =
-                  if (server.isRunning) {
+                  if (isServerRunning) {
                     MaterialTheme.colorScheme.primaryContainer
                   } else {
                     MaterialTheme.colorScheme.surfaceContainerHigh
                   },
               ) {
                 Text(
-                  text = if (server.isRunning) "RUNNING" else "STOPPED",
+                  text = if (isServerRunning) "RUNNING" else "STOPPED",
                   style = MaterialTheme.typography.labelLarge,
                   fontWeight = FontWeight.Bold,
                   color =
-                    if (server.isRunning) {
+                    if (isServerRunning) {
                       MaterialTheme.colorScheme.onPrimaryContainer
                     } else {
                       MaterialTheme.colorScheme.onSurfaceVariant
@@ -219,18 +235,29 @@ fun ConsoleTabContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
               ) {
                 Icon(
-                  imageVector = if (server.isRunning) Icons.Filled.Stop else Icons.Filled.PlayArrow,
+                  imageVector = if (isServerRunning) Icons.Filled.Stop else Icons.Filled.PlayArrow,
                   contentDescription = null,
                 )
                 Text(
-                  text = if (server.isRunning) "Server Enabled" else "Start WebSocket Server",
+                  text =
+                    when {
+                      !state.isLifetimePro -> "Start WebSocket Server (Lifetime Pro)"
+                      isServerRunning -> "Server Enabled"
+                      else -> "Start WebSocket Server"
+                    },
                   style = MaterialTheme.typography.bodyLarge,
                   fontWeight = FontWeight.Medium,
                 )
               }
               Switch(
-                checked = server.isRunning,
-                onCheckedChange = { onIntent(HomeUiIntent.ToggleLocalServer) },
+                checked = isServerRunning,
+                onCheckedChange = {
+                  if (!state.isLifetimePro) {
+                    onIntent(HomeUiIntent.OpenPaywallClicked)
+                  } else {
+                    onIntent(HomeUiIntent.ToggleLocalServer)
+                  }
+                },
                 modifier = Modifier.testTag("console_server_switch"),
               )
             }
@@ -338,7 +365,28 @@ fun ConsoleTabContent(
 
 @Preview(showBackground = true)
 @Composable
-private fun ConsoleTabPreview() {
+private fun ConsoleTabLifetimePreview() {
+  MaterialTheme {
+    ConsoleTabContent(
+      state =
+        HomeUiState(
+          entitlementState = EntitlementState.ProLifetime("hash", 1_700_000_000_000L),
+          serverStatus =
+            ServerUiStatus(
+              isRunning = true,
+              port = 18080,
+              connectedClientCount = 1,
+              adbCommand = "adb forward tcp:18080 tcp:18080",
+            ),
+        ),
+      onIntent = {},
+    )
+  }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ConsoleTabTrialLockedPreview() {
   MaterialTheme {
     ConsoleTabContent(
       state =
@@ -346,9 +394,9 @@ private fun ConsoleTabPreview() {
           entitlementState = EntitlementState.ProTrial(0L, 6, 12),
           serverStatus =
             ServerUiStatus(
-              isRunning = true,
+              isRunning = false,
               port = 18080,
-              connectedClientCount = 1,
+              connectedClientCount = 0,
               adbCommand = "adb forward tcp:18080 tcp:18080",
             ),
         ),

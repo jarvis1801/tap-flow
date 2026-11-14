@@ -27,14 +27,17 @@ Entitlement Matrix (Free vs. TapFlow Pro):
       - Advanced Logic & Variables: `IfBlock` (Card-in-Card nested groups), `While / Until / Unlimited` Loops, and all `Dynamic Variables` & Variable Operations.
       - Anti-Ban Humanization Suite: `Jitter` dispersion radius, `Micro-movement Jitter`, `Bezier Curve` trajectories, `RandomRange` & `Deviation` delays.
       - Seamless (Shizuku) Integration: Shell input injection, rootless `am force-stop` crash recovery, enhanced key events, silent screenshots.
-      - Desktop Studio Bridge: Ktor WebSocket Server (`Console Tab`).
-      - Backup & Watchdog: `.tapflow` Export/Import, Pipeline `Skip & Continue` crash recovery, full Execution History & Crash Screenshots.
+      - Pipeline Watchdog & Logs: Pipeline `Skip & Continue` crash recovery, full Execution History & Crash Screenshots.
+  - TapFlow Lifetime Pro Exclusive (`EntitlementState.ProLifetime` ONLY — Excluded from 7-Day Trial):
+      - Desktop Studio Bridge: Ktor WebSocket Server (`Console Tab`, `ProFeatureGate.DESKTOP_CONSOLE`).
+      - Data Backup & Transfer: `.tapflow` Export/Import (`Settings Tab`, `ProFeatureGate.DATA_BACKUP`).
 
 Paywall & Guard Behavior:
   - Paywall Screen / Sheet (`Route.Paywall`):
-      - Displays remaining Trial countdown OR expired banner, feature comparison checklist, localized One-Time Price fetched from `ProductDetails` (handling both `oneTimePurchaseOfferDetailsList` and legacy fallback), `[Activate 7-Day Free Trial]` (if never activated), `[Unlock Lifetime Pro]` CTA, and `[Restore Purchase]`.
+      - Displays remaining Trial countdown (`"7-Day Trial Active (Xd Xh left)"`) OR expired banner, feature comparison checklist distinguishing `[7-Day Trial + Lifetime]` vs `[Lifetime Only]`, localized One-Time Price fetched from `ProductDetails` (handling both `oneTimePurchaseOfferDetailsList` and legacy fallback), `[Activate 7-Day Free Trial]` (hidden once trial is active/used), `[Unlock Lifetime Pro]` CTA, and `[Restore Purchase]`.
+      - When an active `ProTrial` user opens `Route.Paywall`, highlights `"Upgrade to Lifetime Pro to unlock Desktop Console & Data Backup"`.
   - Soft Feature Guard:
-      - Tapping any Pro-locked feature opens `Route.Paywall`.
+      - Tapping any Pro-locked feature (or tapping Desktop Console / Data Backup without `ProLifetime`) opens `Route.Paywall`.
       - Attempting to Run (`▶`) an imported/existing Script or Pipeline that contains Pro actions after trial expiration blocks execution and prompts `Route.Paywall` (identifying which Pro features are used).
 
 ---
@@ -181,12 +184,12 @@ Tabs:
             - Option 2 (Import Screenshot - Pro): Opens system Photo/File Picker (`GetContent("image/*")`) to import an existing image into a new Inspect Group/Item (converted to lossless PNG).
 
   # -------------------------------------------------------------
-  # TAB 4: CONSOLE (Desktop ADB / WebSocket Bridge - Pro Feature)
+  # TAB 4: CONSOLE (Desktop ADB / WebSocket Bridge - Lifetime Pro Only)
   # -------------------------------------------------------------
   - Console Tab:
       Overview:
         - Controls the embedded Ktor WebSocket & HTTP server for Desktop Studio synchronization.
-        - Entitlement Guard: Starting the server requires TapFlow Pro (Trial or Lifetime). Free users see a clear Pro upgrade banner and ADB preview.
+        - Entitlement Guard: Starting or keeping the Ktor Embedded Server running strictly requires `EntitlementState.ProLifetime` (`ProFeatureGate.DESKTOP_CONSOLE`) and is excluded from the 7-Day Free Trial. Free and 7-Day Trial users see a `"Lifetime Pro Required • Excluded from 7-Day Trial"` banner, keep the server stopped, and tapping the toggle or upgrade button routes directly to `Route.Paywall`.
       Content UI:
         - Server Status Card:
             - Status Badge: [RUNNING] (Green indicator) / [STOPPED] (Gray indicator).
@@ -233,7 +236,8 @@ Tabs:
         - Localization:
             - Language Picker: English / Traditional Chinese (繁體中文) / Simplified Chinese (简体中文).
             - Implementation: Uses `AppCompatDelegate.setApplicationLocales()` (`MainActivity : AppCompatActivity()`, `Theme.AppCompat.DayNight.NoActionBar`, `AppLocalesMetadataHolderService`, `generateLocaleConfig = true`).
-        - Data Backup & Transfer (Pro Feature):
+        - Data Backup & Transfer (Lifetime Pro Only — Excluded from 7-Day Trial):
+            - Entitlement Guard: Strictly requires `EntitlementState.ProLifetime` (`ProFeatureGate.DATA_BACKUP`) and is excluded from the 7-Day Free Trial. Free and 7-Day Trial users see `"Requires Lifetime Pro purchase (not included in 7-day trial)."` and tapping Export/Import routes directly to `Route.Paywall` without opening the SAF file picker.
             - Export Data:
                 - Exports Scripts, Pipelines, Dynamic Variables, and Action configurations as a lightweight `.tapflow` (JSON) file via SAF `CreateDocument("application/json")`.
                 - Strictly excludes all Inspect Groups, Inspect Items, and PNG screenshot assets.
