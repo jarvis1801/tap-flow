@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tapflow.core.model.action.LoopMode
@@ -65,7 +66,7 @@ fun IfBlockActionEditor(
       onRootChange = { updatedRoot -> onChange(action.copy(conditionRoot = updatedRoot)) },
       onIntent = onIntent,
       validationErrors = validationErrors,
-      previewPrefix = "If:",
+      previewPrefix = stringResource(R.string.if_block_condition_prefix),
     )
   }
 }
@@ -80,12 +81,12 @@ fun ElseIfConditionEditor(
   validationErrors: Map<String, String> = emptyMap(),
 ) {
   Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    EditorSectionCard(title = "Else If Branch Name") {
+    EditorSectionCard(title = stringResource(R.string.else_if_branch_name_title)) {
       OutlinedTextField(
         value = branch.name,
         onValueChange = { onChange(branch.copy(name = it)) },
-        label = { Text("Branch Nickname (Optional)") },
-        placeholder = { Text("e.g. If Skip Button Appears") },
+        label = { Text(stringResource(R.string.else_if_branch_nickname_label)) },
+        placeholder = { Text(stringResource(R.string.else_if_branch_nickname_placeholder)) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth().testTag("else_if_name_input_${branch.id}"),
       )
@@ -100,7 +101,7 @@ fun ElseIfConditionEditor(
       onRootChange = { updatedRoot -> onChange(branch.copy(conditionRoot = updatedRoot)) },
       onIntent = onIntent,
       validationErrors = validationErrors,
-      previewPrefix = "Otherwise, if:",
+      previewPrefix = stringResource(R.string.if_block_else_if_header),
     )
   }
 }

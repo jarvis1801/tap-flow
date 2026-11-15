@@ -300,7 +300,7 @@ class ActionTreeAndConditionTest {
 
     val sentence = PlainLanguageFormatter.formatConditionSentence(root)
     assertEquals(
-      "Run 'Then' steps when: screen color at (540, 960) is White AND (app Game is open OR coins is at least 100)",
+      "If: screen color at (540, 960) is White AND (app Game is open OR coins is at least 100)",
       sentence,
     )
     assertEquals("#FFFFFF", PlainLanguageFormatter.extractFirstColorHex(root))

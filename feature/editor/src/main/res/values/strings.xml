@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="if_block_card_title">If Rule</string>
+    <string name="if_block_catalog_hint">Check rule &amp; pick steps</string>
+    <string name="if_block_condition_prefix">If:</string>
+    <string name="if_block_empty_condition">If: no rules added yet — tap to set rule</string>
+    <string name="if_block_action_list_label">Do these:</string>
+    <string name="if_block_else_if_header">If not, check:</string>
+    <string name="if_block_else_if_header_named">If not, check (%1$s):</string>
+    <string name="if_block_else_header">If nothing above matched:</string>
+    <string name="if_block_add_else_if_cta">+ Or if not, check...</string>
+    <string name="if_block_add_else_cta">+ If none match...</string>
+    <string name="if_block_first_match_helper">Runs only the first match above</string>
+    <string name="if_block_add_step">Add Step</string>
+    <string name="else_if_empty_condition">No rule set yet — tap to set rule</string>
+    <string name="remove_else_if_cd">Remove If not, check branch</string>
+    <string name="remove_else_cd">Remove If nothing above matched branch</string>
+    <string name="edit_else_if_condition_title">Edit \"If not, check\" Rule</string>
+    <string name="else_if_branch_name_title">If not, check: Name</string>
+    <string name="else_if_branch_nickname_label">Branch Nickname (Optional)</string>
+    <string name="else_if_branch_nickname_placeholder">e.g. If Skip Button Appears</string>
+    <string name="loop_block_action_list_label">Repeat these steps:</string>
+</resources>

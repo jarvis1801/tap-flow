@@ -126,7 +126,7 @@ class TapFlowTypeConvertersTest {
 
     // Legacy Room row without "elseIfBranches" field must deserialize with emptyList()
     val legacyJson =
-      """[{"kind":"if","id":"if-legacy","name":"Old","conditionRoot":{"id":"g1","name":"When","operator":"ALL","children":[],"isExpanded":true},"thenActions":[],"elseActions":[],"isExpanded":true}]"""
+      """[{"kind":"if_block","id":"if-legacy","name":"Old","conditionRoot":{"id":"g1","name":"When","operator":"ALL","children":[],"isExpanded":true},"thenActions":[],"elseActions":[],"isExpanded":true}]"""
     val decodedLegacy = converters.toScriptActionList(legacyJson)
     assertEquals(1, decodedLegacy.size)
     val legacyIf = decodedLegacy.first() as ScriptAction.IfBlock

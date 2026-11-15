@@ -383,7 +383,7 @@ class ScriptEditorViewModel @Inject constructor(
           ScriptAction.ElseIfBranch(
             id = UUID.randomUUID().toString(),
             conditionRoot =
-              ConditionGroup(id = UUID.randomUUID().toString(), name = "Otherwise, if..."),
+              ConditionGroup(id = UUID.randomUUID().toString(), name = "If not, check"),
           )
         val updatedIf =
           ifBlock.copy(

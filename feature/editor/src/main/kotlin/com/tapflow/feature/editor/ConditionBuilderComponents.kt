@@ -99,7 +99,7 @@ fun ConditionGroupCardEditor(
   onRootChange: (ConditionGroup) -> Unit,
   onIntent: (ScriptEditorUiIntent) -> Unit,
   validationErrors: Map<String, String> = emptyMap(),
-  previewPrefix: String = "Run 'Then' steps when:",
+  previewPrefix: String = "If:",
 ) {
   var showAddRuleCards by remember(currentGroup.id) { mutableStateOf(false) }
   val groupError = validationErrors["cond_group_${currentGroup.id}"]

@@ -675,7 +675,7 @@ object PlainLanguageFormatter {
 
   fun formatConditionSentence(
     root: ConditionGroup,
-    prefix: String = "Run 'Then' steps when:",
+    prefix: String = "If:",
     emptyText: String = "No rules added yet — tap '+ Add Rule' below",
   ): String {
     val clause = formatConditionClause(root)

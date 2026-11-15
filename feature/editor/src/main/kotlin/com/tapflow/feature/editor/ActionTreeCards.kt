@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -198,8 +199,14 @@ internal fun ActionTreeItemCard(
           modifier = Modifier.weight(1f),
           verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
+          val cardTitle =
+            if (action is ScriptAction.IfBlock) {
+              action.name.trim().ifBlank { stringResource(R.string.if_block_card_title) }
+            } else {
+              ActionTreeUtils.actionTypeTitle(action)
+            }
           Text(
-            text = ActionTreeUtils.actionTypeTitle(action),
+            text = cardTitle,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
@@ -212,6 +219,28 @@ internal fun ActionTreeItemCard(
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
           )
+          if (action is ScriptAction.IfBlock) {
+            val hasAdditionalBranches =
+              action.elseIfBranches.isNotEmpty() ||
+                action.elseActions.isNotEmpty() ||
+                action.id in revealedElseBlockIds
+            if (hasAdditionalBranches) {
+              Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f),
+                modifier = Modifier.testTag("if_first_match_helper_${action.id}"),
+              ) {
+                Text(
+                  text = stringResource(R.string.if_block_first_match_helper),
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.onSecondaryContainer,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                  modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+              }
+            }
+          }
           if (action.supportsPostActionDelay()) {
             val postDelay = extractActionPostDelay(action)
             val isCustomOverride = postDelay is PostActionDelay.Override
@@ -316,8 +345,8 @@ internal fun ActionTreeItemCard(
         is ScriptAction.IfBlock -> {
           ConditionSummaryPill(
             conditionRoot = action.conditionRoot,
-            prefix = "If",
-            emptyText = "If no rules added yet — tap to set rule",
+            prefix = stringResource(R.string.if_block_condition_prefix),
+            emptyText = stringResource(R.string.if_block_empty_condition),
             onClick = { onIntent(ScriptEditorUiIntent.OpenEditActionSheet(action.id)) },
             testTag = "if_condition_pill_${action.id}",
           )
@@ -326,9 +355,9 @@ internal fun ActionTreeItemCard(
             val showElseSection =
               action.id in revealedElseBlockIds || action.elseActions.isNotEmpty()
 
-            // 1. THEN Branch ("If Yes, do these:") — always visible when expanded
+            // 1. Primary action list ("Do these:") — always visible when expanded
             BranchSectionBlock(
-              title = "If Yes, do these:",
+              title = stringResource(R.string.if_block_action_list_label),
               stepCount = action.thenActions.size,
               railColor = MaterialTheme.colorScheme.primary,
               badgeContainerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -346,14 +375,14 @@ internal fun ActionTreeItemCard(
               onIntent = onIntent,
             )
 
-            // 2. ELSE IF Branches — rendered in order
+            // 2. Ordered secondary rule branches ("If not, check:")
             action.elseIfBranches.forEachIndexed { branchIdx, branch ->
               key(branch.id) {
                 val branchTitle =
                   if (branch.name.isNotBlank()) {
-                    "Otherwise, if (${branch.name.trim()}):"
+                    stringResource(R.string.if_block_else_if_header_named, branch.name.trim())
                   } else {
-                    "Otherwise, if:"
+                    stringResource(R.string.if_block_else_if_header)
                   }
                 BranchSectionBlock(
                   title = branchTitle,
@@ -364,8 +393,8 @@ internal fun ActionTreeItemCard(
                   headerExtra = {
                     ConditionSummaryPill(
                       conditionRoot = branch.conditionRoot,
-                      prefix = "When",
-                      emptyText = "No rule set yet — tap to set condition",
+                      prefix = "",
+                      emptyText = stringResource(R.string.else_if_empty_condition),
                       onClick = {
                         onIntent(
                           ScriptEditorUiIntent.OpenEditElseIfConditionSheet(
@@ -393,16 +422,16 @@ internal fun ActionTreeItemCard(
                     )
                   },
                   removeBranchTestTag = "remove_else_if_${branch.id}",
-                  removeBranchContentDesc = "Remove Else If branch",
+                  removeBranchContentDesc = stringResource(R.string.remove_else_if_cd),
                   onIntent = onIntent,
                 )
               }
             }
 
-            // 3. ELSE Branch ("Otherwise (if none above matched):") — only when added/non-empty
+            // 3. Fallback branch ("If nothing above matched:") — only when added/non-empty
             if (showElseSection) {
               BranchSectionBlock(
-                title = "Otherwise (if none above matched):",
+                title = stringResource(R.string.if_block_else_header),
                 stepCount = action.elseActions.size,
                 railColor = MaterialTheme.colorScheme.tertiary,
                 badgeContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
@@ -418,19 +447,19 @@ internal fun ActionTreeItemCard(
                   onIntent(ScriptEditorUiIntent.RemoveElseBranch(action.id))
                 },
                 removeBranchTestTag = "remove_else_branch_${action.id}",
-                removeBranchContentDesc = "Remove Otherwise branch",
+                removeBranchContentDesc = stringResource(R.string.remove_else_cd),
                 onIntent = onIntent,
               )
             }
 
-            // 4. Bottom compact tonal chips for adding Else If / Otherwise (Else)
+            // 4. Bottom compact tonal chips for adding fallback branches
             FlowRow(
               modifier = Modifier.fillMaxWidth(),
               horizontalArrangement = Arrangement.spacedBy(8.dp),
               verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
               TonalBranchChip(
-                label = "+ Add \"Else If\"",
+                label = stringResource(R.string.if_block_add_else_if_cta),
                 containerColor = MaterialTheme.colorScheme.secondaryContainer,
                 contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                 onClick = { onIntent(ScriptEditorUiIntent.AddElseIfBranch(action.id)) },
@@ -438,7 +467,7 @@ internal fun ActionTreeItemCard(
               )
               if (!showElseSection) {
                 TonalBranchChip(
-                  label = "+ Add \"Otherwise (Else)\"",
+                  label = stringResource(R.string.if_block_add_else_cta),
                   containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                   contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                   onClick = { onIntent(ScriptEditorUiIntent.RevealElseBranch(action.id)) },
@@ -452,7 +481,7 @@ internal fun ActionTreeItemCard(
         is ScriptAction.LoopBlock -> {
           if (action.isExpanded) {
             BranchSectionBlock(
-              title = "Repeat these steps:",
+              title = stringResource(R.string.loop_block_action_list_label),
               stepCount = action.bodyActions.size,
               railColor = MaterialTheme.colorScheme.secondary,
               badgeContainerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -492,6 +521,8 @@ private fun ConditionSummaryPill(
   val pillText =
     if (clause.isBlank()) {
       emptyText
+    } else if (prefix.isBlank()) {
+      clause
     } else {
       "$prefix $clause"
     }
@@ -594,15 +625,26 @@ private fun BranchSectionBlock(
           color = badgeContainerColor,
           modifier = Modifier.weight(1f, fill = false),
         ) {
-          Text(
-            text = "$title ($stepCount)",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = badgeContentColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
+          Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-          )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+          ) {
+            Text(
+              text = title,
+              style = MaterialTheme.typography.labelMedium,
+              fontWeight = FontWeight.SemiBold,
+              color = badgeContentColor,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+              modifier = Modifier.weight(1f, fill = false),
+            )
+            Text(
+              text = "($stepCount)",
+              style = MaterialTheme.typography.labelSmall,
+              color = badgeContentColor.copy(alpha = 0.8f),
+            )
+          }
         }
         if (onRemoveBranch != null && removeBranchTestTag != null) {
           IconButton(
@@ -683,7 +725,7 @@ private fun BranchSectionBlock(
       ) {
         Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.width(6.dp))
-        Text("Add Step", fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.if_block_add_step), fontWeight = FontWeight.SemiBold)
       }
     }
   }

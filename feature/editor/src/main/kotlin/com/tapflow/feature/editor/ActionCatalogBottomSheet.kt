@@ -72,6 +72,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -94,6 +95,8 @@ import java.util.UUID
 private data class ActionTemplateSpec(
   val label: String,
   val hint: String,
+  val labelRes: Int? = null,
+  val hintRes: Int? = null,
   val icon: ImageVector,
   val category: ActionCategoryGroup,
   val isPro: Boolean,
@@ -153,7 +156,7 @@ fun ActionCatalogBottomSheet(
           Text(
             text =
               when {
-                editingElseIfBranch != null -> "Edit Else If Condition"
+                editingElseIfBranch != null -> stringResource(R.string.edit_else_if_condition_title)
                 isEditingExisting -> "Edit ${ActionTreeUtils.actionTypeTitle(session.draftAction)}"
                 else -> "Add Action"
               },
@@ -276,7 +279,9 @@ fun ActionCatalogBottomSheet(
                 ) {
                   pair.forEach { spec ->
                     val isIfDepthCapped =
-                      !isEditingExisting && spec.label == "If Block" && !session.canAddNestedIfBlock
+                      !isEditingExisting &&
+                        spec.labelRes == R.string.if_block_card_title &&
+                        !session.canAddNestedIfBlock
                     ActionCatalogTile(
                       spec = spec,
                       selected = spec.matcher(session.draftAction),
@@ -616,7 +621,7 @@ private fun ActionCatalogTile(
 
       Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
-          text = spec.label,
+          text = spec.labelRes?.let { stringResource(it) } ?: spec.label,
           style = MaterialTheme.typography.labelLarge,
           fontWeight = FontWeight.SemiBold,
           color = titleColor,
@@ -624,7 +629,7 @@ private fun ActionCatalogTile(
           overflow = TextOverflow.Ellipsis,
         )
         Text(
-          text = disabledNote ?: spec.hint,
+          text = disabledNote ?: spec.hintRes?.let { stringResource(it) } ?: spec.hint,
           style = MaterialTheme.typography.bodySmall,
           color = if (disabledNote != null) MaterialTheme.colorScheme.error else subtitleColor,
           maxLines = 1,
@@ -734,8 +739,10 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
     ActionCategoryGroup.FLOW_CONTROL ->
       listOf(
         ActionTemplateSpec(
-          label = "If Block",
-          hint = "Run steps if rule matches",
+          label = "If Rule",
+          hint = "Check rule & pick steps",
+          labelRes = R.string.if_block_card_title,
+          hintRes = R.string.if_block_catalog_hint,
           icon = Icons.AutoMirrored.Rounded.AltRoute,
           category = ActionCategoryGroup.FLOW_CONTROL,
           isPro = true,
@@ -743,7 +750,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
             ScriptAction.IfBlock(
               id = id,
               conditionRoot =
-                ConditionGroup(id = UUID.randomUUID().toString(), name = "When..."),
+                ConditionGroup(id = UUID.randomUUID().toString(), name = "If:"),
             )
           },
           matcher = { it is ScriptAction.IfBlock },

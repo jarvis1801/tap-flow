@@ -425,7 +425,7 @@ object ActionTreeUtils {
       is ScriptAction.MultiTouch -> "Multi-touch"
       is ScriptAction.SwipeDrag -> "Swipe & Drag"
       is ScriptAction.InputText -> "Input Text"
-      is ScriptAction.IfBlock -> "If Block"
+      is ScriptAction.IfBlock -> "If Rule"
       is ScriptAction.LoopBlock -> "Loop Block"
       is ScriptAction.Delay -> "Wait / Pause"
       is ScriptAction.Break -> "Exit Loop"
@@ -480,14 +480,14 @@ object ActionTreeUtils {
       is ScriptAction.InputText ->
         "${PlainLanguageFormatter.textEngineLabel(action.engine)}: \"${action.textTemplate.take(28)}\""
       is ScriptAction.IfBlock -> {
-        val label = action.name.trim().ifBlank { "Condition Check" }
+        val label = action.name.trim().ifBlank { "If Rule" }
         val parts = buildList {
-          add("${action.thenActions.size} Yes")
+          add("${action.thenActions.size} Do these")
           if (action.elseIfBranches.isNotEmpty()) {
-            add("${action.elseIfBranches.size} Else If")
+            add("${action.elseIfBranches.size} If not, check")
           }
           if (action.elseActions.isNotEmpty()) {
-            add("${action.elseActions.size} Otherwise")
+            add("${action.elseActions.size} If none match")
           }
         }
         "$label • ${parts.joinToString(", ")}"

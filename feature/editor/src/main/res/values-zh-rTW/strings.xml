@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="if_block_card_title">如果條件</string>
+    <string name="if_block_catalog_hint">檢查條件並決定執行步驟</string>
+    <string name="if_block_condition_prefix">如果：</string>
+    <string name="if_block_empty_condition">如果：尚未設定規則 — 點此設定</string>
+    <string name="if_block_action_list_label">就執行：</string>
+    <string name="if_block_else_if_header">若不符，改檢查：</string>
+    <string name="if_block_else_if_header_named">若不符，改檢查 (%1$s)：</string>
+    <string name="if_block_else_header">以上都不符合時：</string>
+    <string name="if_block_add_else_if_cta">+ 若不符，改檢查...</string>
+    <string name="if_block_add_else_cta">+ 以上都不符合時...</string>
+    <string name="if_block_first_match_helper">只會執行第一個符合的分支</string>
+    <string name="if_block_add_step">新增步驟</string>
+    <string name="else_if_empty_condition">尚未設定規則 — 點此設定</string>
+    <string name="remove_else_if_cd">移除「若不符，改檢查」分支</string>
+    <string name="remove_else_cd">移除「以上都不符合時」分支</string>
+    <string name="edit_else_if_condition_title">編輯「若不符，改檢查」條件</string>
+    <string name="else_if_branch_name_title">若不符，改檢查：名稱</string>
+    <string name="else_if_branch_nickname_label">分支暱稱（選填）</string>
+    <string name="else_if_branch_nickname_placeholder">例如：如果出現跳過按鈕</string>
+    <string name="loop_block_action_list_label">重複執行這些步驟：</string>
+</resources>
