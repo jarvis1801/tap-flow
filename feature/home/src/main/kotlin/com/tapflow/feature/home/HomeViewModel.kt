@@ -617,13 +617,21 @@ class HomeViewModel @Inject constructor(
         if (!diag.isInstalled) {
           sendEffect(HomeUiEffect.OpenShizukuDownloadPage)
         } else if (!diag.isServiceRunning) {
-          sendEffect(HomeUiEffect.ShowSnackbar("Start the Shizuku service in the Shizuku app first"))
-        } else {
+          sendEffect(HomeUiEffect.OpenShizukuApp)
+        } else if (!diag.isPermissionGranted) {
           shizukuManager.requestPermission()
         }
       }
       HomeUiIntent.OpenShizukuDownloadClicked -> {
         sendEffect(HomeUiEffect.OpenShizukuDownloadPage)
+      }
+      HomeUiIntent.OpenShizukuAppClicked -> {
+        val diag = shizukuManager.refreshDiagnostics()
+        if (diag.isInstalled) {
+          sendEffect(HomeUiEffect.OpenShizukuApp)
+        } else {
+          sendEffect(HomeUiEffect.OpenShizukuDownloadPage)
+        }
       }
       is HomeUiIntent.ToggleShizukuShellInput -> {
         if (!requireShizukuProAndReady()) return
@@ -726,7 +734,13 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { preferencesRepository.setOverlaySize(intent.option) }
       }
       is HomeUiIntent.SelectLocale -> {
-        sendEffect(HomeUiEffect.ApplyAppLocale(intent.locale.languageTag))
+        if (!AppLocaleHelper.isLocaleAlreadyActive(
+            intent.currentLanguageTags,
+            intent.locale.languageTag,
+          )
+        ) {
+          sendEffect(HomeUiEffect.ApplyAppLocale(intent.locale.languageTag))
+        }
       }
       HomeUiIntent.ExportBackupClicked -> {
         val isLifetimePro =

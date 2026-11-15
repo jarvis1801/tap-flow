@@ -55,4 +55,68 @@ class ShizukuManagerHelpersTest {
     assertTrue(ShizukuManager.parseAppOpsGetAllowed("PROJECT_MEDIA: allow; time=+1m ago"))
     assertFalse(ShizukuManager.parseAppOpsGetAllowed("PROJECT_MEDIA: ignore"))
   }
+
+  @Test
+  fun evaluateSequentialDiagnostics_enforcesStrictCascade() {
+    // 1. Not installed -> serviceRunning, permissionGranted, userServiceBound MUST be false
+    val notInstalled =
+      ShizukuManager.evaluateSequentialDiagnostics(
+        installed = false,
+        binderAlive = true,
+        permissionGranted = true,
+        userServiceBinderAlive = true,
+        projectMediaAllowed = false,
+      )
+    assertFalse(notInstalled.isInstalled)
+    assertFalse(notInstalled.isServiceRunning)
+    assertFalse(notInstalled.isPermissionGranted)
+    assertFalse(notInstalled.isUserServiceBound)
+    assertFalse(notInstalled.isFullyReady)
+
+    // 2. Installed but service not running -> permissionGranted MUST be false
+    val notRunning =
+      ShizukuManager.evaluateSequentialDiagnostics(
+        installed = true,
+        binderAlive = false,
+        permissionGranted = true,
+        userServiceBinderAlive = true,
+        projectMediaAllowed = false,
+      )
+    assertTrue(notRunning.isInstalled)
+    assertFalse(notRunning.isServiceRunning)
+    assertFalse(notRunning.isPermissionGranted)
+    assertFalse(notRunning.isUserServiceBound)
+    assertFalse(notRunning.isFullyReady)
+
+    // 3. Installed & running, permission not granted -> userServiceBound & isFullyReady MUST be false
+    val awaitingPermission =
+      ShizukuManager.evaluateSequentialDiagnostics(
+        installed = true,
+        binderAlive = true,
+        permissionGranted = false,
+        userServiceBinderAlive = true,
+        projectMediaAllowed = false,
+      )
+    assertTrue(awaitingPermission.isInstalled)
+    assertTrue(awaitingPermission.isServiceRunning)
+    assertFalse(awaitingPermission.isPermissionGranted)
+    assertFalse(awaitingPermission.isUserServiceBound)
+    assertFalse(awaitingPermission.isFullyReady)
+
+    // 4. All 3 checks pass -> isFullyReady is true
+    val ready =
+      ShizukuManager.evaluateSequentialDiagnostics(
+        installed = true,
+        binderAlive = true,
+        permissionGranted = true,
+        userServiceBinderAlive = true,
+        projectMediaAllowed = true,
+      )
+    assertTrue(ready.isInstalled)
+    assertTrue(ready.isServiceRunning)
+    assertTrue(ready.isPermissionGranted)
+    assertTrue(ready.isUserServiceBound)
+    assertTrue(ready.isProjectMediaAllowed)
+    assertTrue(ready.isFullyReady)
+  }
 }

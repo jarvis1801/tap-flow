@@ -7,7 +7,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Color as AndroidColor
+import android.graphics.drawable.ColorDrawable
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
@@ -18,13 +20,17 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -40,7 +46,9 @@ import com.jarvis.tapflow.navigation.Route
 import com.jarvis.tapflow.ui.theme.TapFlowTheme
 import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.datastore.AppPreferences
+import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
+import com.tapflow.core.datastore.ThemePaletteOption
 import com.tapflow.core.service.accessibility.TapFlowAccessibilityService
 import com.tapflow.core.service.overlay.GesturePickerBridge
 import com.tapflow.core.service.overlay.OverlayLaunchIntents
@@ -69,6 +77,14 @@ class MainActivity : AppCompatActivity() {
   @Inject lateinit var mediaProjectionBridge: MediaProjectionBridge
   @Inject lateinit var gesturePickerBridge: GesturePickerBridge
 
+  private companion object {
+    const val PREF_WINDOW_BG_CACHE = "tapflow_window_bg_cache"
+    const val KEY_LAST_WINDOW_BG_ARGB = "last_window_bg_argb"
+    const val WINDOW_BG_AMOLED = AndroidColor.BLACK
+    const val WINDOW_BG_DARK = 0xFF0A111A.toInt()
+    const val WINDOW_BG_LIGHT = 0xFFF4F8FB.toInt()
+  }
+
   private var pendingProjectionTarget: PendingMediaProjectionTarget? = null
   private var pendingProjectionDeniedCallback: (() -> Unit)? = null
 
@@ -94,8 +110,15 @@ class MainActivity : AppCompatActivity() {
       }
     }
 
+  override fun setTheme(resId: Int) {
+    super.setTheme(resId)
+    applyWindowBackgroundColor(resolveInitialWindowBackgroundColor())
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    val initialWindowBgArgb = resolveInitialWindowBackgroundColor()
+    applyWindowBackgroundColor(initialWindowBgArgb)
     enableEdgeToEdge()
     setContent {
       val prefsOrNull by
@@ -107,6 +130,43 @@ class MainActivity : AppCompatActivity() {
       val darkMode = prefs?.darkMode ?: AppPreferences().darkMode
       val themePalette = prefs?.themePalette ?: AppPreferences().themePalette
       val isDark = resolveIsDarkTheme(darkMode = darkMode, themePalette = themePalette, isPro = isPro)
+      val isAmoledActive = themePalette == ThemePaletteOption.AMOLED_TRUE_BLACK && isPro
+
+      val targetNightMode =
+        if (prefs != null) {
+          when {
+            isAmoledActive -> AppCompatDelegate.MODE_NIGHT_YES
+            darkMode == DarkModeOption.DARK -> AppCompatDelegate.MODE_NIGHT_YES
+            darkMode == DarkModeOption.LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+            else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+          }
+        } else {
+          null
+        }
+
+      val resolvedWindowBgArgb =
+        if (prefs != null) {
+          when {
+            isAmoledActive -> WINDOW_BG_AMOLED
+            isDark -> WINDOW_BG_DARK
+            else -> WINDOW_BG_LIGHT
+          }
+        } else {
+          initialWindowBgArgb
+        }
+
+      LaunchedEffect(targetNightMode) {
+        if (targetNightMode != null && AppCompatDelegate.getDefaultNightMode() != targetNightMode) {
+          AppCompatDelegate.setDefaultNightMode(targetNightMode)
+        }
+      }
+
+      LaunchedEffect(prefs != null, resolvedWindowBgArgb) {
+        applyWindowBackgroundColor(resolvedWindowBgArgb)
+        if (prefs != null) {
+          cacheWindowBackgroundColor(resolvedWindowBgArgb)
+        }
+      }
 
       DisposableEffect(isDark) {
         enableEdgeToEdge(
@@ -133,7 +193,7 @@ class MainActivity : AppCompatActivity() {
         darkTheme = isDark,
       ) {
         if (prefs == null) {
-          Box(modifier = Modifier.fillMaxSize())
+          Box(modifier = Modifier.fillMaxSize().background(Color(resolvedWindowBgArgb)))
         } else {
           val initialDestination: Route =
             remember(prefs.hasCompletedPermissionOnboarding) {
@@ -153,6 +213,43 @@ class MainActivity : AppCompatActivity() {
           )
         }
       }
+    }
+  }
+
+  private fun resolveInitialWindowBackgroundColor(): Int {
+    val cached =
+      runCatching {
+        getSharedPreferences(PREF_WINDOW_BG_CACHE, Context.MODE_PRIVATE)
+          .takeIf { it.contains(KEY_LAST_WINDOW_BG_ARGB) }
+          ?.getInt(KEY_LAST_WINDOW_BG_ARGB, WINDOW_BG_DARK)
+      }.getOrNull()
+    if (cached != null) {
+      return cached
+    }
+    val nightMode = AppCompatDelegate.getDefaultNightMode()
+    val isNight =
+      when (nightMode) {
+        AppCompatDelegate.MODE_NIGHT_YES -> true
+        AppCompatDelegate.MODE_NIGHT_NO -> false
+        else ->
+          runCatching {
+            (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+              Configuration.UI_MODE_NIGHT_YES
+          }.getOrDefault(false)
+      }
+    return if (isNight) WINDOW_BG_DARK else WINDOW_BG_LIGHT
+  }
+
+  private fun applyWindowBackgroundColor(argb: Int) {
+    window?.setBackgroundDrawable(ColorDrawable(argb))
+  }
+
+  private fun cacheWindowBackgroundColor(argb: Int) {
+    runCatching {
+      getSharedPreferences(PREF_WINDOW_BG_CACHE, Context.MODE_PRIVATE)
+        .edit()
+        .putInt(KEY_LAST_WINDOW_BG_ARGB, argb)
+        .apply()
     }
   }
 

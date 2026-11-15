@@ -47,8 +47,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -65,7 +67,10 @@ fun SettingsTabContent(
   onIntent: (HomeUiIntent) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  val currentLocales = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+  val configuration = LocalConfiguration.current
+  val currentLocales = remember(configuration) {
+    AppCompatDelegate.getApplicationLocales().toLanguageTags()
+  }
 
   Column(
     modifier = modifier.fillMaxSize(),
@@ -303,15 +308,14 @@ fun SettingsTabContent(
               verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
               AppLocaleOption.entries.forEach { localeOption ->
-                val isSelected =
-                  if (currentLocales.isBlank()) {
-                    localeOption == AppLocaleOption.ENGLISH
-                  } else {
-                    currentLocales.startsWith(localeOption.languageTag, ignoreCase = true)
-                  }
+                val isSelected = AppLocaleHelper.isLocaleOptionSelected(currentLocales, localeOption)
                 FilterChip(
                   selected = isSelected,
-                  onClick = { onIntent(HomeUiIntent.SelectLocale(localeOption)) },
+                  onClick = {
+                    if (!isSelected) {
+                      onIntent(HomeUiIntent.SelectLocale(localeOption, currentLocales))
+                    }
+                  },
                   label = { Text(localeOption.label) },
                   modifier = Modifier.testTag("locale_${localeOption.languageTag.lowercase()}"),
                 )

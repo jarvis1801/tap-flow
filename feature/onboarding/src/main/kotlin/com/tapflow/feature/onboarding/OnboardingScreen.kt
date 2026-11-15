@@ -5,6 +5,7 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -140,7 +141,7 @@ fun OnboardingScreen(
             if (status == PackageManager.PERMISSION_GRANTED) {
               evaluateAndDispatch()
             } else {
-              val activity = context as? Activity
+              val activity = context.findActivity()
               val shouldShowRationale =
                 activity?.shouldShowRequestPermissionRationale(
                   Manifest.permission.POST_NOTIFICATIONS,
@@ -183,7 +184,7 @@ fun OnboardingScreen(
         }
         OnboardingUiEffect.NavigateToHome -> onNavigateToHome()
         OnboardingUiEffect.ExitApplication -> {
-          (context as? Activity)?.finishAffinity()
+          context.findActivity()?.finishAffinity()
         }
       }
     }
@@ -738,3 +739,10 @@ private fun OnboardingReadyPreview() {
     )
   }
 }
+
+private tailrec fun Context.findActivity(): Activity? =
+  when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+  }

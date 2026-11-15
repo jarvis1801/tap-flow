@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -73,6 +74,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.service.overlay.OverlayLaunchIntents
 import com.tapflow.core.service.projection.MediaProjectionBridge
+import com.tapflow.core.service.shizuku.ShizukuManager
 import kotlinx.coroutines.launch
 
 @Composable
@@ -209,16 +211,43 @@ fun HomeScreen(
           cm.setPrimaryClip(ClipData.newPlainText(effect.label, effect.text))
         }
         is HomeUiEffect.ApplyAppLocale -> {
-          val locales = LocaleListCompat.forLanguageTags(effect.languageTag)
-          AppCompatDelegate.setApplicationLocales(locales)
+          val currentTags = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+          if (!currentTags.equals(effect.languageTag, ignoreCase = true) &&
+            !AppLocaleHelper.isLocaleAlreadyActive(currentTags, effect.languageTag)
+          ) {
+            val locales = LocaleListCompat.forLanguageTags(effect.languageTag)
+            AppCompatDelegate.setApplicationLocales(locales)
+          }
         }
         HomeUiEffect.OpenShizukuDownloadPage -> {
-          val intent =
-            Intent(
-              Intent.ACTION_VIEW,
-              Uri.parse("https://shizuku.rikka.app/download/"),
+          val pkg = ShizukuManager.SHIZUKU_PACKAGE_NAME
+          val candidates =
+            listOf(
+              Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$pkg")),
+              Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$pkg")),
+              Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/RikkaApps/Shizuku/releases/latest")),
             )
-          runCatching { context.startActivity(intent) }
+          candidates.firstOrNull { candidate ->
+            candidate.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { context.startActivity(candidate) }.isSuccess
+          }
+        }
+        HomeUiEffect.OpenShizukuApp -> {
+          val pkg = ShizukuManager.SHIZUKU_PACKAGE_NAME
+          val launchIntent =
+            context.packageManager.getLaunchIntentForPackage(pkg)?.apply {
+              addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+          val started =
+            launchIntent != null && runCatching { context.startActivity(launchIntent) }.isSuccess
+          if (!started) {
+            val appInfoIntent =
+              Intent(
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.fromParts("package", pkg, null),
+              ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            runCatching { context.startActivity(appInfoIntent) }
+          }
         }
         is HomeUiEffect.LaunchFeedbackEmail -> {
           val intent =

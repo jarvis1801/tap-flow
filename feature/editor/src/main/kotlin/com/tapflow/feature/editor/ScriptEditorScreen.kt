@@ -1,6 +1,8 @@
 package com.tapflow.feature.editor
 
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
@@ -122,7 +124,7 @@ fun ScriptEditorScreen(
               targetType = effect.targetType,
             )
           ContextCompat.startForegroundService(context, intent)
-          (context as? Activity)?.moveTaskToBack(true)
+          context.findActivity()?.moveTaskToBack(true)
         }
         is ScriptEditorUiEffect.ShowUndoSnackbar -> {
           launch {
@@ -727,3 +729,10 @@ private fun ScriptEditorPreview() {
     )
   }
 }
+
+private tailrec fun Context.findActivity(): Activity? =
+  when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+  }

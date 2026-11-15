@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.DeadObjectException
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
@@ -78,6 +79,25 @@ class ShizukuManager @Inject constructor(
       }
       return true
     }
+
+    internal fun evaluateSequentialDiagnostics(
+      installed: Boolean,
+      binderAlive: Boolean,
+      permissionGranted: Boolean,
+      userServiceBinderAlive: Boolean,
+      projectMediaAllowed: Boolean,
+    ): ShizukuDiagnosticState {
+      val serviceRunning = installed && binderAlive
+      val granted = serviceRunning && permissionGranted
+      val userServiceBound = granted && userServiceBinderAlive
+      return ShizukuDiagnosticState(
+        isInstalled = installed,
+        isServiceRunning = serviceRunning,
+        isPermissionGranted = granted,
+        isUserServiceBound = userServiceBound,
+        isProjectMediaAllowed = projectMediaAllowed,
+      )
+    }
   }
 
   private val bindMutex = Mutex()
@@ -128,8 +148,17 @@ class ShizukuManager @Inject constructor(
   private val binderDeadListener =
     Shizuku.OnBinderDeadListener {
       shellService = null
-      _diagnosticState.update {
-        it.copy(isServiceRunning = false, isPermissionGranted = false, isUserServiceBound = false)
+      pendingBindDeferred?.complete(false)
+      pendingBindDeferred = null
+      val installed = isShizukuInstalled()
+      _diagnosticState.update { current ->
+        evaluateSequentialDiagnostics(
+          installed = installed,
+          binderAlive = false,
+          permissionGranted = false,
+          userServiceBinderAlive = false,
+          projectMediaAllowed = current.isProjectMediaAllowed,
+        )
       }
     }
 
@@ -151,65 +180,55 @@ class ShizukuManager @Inject constructor(
   }
 
   /**
-   * Performs a live synchronous check of Shizuku binder reachability and permission grant,
-   * automatically updating [diagnosticState] if Shizuku stopped or permission was revoked.
+   * Performs a live sequential check of Shizuku installation, binder reachability, and permission
+   * grant, automatically updating [diagnosticState] if Shizuku stopped or permission was revoked.
    */
   fun isReadyNow(): Boolean {
-    val running = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
+    val installed = isShizukuInstalled()
+    val running = installed && runCatching { Shizuku.pingBinder() }.getOrDefault(false)
     val granted =
-      if (running) {
+      running &&
         runCatching {
           Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
         }.getOrDefault(false)
-      } else {
-        false
-      }
-    if (!running || !granted) {
-      if (!running) {
-        shellService = null
-      }
+    if (!running) {
+      shellService = null
     }
-    val binderAlive = running && granted && (shellService?.asBinder()?.isBinderAlive == true)
+    val binderAlive = granted && (shellService?.asBinder()?.isBinderAlive == true)
     val current = _diagnosticState.value
-    val installed = if (running) true else current.isInstalled
-    if (
-      current.isInstalled != installed ||
-      current.isServiceRunning != running ||
-      current.isPermissionGranted != granted ||
-      current.isUserServiceBound != binderAlive
-    ) {
-      _diagnosticState.value =
-        current.copy(
-          isInstalled = installed,
-          isServiceRunning = running,
-          isPermissionGranted = granted,
-          isUserServiceBound = binderAlive,
-        )
+    val updated =
+      evaluateSequentialDiagnostics(
+        installed = installed,
+        binderAlive = running,
+        permissionGranted = granted,
+        userServiceBinderAlive = binderAlive,
+        projectMediaAllowed = current.isProjectMediaAllowed,
+      )
+    if (current != updated) {
+      _diagnosticState.value = updated
     }
-    return running && granted
+    return updated.isFullyReady
   }
 
   fun refreshDiagnostics(): ShizukuDiagnosticState {
     val installed = isShizukuInstalled()
-    val running = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
+    val running = installed && runCatching { Shizuku.pingBinder() }.getOrDefault(false)
     val granted =
-      if (running) {
+      running &&
         runCatching {
           Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
         }.getOrDefault(false)
-      } else {
-        false
-      }
     if (!running) {
       shellService = null
     }
+    val binderAlive = granted && (shellService?.asBinder()?.isBinderAlive == true)
     val updated =
-      ShizukuDiagnosticState(
-        isInstalled = installed,
-        isServiceRunning = running,
-        isPermissionGranted = granted,
-        isUserServiceBound = running && granted && (shellService?.asBinder()?.isBinderAlive == true),
-        isProjectMediaAllowed =
+      evaluateSequentialDiagnostics(
+        installed = installed,
+        binderAlive = running,
+        permissionGranted = granted,
+        userServiceBinderAlive = binderAlive,
+        projectMediaAllowed =
           checkProjectMediaViaAppOpsManager() || _diagnosticState.value.isProjectMediaAllowed,
       )
     _diagnosticState.value = updated
@@ -529,7 +548,15 @@ class ShizukuManager @Inject constructor(
 
   private fun isShizukuInstalled(): Boolean {
     return runCatching {
-      context.packageManager.getPackageInfo(SHIZUKU_PACKAGE_NAME, 0)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        context.packageManager.getPackageInfo(
+          SHIZUKU_PACKAGE_NAME,
+          PackageManager.PackageInfoFlags.of(0L),
+        )
+      } else {
+        @Suppress("DEPRECATION")
+        context.packageManager.getPackageInfo(SHIZUKU_PACKAGE_NAME, 0)
+      }
       true
     }.getOrDefault(false)
   }

@@ -217,6 +217,8 @@ sealed interface HomeUiIntent {
 
   data object OpenShizukuDownloadClicked : HomeUiIntent
 
+  data object OpenShizukuAppClicked : HomeUiIntent
+
   data class ToggleShizukuShellInput(val enabled: Boolean) : HomeUiIntent
 
   data class ToggleShizukuForceStop(val enabled: Boolean) : HomeUiIntent
@@ -238,7 +240,10 @@ sealed interface HomeUiIntent {
 
   data class SetOverlaySize(val option: OverlaySizeOption) : HomeUiIntent
 
-  data class SelectLocale(val locale: AppLocaleOption) : HomeUiIntent
+  data class SelectLocale(
+    val locale: AppLocaleOption,
+    val currentLanguageTags: String = "",
+  ) : HomeUiIntent
 
   data object ExportBackupClicked : HomeUiIntent
 
@@ -296,6 +301,8 @@ sealed interface HomeUiEffect {
   data class ApplyAppLocale(val languageTag: String) : HomeUiEffect
 
   data object OpenShizukuDownloadPage : HomeUiEffect
+
+  data object OpenShizukuApp : HomeUiEffect
 
   data class LaunchFeedbackEmail(val subject: String, val body: String) : HomeUiEffect
 

@@ -1,6 +1,8 @@
 package com.tapflow.feature.paywall
 
 import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -119,7 +121,7 @@ fun PaywallScreen(
     viewModel.effects.collect { effect ->
       when (effect) {
         PaywallUiEffect.LaunchPlayBillingFlow -> {
-          val activity = context as? Activity
+          val activity = context.findActivity()
           if (activity != null) {
             entitlementRepository.launchLifetimePurchase(activity)
           } else {
@@ -701,3 +703,10 @@ private fun PaywallTrialPreview() {
     )
   }
 }
+
+private tailrec fun Context.findActivity(): Activity? =
+  when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+  }

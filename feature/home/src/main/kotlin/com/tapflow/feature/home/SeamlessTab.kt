@@ -15,11 +15,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Card
@@ -161,63 +163,67 @@ fun SeamlessTabContent(
 
             DiagnosticRow(
               step = "1. Shizuku App Installed",
-              passed = shizuku.isInstalled,
-              detail = if (shizuku.isInstalled) "Installed" else "Not installed",
+              state =
+                if (shizuku.isInstalled) {
+                  DiagnosticStepVisualState.PASSED
+                } else {
+                  DiagnosticStepVisualState.ACTION_REQUIRED
+                },
+              statusBadge = if (shizuku.isInstalled) "Installed ✓" else "Not Installed",
+              badgeTestTag = "shizuku_installed_badge",
+              actionLabel = if (!shizuku.isInstalled) "Install Shizuku" else null,
+              actionIcon = Icons.Filled.Download,
+              actionTestTag = "install_shizuku_button",
+              onActionClick = { onIntent(HomeUiIntent.OpenShizukuDownloadClicked) },
             )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             DiagnosticRow(
               step = "2. Shizuku Service Running",
-              passed = shizuku.isServiceRunning,
-              detail =
-                if (shizuku.isServiceRunning) "Binder alive (pingBinder OK)" else "Service inactive",
+              state =
+                when {
+                  shizuku.isServiceRunning -> DiagnosticStepVisualState.PASSED
+                  shizuku.isInstalled -> DiagnosticStepVisualState.ACTION_REQUIRED
+                  else -> DiagnosticStepVisualState.WAITING
+                },
+              statusBadge =
+                when {
+                  shizuku.isServiceRunning -> "Running ✓"
+                  shizuku.isInstalled -> "Not Running"
+                  else -> "Install Shizuku first"
+                },
+              badgeTestTag = "shizuku_running_badge",
+              actionLabel =
+                if (shizuku.isInstalled && !shizuku.isServiceRunning) "Open Shizuku" else null,
+              actionIcon = Icons.AutoMirrored.Filled.OpenInNew,
+              actionTestTag = "open_shizuku_button",
+              onActionClick = { onIntent(HomeUiIntent.OpenShizukuAppClicked) },
             )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             DiagnosticRow(
               step = "3. TapFlow Permission Granted",
-              passed = shizuku.isPermissionGranted,
-              detail = if (shizuku.isPermissionGranted) "Authorized" else "Permission required",
+              state =
+                when {
+                  shizuku.isPermissionGranted -> DiagnosticStepVisualState.PASSED
+                  shizuku.isServiceRunning -> DiagnosticStepVisualState.ACTION_REQUIRED
+                  else -> DiagnosticStepVisualState.WAITING
+                },
+              statusBadge =
+                when {
+                  shizuku.isPermissionGranted -> "Granted ✓"
+                  shizuku.isServiceRunning -> "Not Granted"
+                  else -> "Start Shizuku service first"
+                },
+              badgeTestTag = "shizuku_permission_badge",
+              actionLabel =
+                if (shizuku.isServiceRunning && !shizuku.isPermissionGranted) {
+                  "Request Permission"
+                } else {
+                  null
+                },
+              actionIcon = Icons.Filled.VerifiedUser,
+              actionTestTag = "request_shizuku_permission_button",
+              onActionClick = { onIntent(HomeUiIntent.RequestShizukuPermission) },
             )
-
-            Row(
-              modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-              horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-              if (!shizuku.isInstalled) {
-                OutlinedButton(
-                  onClick = { onIntent(HomeUiIntent.OpenShizukuDownloadClicked) },
-                  modifier =
-                    Modifier
-                      .weight(1f)
-                      .heightIn(min = 48.dp)
-                      .testTag("download_shizuku_button"),
-                ) {
-                  Icon(
-                    imageVector = Icons.Filled.Download,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                  )
-                  Spacer(modifier = Modifier.width(6.dp))
-                  Text("Get Shizuku")
-                }
-              }
-
-              if (shizuku.isInstalled && !shizuku.isPermissionGranted) {
-                FilledTonalButton(
-                  onClick = { onIntent(HomeUiIntent.RequestShizukuPermission) },
-                  modifier =
-                    Modifier
-                      .weight(1f)
-                      .heightIn(min = 48.dp)
-                      .testTag("request_shizuku_permission_button"),
-                ) {
-                  Icon(
-                    imageVector = Icons.Filled.VerifiedUser,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                  )
-                  Spacer(modifier = Modifier.width(6.dp))
-                  Text("Request Permission")
-                }
-              }
-            }
           }
         }
       }
@@ -302,39 +308,126 @@ fun SeamlessTabContent(
   }
 }
 
+private enum class DiagnosticStepVisualState {
+  PASSED,
+  ACTION_REQUIRED,
+  WAITING,
+}
+
 @Composable
 private fun DiagnosticRow(
   step: String,
-  passed: Boolean,
-  detail: String,
+  state: DiagnosticStepVisualState,
+  statusBadge: String,
+  badgeTestTag: String,
+  actionLabel: String? = null,
+  actionIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+  actionTestTag: String? = null,
+  onActionClick: (() -> Unit)? = null,
 ) {
-  Row(
-    modifier = Modifier.fillMaxWidth(),
-    verticalAlignment = Alignment.CenterVertically,
-    horizontalArrangement = Arrangement.spacedBy(10.dp),
+  val icon =
+    when (state) {
+      DiagnosticStepVisualState.PASSED -> Icons.Filled.CheckCircle
+      DiagnosticStepVisualState.ACTION_REQUIRED -> Icons.Filled.ErrorOutline
+      DiagnosticStepVisualState.WAITING -> Icons.Filled.RadioButtonUnchecked
+    }
+  val iconTint =
+    when (state) {
+      DiagnosticStepVisualState.PASSED -> MaterialTheme.colorScheme.primary
+      DiagnosticStepVisualState.ACTION_REQUIRED -> MaterialTheme.colorScheme.error
+      DiagnosticStepVisualState.WAITING -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+    }
+  val badgeContainer =
+    when (state) {
+      DiagnosticStepVisualState.PASSED -> MaterialTheme.colorScheme.primaryContainer
+      DiagnosticStepVisualState.ACTION_REQUIRED -> MaterialTheme.colorScheme.errorContainer
+      DiagnosticStepVisualState.WAITING -> MaterialTheme.colorScheme.surfaceContainerHighest
+    }
+  val badgeContent =
+    when (state) {
+      DiagnosticStepVisualState.PASSED -> MaterialTheme.colorScheme.onPrimaryContainer
+      DiagnosticStepVisualState.ACTION_REQUIRED -> MaterialTheme.colorScheme.onErrorContainer
+      DiagnosticStepVisualState.WAITING -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+  Column(
+    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+    verticalArrangement = Arrangement.spacedBy(8.dp),
   ) {
-    Icon(
-      imageVector = if (passed) Icons.Filled.CheckCircle else Icons.Filled.ErrorOutline,
-      contentDescription = null,
-      tint =
-        if (passed) {
-          MaterialTheme.colorScheme.primary
-        } else {
-          MaterialTheme.colorScheme.error
-        },
-      modifier = Modifier.size(20.dp),
-    )
-    Column(modifier = Modifier.weight(1f)) {
+    Row(
+      modifier = Modifier.fillMaxWidth(),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+      Icon(
+        imageVector = icon,
+        contentDescription = null,
+        tint = iconTint,
+        modifier = Modifier.size(20.dp),
+      )
       Text(
         text = step,
         style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.Medium,
+        color =
+          if (state == DiagnosticStepVisualState.WAITING) {
+            MaterialTheme.colorScheme.onSurfaceVariant
+          } else {
+            MaterialTheme.colorScheme.onSurface
+          },
+        modifier = Modifier.weight(1f),
       )
-      Text(
-        text = detail,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
+      Surface(
+        shape = MaterialTheme.shapes.small,
+        color = badgeContainer,
+        modifier = Modifier.testTag(badgeTestTag),
+      ) {
+        Text(
+          text = statusBadge,
+          style = MaterialTheme.typography.labelMedium,
+          fontWeight = FontWeight.SemiBold,
+          color = badgeContent,
+          modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+        )
+      }
+    }
+
+    if (actionLabel != null && onActionClick != null) {
+      val buttonModifier =
+        Modifier
+          .fillMaxWidth()
+          .padding(start = 30.dp)
+          .heightIn(min = 48.dp)
+          .let { mod -> if (actionTestTag != null) mod.testTag(actionTestTag) else mod }
+      if (state == DiagnosticStepVisualState.ACTION_REQUIRED && actionIcon == Icons.Filled.Download) {
+        OutlinedButton(
+          onClick = onActionClick,
+          modifier = buttonModifier,
+        ) {
+          Icon(
+            imageVector = actionIcon,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+          )
+          Spacer(modifier = Modifier.width(6.dp))
+          Text(actionLabel)
+        }
+      } else {
+        FilledTonalButton(
+          onClick = onActionClick,
+          modifier = buttonModifier,
+        ) {
+          if (actionIcon != null) {
+            Icon(
+              imageVector = actionIcon,
+              contentDescription = null,
+              modifier = Modifier.size(18.dp),
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+          }
+          Text(actionLabel)
+        }
+      }
     }
   }
 }
