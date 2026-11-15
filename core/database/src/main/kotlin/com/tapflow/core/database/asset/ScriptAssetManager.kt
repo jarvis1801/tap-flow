@@ -153,6 +153,10 @@ class ScriptAssetManager @Inject constructor(
       is ScriptAction.IfBlock -> {
         collectFromCondition(action.conditionRoot, out)
         action.thenActions.forEach { collectFromAction(it, out) }
+        action.elseIfBranches.forEach { branch ->
+          collectFromCondition(branch.conditionRoot, out)
+          branch.actions.forEach { collectFromAction(it, out) }
+        }
         action.elseActions.forEach { collectFromAction(it, out) }
       }
       is ScriptAction.LoopBlock -> {

@@ -124,7 +124,7 @@ class ScriptEditorViewModel @Inject constructor(
           val activeSession = state.actionEditorSession ?: return@update state
           val nextErrors =
             if (activeSession.showValidationErrors) {
-              ActionValidator.validate(updatedDraft)
+              ActionValidator.validate(updatedDraft, activeSession.editingElseIfBranchId)
             } else {
               activeSession.validationErrors
             }
@@ -332,6 +332,9 @@ class ScriptEditorViewModel @Inject constructor(
           )
           return
         }
+        val canAddNestedIf =
+          ActionTreeUtils.ifNestingDepthForLocation(state.actions, intent.location) <
+            ActionTreeUtils.MAX_IF_NESTING_DEPTH
         val defaultAction =
           ScriptAction.Tap(
             id = UUID.randomUUID().toString(),
@@ -347,6 +350,8 @@ class ScriptEditorViewModel @Inject constructor(
                 editingActionId = null,
                 draftAction = defaultAction,
                 selectedCategory = ActionCategoryGroup.TOUCH_GESTURES,
+                editingElseIfBranchId = null,
+                canAddNestedIfBlock = canAddNestedIf,
               ),
           )
         }
@@ -363,7 +368,102 @@ class ScriptEditorViewModel @Inject constructor(
                 editingActionId = existing.id,
                 draftAction = existing,
                 selectedCategory = existing.categoryGroup(),
+                editingElseIfBranchId = null,
+                canAddNestedIfBlock = true,
               ),
+          )
+        }
+      }
+      is ScriptEditorUiIntent.AddElseIfBranch -> {
+        val ifBlock =
+          ActionTreeUtils.findActionById(_uiState.value.actions, intent.ifBlockId)
+            as? ScriptAction.IfBlock ?: return
+        if (!verifyProGateForAction(ifBlock)) return
+        val newBranch =
+          ScriptAction.ElseIfBranch(
+            id = UUID.randomUUID().toString(),
+            conditionRoot =
+              ConditionGroup(id = UUID.randomUUID().toString(), name = "Otherwise, if..."),
+          )
+        val updatedIf =
+          ifBlock.copy(
+            isExpanded = true,
+            elseIfBranches = ifBlock.elseIfBranches + newBranch,
+          )
+        _uiState.update { state ->
+          state.copy(
+            actions = ActionTreeUtils.replaceAction(state.actions, updatedIf),
+            isDirty = true,
+            actionEditorSession =
+              ActionEditorSession(
+                insertionLocation = ActionBranchLocation(),
+                insertIndex = 0,
+                editingActionId = updatedIf.id,
+                draftAction = updatedIf,
+                selectedCategory = ActionCategoryGroup.FLOW_CONTROL,
+                editingElseIfBranchId = newBranch.id,
+                canAddNestedIfBlock = true,
+              ),
+          )
+        }
+      }
+      is ScriptEditorUiIntent.OpenEditElseIfConditionSheet -> {
+        val ifBlock =
+          ActionTreeUtils.findActionById(_uiState.value.actions, intent.ifBlockId)
+            as? ScriptAction.IfBlock ?: return
+        if (ifBlock.elseIfBranches.none { it.id == intent.branchId }) return
+        _uiState.update {
+          it.copy(
+            actionEditorSession =
+              ActionEditorSession(
+                insertionLocation = ActionBranchLocation(),
+                insertIndex = 0,
+                editingActionId = ifBlock.id,
+                draftAction = ifBlock,
+                selectedCategory = ActionCategoryGroup.FLOW_CONTROL,
+                editingElseIfBranchId = intent.branchId,
+                canAddNestedIfBlock = true,
+              ),
+          )
+        }
+      }
+      is ScriptEditorUiIntent.RemoveElseIfBranch -> {
+        val ifBlock =
+          ActionTreeUtils.findActionById(_uiState.value.actions, intent.ifBlockId)
+            as? ScriptAction.IfBlock ?: return
+        val updatedIf =
+          ifBlock.copy(
+            elseIfBranches = ifBlock.elseIfBranches.filterNot { it.id == intent.branchId },
+          )
+        _uiState.update { state ->
+          state.copy(
+            actions = ActionTreeUtils.replaceAction(state.actions, updatedIf),
+            isDirty = true,
+          )
+        }
+      }
+      is ScriptEditorUiIntent.RevealElseBranch -> {
+        val ifBlock =
+          ActionTreeUtils.findActionById(_uiState.value.actions, intent.ifBlockId)
+            as? ScriptAction.IfBlock ?: return
+        val updatedIf = if (ifBlock.isExpanded) ifBlock else ifBlock.copy(isExpanded = true)
+        _uiState.update { state ->
+          state.copy(
+            actions = ActionTreeUtils.replaceAction(state.actions, updatedIf),
+            revealedElseBlockIds = state.revealedElseBlockIds + intent.ifBlockId,
+          )
+        }
+      }
+      is ScriptEditorUiIntent.RemoveElseBranch -> {
+        val ifBlock =
+          ActionTreeUtils.findActionById(_uiState.value.actions, intent.ifBlockId)
+            as? ScriptAction.IfBlock ?: return
+        val updatedIf = ifBlock.copy(elseActions = emptyList())
+        _uiState.update { state ->
+          state.copy(
+            actions = ActionTreeUtils.replaceAction(state.actions, updatedIf),
+            revealedElseBlockIds = state.revealedElseBlockIds - intent.ifBlockId,
+            isDirty = ifBlock.elseActions.isNotEmpty() || state.isDirty,
           )
         }
       }
@@ -382,6 +482,18 @@ class ScriptEditorViewModel @Inject constructor(
         }
       }
       is ScriptEditorUiIntent.SelectTemplateAction -> {
+        val currentSession = _uiState.value.actionEditorSession ?: return
+        if (currentSession.editingActionId == null &&
+          intent.action is ScriptAction.IfBlock &&
+          !currentSession.canAddNestedIfBlock
+        ) {
+          sendEffect(
+            ScriptEditorUiEffect.ShowSnackbar(
+              "Maximum ${ActionTreeUtils.MAX_IF_NESTING_DEPTH} nested If levels reached.",
+            ),
+          )
+          return
+        }
         if (!verifyProGateForAction(intent.action)) return
         _uiState.update { state ->
           val session = state.actionEditorSession ?: return@update state
@@ -403,7 +515,7 @@ class ScriptEditorViewModel @Inject constructor(
           val session = state.actionEditorSession ?: return@update state
           val nextErrors =
             if (session.showValidationErrors) {
-              ActionValidator.validate(intent.action)
+              ActionValidator.validate(intent.action, session.editingElseIfBranchId)
             } else {
               session.validationErrors
             }
@@ -418,8 +530,19 @@ class ScriptEditorViewModel @Inject constructor(
       }
       ScriptEditorUiIntent.CommitDraftAction -> {
         val session = _uiState.value.actionEditorSession ?: return
+        if (session.editingActionId == null &&
+          session.draftAction is ScriptAction.IfBlock &&
+          !session.canAddNestedIfBlock
+        ) {
+          sendEffect(
+            ScriptEditorUiEffect.ShowSnackbar(
+              "Maximum ${ActionTreeUtils.MAX_IF_NESTING_DEPTH} nested If levels reached.",
+            ),
+          )
+          return
+        }
         if (!verifyProGateForAction(session.draftAction)) return
-        val errors = ActionValidator.validate(session.draftAction)
+        val errors = ActionValidator.validate(session.draftAction, session.editingElseIfBranchId)
         if (errors.isNotEmpty()) {
           _uiState.update { state ->
             val current = state.actionEditorSession ?: return@update state
@@ -524,7 +647,11 @@ class ScriptEditorViewModel @Inject constructor(
           }
         _uiState.update {
           val nextErrors =
-            if (session.showValidationErrors) ActionValidator.validate(updatedDraft) else session.validationErrors
+            if (session.showValidationErrors) {
+              ActionValidator.validate(updatedDraft, session.editingElseIfBranchId)
+            } else {
+              session.validationErrors
+            }
           it.copy(
             appPickerTarget = null,
             actionEditorSession =
@@ -575,7 +702,11 @@ class ScriptEditorViewModel @Inject constructor(
           }
         _uiState.update {
           val nextErrors =
-            if (session.showValidationErrors) ActionValidator.validate(updatedDraft) else session.validationErrors
+            if (session.showValidationErrors) {
+              ActionValidator.validate(updatedDraft, session.editingElseIfBranchId)
+            } else {
+              session.validationErrors
+            }
           it.copy(
             inspectPickerTarget = null,
             actionEditorSession =
@@ -617,7 +748,7 @@ class ScriptEditorViewModel @Inject constructor(
             _uiState.update {
               val nextErrors =
                 if (session.showValidationErrors) {
-                  ActionValidator.validate(updatedDraft)
+                  ActionValidator.validate(updatedDraft, session.editingElseIfBranchId)
                 } else {
                   session.validationErrors
                 }
@@ -818,7 +949,15 @@ class ScriptEditorViewModel @Inject constructor(
   ): ScriptAction {
     return when (action) {
       is ScriptAction.IfBlock ->
-        action.copy(conditionRoot = replaceLeafRecursive(action.conditionRoot, leafId, transform))
+        action.copy(
+          conditionRoot = replaceLeafRecursive(action.conditionRoot, leafId, transform),
+          elseIfBranches =
+            action.elseIfBranches.map { branch ->
+              branch.copy(
+                conditionRoot = replaceLeafRecursive(branch.conditionRoot, leafId, transform),
+              )
+            },
+        )
       is ScriptAction.LoopBlock ->
         when (val m = action.mode) {
           is com.tapflow.core.model.action.LoopMode.WhileCondition ->

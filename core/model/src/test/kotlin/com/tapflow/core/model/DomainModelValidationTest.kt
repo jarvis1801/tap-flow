@@ -245,4 +245,46 @@ class DomainModelValidationTest {
       assertEquals(option, decoded)
     }
   }
+
+  @Test
+  fun elseIfBranch_isBackwardCompatibleAndTraversedByTreeScanners() {
+    val elseIfIfBlock =
+      ScriptAction.IfBlock(
+        id = "if-chain",
+        name = "Chain",
+        conditionRoot = ConditionGroup(id = "if-root"),
+        thenActions = listOf(ScriptAction.Delay(id = "then-d")),
+        elseIfBranches =
+          listOf(
+            ScriptAction.ElseIfBranch(
+              id = "ei-1",
+              name = "Popup",
+              conditionRoot =
+                ConditionGroup(
+                  id = "ei1-root",
+                  children =
+                    listOf(
+                      ConditionLeaf(
+                        id = "ei1-leaf",
+                        predicate = ConditionPredicate.ColorMatch(targets = listOf(ColorTarget(10, 20, "#FF0000"))),
+                      ),
+                    ),
+                ),
+              actions =
+                listOf(
+                  ScriptAction.Tap(id = "ei1-tap", jitterPx = 8),
+                ),
+            ),
+          ),
+        elseActions = listOf(ScriptAction.Delay(id = "else-d")),
+      )
+
+    val script = Script(id = "s-chain", title = "Chain", actions = listOf(elseIfIfBlock))
+    assertTrue(script.requiresVision())
+    assertEquals(4, script.totalActionCount())
+
+    val proGates = EntitlementValidator.detectProFeaturesInScript(script)
+    assertTrue(proGates.contains(ProFeatureGate.IF_BLOCK))
+    assertTrue(proGates.contains(ProFeatureGate.ANTI_BAN_JITTER))
+  }
 }

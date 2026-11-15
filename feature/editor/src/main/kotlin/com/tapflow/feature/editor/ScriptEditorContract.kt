@@ -43,6 +43,8 @@ data class ActionEditorSession(
   val editingActionId: String?,
   val draftAction: ScriptAction,
   val selectedCategory: ActionCategoryGroup,
+  val editingElseIfBranchId: String? = null,
+  val canAddNestedIfBlock: Boolean = true,
   val activePickerRequestId: String? = null,
   val activePickPurpose: OverlayPickPurpose? = null,
   val validationErrors: Map<String, String> = emptyMap(),
@@ -63,6 +65,7 @@ data class ScriptEditorUiState(
   val globalDelay: DelayConfig = DelayConfig.Fixed(0L),
   val variables: List<VariableDefinition> = emptyList(),
   val actions: List<ScriptAction> = emptyList(),
+  val revealedElseBlockIds: Set<String> = emptySet(),
   val undoRecord: RemovedActionRecord? = null,
   val showUnsavedDialog: Boolean = false,
   val showGlobalDelaySheet: Boolean = false,
@@ -128,6 +131,17 @@ sealed interface ScriptEditorUiIntent {
   ) : ScriptEditorUiIntent
 
   data class OpenEditActionSheet(val actionId: String) : ScriptEditorUiIntent
+
+  data class AddElseIfBranch(val ifBlockId: String) : ScriptEditorUiIntent
+
+  data class RemoveElseIfBranch(val ifBlockId: String, val branchId: String) : ScriptEditorUiIntent
+
+  data class OpenEditElseIfConditionSheet(val ifBlockId: String, val branchId: String) :
+    ScriptEditorUiIntent
+
+  data class RevealElseBranch(val ifBlockId: String) : ScriptEditorUiIntent
+
+  data class RemoveElseBranch(val ifBlockId: String) : ScriptEditorUiIntent
 
   // Action Editor BottomSheet
   data class SelectCatalogCategory(val category: ActionCategoryGroup) : ScriptEditorUiIntent

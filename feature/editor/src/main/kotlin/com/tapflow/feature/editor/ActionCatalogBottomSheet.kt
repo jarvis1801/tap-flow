@@ -112,8 +112,18 @@ fun ActionCatalogBottomSheet(
 ) {
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
   val isEditingExisting = session.editingActionId != null
-  var searchQuery by remember(session.editingActionId) { mutableStateOf("") }
-  var showAllCategories by remember(session.editingActionId) { mutableStateOf(false) }
+  val editingElseIfBranch =
+    (session.draftAction as? ScriptAction.IfBlock)?.let { ifBlock ->
+      session.editingElseIfBranchId?.let { branchId ->
+        ifBlock.elseIfBranches.firstOrNull { it.id == branchId }
+      }
+    }
+  var searchQuery by remember(session.editingActionId, session.editingElseIfBranchId) {
+    mutableStateOf("")
+  }
+  var showAllCategories by remember(session.editingActionId, session.editingElseIfBranchId) {
+    mutableStateOf(false)
+  }
 
   ModalBottomSheet(
     onDismissRequest = { onIntent(ScriptEditorUiIntent.DismissActionSheet) },
@@ -142,10 +152,10 @@ fun ActionCatalogBottomSheet(
         Column(modifier = Modifier.weight(1f)) {
           Text(
             text =
-              if (isEditingExisting) {
-                "Edit ${ActionTreeUtils.actionTypeTitle(session.draftAction)}"
-              } else {
-                "Add Action"
+              when {
+                editingElseIfBranch != null -> "Edit Else If Condition"
+                isEditingExisting -> "Edit ${ActionTreeUtils.actionTypeTitle(session.draftAction)}"
+                else -> "Add Action"
               },
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
@@ -265,10 +275,13 @@ fun ActionCatalogBottomSheet(
                   horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                   pair.forEach { spec ->
+                    val isIfDepthCapped =
+                      !isEditingExisting && spec.label == "If Block" && !session.canAddNestedIfBlock
                     ActionCatalogTile(
                       spec = spec,
                       selected = spec.matcher(session.draftAction),
                       isPro = isPro,
+                      disabledNote = if (isIfDepthCapped) "Max 3 nested levels" else null,
                       onClick = {
                         onIntent(
                           ScriptEditorUiIntent.SelectTemplateAction(
@@ -350,14 +363,36 @@ fun ActionCatalogBottomSheet(
               validationErrors = session.validationErrors,
             )
           is ScriptAction.IfBlock ->
-            IfBlockActionEditor(
-              action = draft,
-              variables = variables,
-              isPro = isPro,
-              onChange = { onIntent(ScriptEditorUiIntent.UpdateDraftAction(it)) },
-              onIntent = onIntent,
-              validationErrors = session.validationErrors,
-            )
+            if (editingElseIfBranch != null) {
+              ElseIfConditionEditor(
+                branch = editingElseIfBranch,
+                variables = variables,
+                isPro = isPro,
+                onChange = { updatedBranch ->
+                  onIntent(
+                    ScriptEditorUiIntent.UpdateDraftAction(
+                      draft.copy(
+                        elseIfBranches =
+                          draft.elseIfBranches.map {
+                            if (it.id == updatedBranch.id) updatedBranch else it
+                          },
+                      ),
+                    ),
+                  )
+                },
+                onIntent = onIntent,
+                validationErrors = session.validationErrors,
+              )
+            } else {
+              IfBlockActionEditor(
+                action = draft,
+                variables = variables,
+                isPro = isPro,
+                onChange = { onIntent(ScriptEditorUiIntent.UpdateDraftAction(it)) },
+                onIntent = onIntent,
+                validationErrors = session.validationErrors,
+              )
+            }
           is ScriptAction.LoopBlock ->
             LoopBlockActionEditor(
               action = draft,
@@ -504,18 +539,23 @@ private fun ActionCatalogTile(
   spec: ActionTemplateSpec,
   selected: Boolean,
   isPro: Boolean,
+  disabledNote: String? = null,
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val containerColor =
     if (selected) {
       MaterialTheme.colorScheme.primaryContainer
+    } else if (disabledNote != null) {
+      MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.6f)
     } else {
       MaterialTheme.colorScheme.surfaceContainerLow
     }
   val titleColor =
     if (selected) {
       MaterialTheme.colorScheme.onPrimaryContainer
+    } else if (disabledNote != null) {
+      MaterialTheme.colorScheme.onSurfaceVariant
     } else {
       MaterialTheme.colorScheme.onSurface
     }
@@ -584,9 +624,9 @@ private fun ActionCatalogTile(
           overflow = TextOverflow.Ellipsis,
         )
         Text(
-          text = spec.hint,
+          text = disabledNote ?: spec.hint,
           style = MaterialTheme.typography.bodySmall,
-          color = subtitleColor,
+          color = if (disabledNote != null) MaterialTheme.colorScheme.error else subtitleColor,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
         )

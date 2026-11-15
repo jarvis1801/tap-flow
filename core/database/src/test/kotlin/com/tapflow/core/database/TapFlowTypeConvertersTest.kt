@@ -97,4 +97,39 @@ class TapFlowTypeConvertersTest {
       )
     assertEquals(entries, converters.toActionLogEntryList(converters.fromActionLogEntryList(entries)))
   }
+
+  @Test
+  fun elseIfBranchesRoundTripAndLegacyIfBlockJsonDeserializesWithoutMigrationCrash() {
+    val withElseIf =
+      listOf(
+        ScriptAction.IfBlock(
+          id = "if-ei",
+          name = "Popup Chain",
+          conditionRoot = ConditionGroup(id = "g-if"),
+          thenActions = listOf(ScriptAction.Delay(id = "d-then")),
+          elseIfBranches =
+            listOf(
+              ScriptAction.ElseIfBranch(
+                id = "ei-1",
+                name = "Close Button",
+                conditionRoot = ConditionGroup(id = "g-ei1"),
+                actions = listOf(ScriptAction.Delay(id = "d-ei1")),
+              ),
+            ),
+          elseActions = listOf(ScriptAction.Delay(id = "d-else")),
+        ),
+      )
+
+    val encoded = converters.fromScriptActionList(withElseIf)
+    val decoded = converters.toScriptActionList(encoded)
+    assertEquals(withElseIf, decoded)
+
+    // Legacy Room row without "elseIfBranches" field must deserialize with emptyList()
+    val legacyJson =
+      """[{"kind":"if","id":"if-legacy","name":"Old","conditionRoot":{"id":"g1","name":"When","operator":"ALL","children":[],"isExpanded":true},"thenActions":[],"elseActions":[],"isExpanded":true}]"""
+    val decodedLegacy = converters.toScriptActionList(legacyJson)
+    assertEquals(1, decodedLegacy.size)
+    val legacyIf = decodedLegacy.first() as ScriptAction.IfBlock
+    assertEquals(emptyList<ScriptAction.ElseIfBranch>(), legacyIf.elseIfBranches)
+  }
 }

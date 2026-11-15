@@ -300,7 +300,7 @@ class ActionTreeAndConditionTest {
 
     val sentence = PlainLanguageFormatter.formatConditionSentence(root)
     assertEquals(
-      "Run 'Then' steps when: Pixel at (540, 960) is White AND (App Game is open OR coins is at least 100)",
+      "Run 'Then' steps when: screen color at (540, 960) is White AND (app Game is open OR coins is at least 100)",
       sentence,
     )
     assertEquals("#FFFFFF", PlainLanguageFormatter.extractFirstColorHex(root))
@@ -320,5 +320,122 @@ class ActionTreeAndConditionTest {
       )
     assertTrue(inputSummary.contains("Paste Text"))
     assertFalse(inputSummary.contains("CLIPBOARD_PASTE"))
+  }
+
+  @Test
+  fun elseIfBranch_supportsInsertMoveDeleteUndoAndGlobalDelay() {
+    val ifBlock =
+      ScriptAction.IfBlock(
+        id = "if1",
+        conditionRoot = ConditionGroup(id = "g1"),
+        elseIfBranches =
+          listOf(
+            ScriptAction.ElseIfBranch(
+              id = "ei1",
+              conditionRoot = ConditionGroup(id = "gei1"),
+              actions =
+                listOf(
+                  ScriptAction.Tap(id = "t1", x = NumericInput.Literal(10), y = NumericInput.Literal(10)),
+                  ScriptAction.Tap(id = "t2", x = NumericInput.Literal(20), y = NumericInput.Literal(20), postDelay = PostActionDelay.Off),
+                ),
+            ),
+          ),
+      )
+    val eiLoc = ActionBranchLocation(parentActionId = "if1", branchKind = BranchKind.IF_ELSE_IF, branchId = "ei1")
+
+    val inserted =
+      ActionTreeUtils.insertActionAt(
+        actions = listOf(ifBlock),
+        location = eiLoc,
+        index = 1,
+        newAction = ScriptAction.Delay(id = "d_mid"),
+      )
+    val insertedBranch = (inserted.first() as ScriptAction.IfBlock).elseIfBranches.first()
+    assertEquals(listOf("t1", "d_mid", "t2"), insertedBranch.actions.map { it.id })
+
+    val moved = ActionTreeUtils.moveSibling(inserted, eiLoc, index = 1, delta = -1)
+    assertEquals(
+      listOf("d_mid", "t1", "t2"),
+      (moved.first() as ScriptAction.IfBlock).elseIfBranches.first().actions.map { it.id },
+    )
+
+    val (afterDelete, undoRecord) = ActionTreeUtils.deleteActionById(moved, "t1")
+    assertNotNull(undoRecord)
+    assertEquals(BranchKind.IF_ELSE_IF, undoRecord!!.location.branchKind)
+    assertEquals("ei1", undoRecord.location.branchId)
+    assertEquals(1, undoRecord.index)
+
+    val restored =
+      ActionTreeUtils.insertActionAt(
+        actions = afterDelete,
+        location = undoRecord.location,
+        index = undoRecord.index,
+        newAction = undoRecord.action,
+      )
+    assertEquals(
+      listOf("d_mid", "t1", "t2"),
+      (restored.first() as ScriptAction.IfBlock).elseIfBranches.first().actions.map { it.id },
+    )
+
+    val withGlobal = ActionTreeUtils.applyGlobalDelayToAllPhysicalActions(restored)
+    val t2Updated = (withGlobal.first() as ScriptAction.IfBlock).elseIfBranches.first().actions[2] as ScriptAction.Tap
+    assertEquals(PostActionDelay.Global, t2Updated.postDelay)
+  }
+
+  @Test
+  fun ifNestingDepth_allowsSequentialIfEverywhereAndCapsOnlyAboveDepth3() {
+    val level3 = ScriptAction.IfBlock(id = "if3", conditionRoot = ConditionGroup("g3"))
+    val level2 =
+      ScriptAction.IfBlock(
+        id = "if2",
+        conditionRoot = ConditionGroup("g2"),
+        elseIfBranches =
+          listOf(
+            ScriptAction.ElseIfBranch(
+              id = "ei2",
+              conditionRoot = ConditionGroup("gei2"),
+              actions = listOf(level3),
+            ),
+          ),
+      )
+    val level1 =
+      ScriptAction.IfBlock(
+        id = "if1",
+        conditionRoot = ConditionGroup("g1"),
+        thenActions = listOf(level2),
+      )
+    val tree = listOf(level1)
+
+    // Sequential If at Root right after level1 -> depth 0 (< 3)
+    assertEquals(0, ActionTreeUtils.ifNestingDepthForLocation(tree, ActionBranchLocation()))
+    // Sequential If inside level1 Then (right after level2) -> depth 1 (< 3)
+    assertEquals(1, ActionTreeUtils.ifNestingDepthForLocation(tree, ActionBranchLocation("if1", BranchKind.IF_THEN)))
+    // Inside level2 ElseIf (right after level3) -> depth 2 (< 3)
+    assertEquals(2, ActionTreeUtils.ifNestingDepthForLocation(tree, ActionBranchLocation("if2", BranchKind.IF_ELSE_IF, "ei2")))
+    // Inside level3 Then -> depth 3 (== MAX_IF_NESTING_DEPTH -> blocked for adding 4th nested If)
+    assertEquals(3, ActionTreeUtils.ifNestingDepthForLocation(tree, ActionBranchLocation("if3", BranchKind.IF_THEN)))
+  }
+
+  @Test
+  fun actionValidator_validatesElseIfBranchCondition() {
+    val ifBlock =
+      ScriptAction.IfBlock(
+        id = "if1",
+        conditionRoot = ConditionGroup(id = "root_empty"),
+        elseIfBranches =
+          listOf(
+            ScriptAction.ElseIfBranch(
+              id = "ei1",
+              conditionRoot = ConditionGroup(id = "ei1_empty"),
+            ),
+          ),
+      )
+    val eiErrors = ActionValidator.validate(ifBlock, editingElseIfBranchId = "ei1")
+    assertTrue(eiErrors.containsKey("cond_group_ei1_empty"))
+    assertFalse(eiErrors.containsKey("cond_group_root_empty"))
+
+    val fullErrors = ActionValidator.validate(ifBlock)
+    assertTrue(fullErrors.containsKey("cond_group_root_empty"))
+    assertTrue(fullErrors.containsKey("cond_group_ei1_empty"))
   }
 }

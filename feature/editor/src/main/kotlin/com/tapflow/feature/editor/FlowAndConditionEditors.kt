@@ -65,7 +65,42 @@ fun IfBlockActionEditor(
       onRootChange = { updatedRoot -> onChange(action.copy(conditionRoot = updatedRoot)) },
       onIntent = onIntent,
       validationErrors = validationErrors,
-      previewPrefix = "Run 'Then' steps when:",
+      previewPrefix = "If:",
+    )
+  }
+}
+
+@Composable
+fun ElseIfConditionEditor(
+  branch: ScriptAction.ElseIfBranch,
+  variables: List<VariableDefinition>,
+  isPro: Boolean,
+  onChange: (ScriptAction.ElseIfBranch) -> Unit,
+  onIntent: (ScriptEditorUiIntent) -> Unit,
+  validationErrors: Map<String, String> = emptyMap(),
+) {
+  Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    EditorSectionCard(title = "Else If Branch Name") {
+      OutlinedTextField(
+        value = branch.name,
+        onValueChange = { onChange(branch.copy(name = it)) },
+        label = { Text("Branch Nickname (Optional)") },
+        placeholder = { Text("e.g. If Skip Button Appears") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().testTag("else_if_name_input_${branch.id}"),
+      )
+    }
+
+    ConditionGroupCardEditor(
+      root = branch.conditionRoot,
+      currentGroup = branch.conditionRoot,
+      depth = 1,
+      isPro = isPro,
+      variables = variables,
+      onRootChange = { updatedRoot -> onChange(branch.copy(conditionRoot = updatedRoot)) },
+      onIntent = onIntent,
+      validationErrors = validationErrors,
+      previewPrefix = "Otherwise, if:",
     )
   }
 }

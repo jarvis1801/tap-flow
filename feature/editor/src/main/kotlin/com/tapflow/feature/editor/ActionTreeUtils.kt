@@ -17,6 +17,7 @@ import com.tapflow.core.model.condition.LogicOperator
 enum class BranchKind {
   ROOT,
   IF_THEN,
+  IF_ELSE_IF,
   IF_ELSE,
   LOOP_BODY,
 }
@@ -25,6 +26,7 @@ enum class BranchKind {
 data class ActionBranchLocation(
   val parentActionId: String? = null,
   val branchKind: BranchKind = BranchKind.ROOT,
+  val branchId: String? = null,
 )
 
 @Immutable
@@ -89,6 +91,54 @@ fun ScriptAction.categoryGroup(): ActionCategoryGroup =
 
 object ActionTreeUtils {
 
+  const val MAX_IF_NESTING_DEPTH: Int = 3
+
+  fun ifNestingDepthForLocation(
+    actions: List<ScriptAction>,
+    location: ActionBranchLocation,
+  ): Int {
+    if (location.parentActionId == null || location.branchKind == BranchKind.ROOT) return 0
+    return findIfDepthRecursive(actions, location.parentActionId, currentIfDepth = 0) ?: 0
+  }
+
+  private fun findIfDepthRecursive(
+    actions: List<ScriptAction>,
+    targetParentId: String,
+    currentIfDepth: Int,
+  ): Int? {
+    for (action in actions) {
+      val nextDepth = if (action is ScriptAction.IfBlock) currentIfDepth + 1 else currentIfDepth
+      if (action.id == targetParentId) return nextDepth
+      when (action) {
+        is ScriptAction.IfBlock -> {
+          findIfDepthRecursive(action.thenActions, targetParentId, nextDepth)?.let { return it }
+          for (branch in action.elseIfBranches) {
+            findIfDepthRecursive(branch.actions, targetParentId, nextDepth)?.let { return it }
+          }
+          findIfDepthRecursive(action.elseActions, targetParentId, nextDepth)?.let { return it }
+        }
+        is ScriptAction.LoopBlock -> {
+          findIfDepthRecursive(action.bodyActions, targetParentId, nextDepth)?.let { return it }
+        }
+        else -> Unit
+      }
+    }
+    return null
+  }
+
+  fun countAllActions(actions: List<ScriptAction>): Int =
+    actions.sumOf { action ->
+      1 +
+        when (action) {
+          is ScriptAction.IfBlock ->
+            countAllActions(action.thenActions) +
+              action.elseIfBranches.sumOf { countAllActions(it.actions) } +
+              countAllActions(action.elseActions)
+          is ScriptAction.LoopBlock -> countAllActions(action.bodyActions)
+          else -> 0
+        }
+    }
+
   fun insertActionAt(
     actions: List<ScriptAction>,
     location: ActionBranchLocation,
@@ -102,7 +152,7 @@ object ActionTreeUtils {
     }
     return actions.map { action ->
       if (action.id == location.parentActionId) {
-        insertIntoContainer(action, location.branchKind, index, newAction)
+        insertIntoContainer(action, location, index, newAction)
       } else {
         recurseChildren(action) { branch ->
           insertActionAt(branch, location, index, newAction)
@@ -130,6 +180,9 @@ object ActionTreeUtils {
       when (action) {
         is ScriptAction.IfBlock -> {
           findActionById(action.thenActions, actionId)?.let { return it }
+          for (branch in action.elseIfBranches) {
+            findActionById(branch.actions, actionId)?.let { return it }
+          }
           findActionById(action.elseActions, actionId)?.let { return it }
         }
         is ScriptAction.LoopBlock -> {
@@ -168,17 +221,42 @@ object ActionTreeUtils {
               foundRecord = thenRemoved
               action.copy(thenActions = nextThen)
             } else {
-              val (nextElse, elseRemoved) =
-                deleteActionById(
-                  action.elseActions,
-                  actionId,
-                  ActionBranchLocation(action.id, BranchKind.IF_ELSE),
-                )
-              if (elseRemoved != null) {
-                foundRecord = elseRemoved
-                action.copy(elseActions = nextElse)
+              var branchRemoved: RemovedActionRecord? = null
+              val nextElseIfBranches =
+                action.elseIfBranches.map { branch ->
+                  if (branchRemoved != null) {
+                    branch
+                  } else {
+                    val (nextBranchActions, removed) =
+                      deleteActionById(
+                        branch.actions,
+                        actionId,
+                        ActionBranchLocation(action.id, BranchKind.IF_ELSE_IF, branch.id),
+                      )
+                    if (removed != null) {
+                      branchRemoved = removed
+                      branch.copy(actions = nextBranchActions)
+                    } else {
+                      branch
+                    }
+                  }
+                }
+              if (branchRemoved != null) {
+                foundRecord = branchRemoved
+                action.copy(elseIfBranches = nextElseIfBranches)
               } else {
-                action
+                val (nextElse, elseRemoved) =
+                  deleteActionById(
+                    action.elseActions,
+                    actionId,
+                    ActionBranchLocation(action.id, BranchKind.IF_ELSE),
+                  )
+                if (elseRemoved != null) {
+                  foundRecord = elseRemoved
+                  action.copy(elseActions = nextElse)
+                } else {
+                  action
+                }
               }
             }
           }
@@ -218,6 +296,17 @@ object ActionTreeUtils {
             when (location.branchKind) {
               BranchKind.IF_THEN ->
                 action.copy(thenActions = swapIndices(action.thenActions, index, index + delta))
+              BranchKind.IF_ELSE_IF ->
+                action.copy(
+                  elseIfBranches =
+                    action.elseIfBranches.map { branch ->
+                      if (branch.id == location.branchId) {
+                        branch.copy(actions = swapIndices(branch.actions, index, index + delta))
+                      } else {
+                        branch
+                      }
+                    },
+                )
               BranchKind.IF_ELSE ->
                 action.copy(elseActions = swapIndices(action.elseActions, index, index + delta))
               else -> action
@@ -269,6 +358,10 @@ object ActionTreeUtils {
         is ScriptAction.IfBlock ->
           action.copy(
             thenActions = applyGlobalDelayToAllPhysicalActions(action.thenActions),
+            elseIfBranches =
+              action.elseIfBranches.map { branch ->
+                branch.copy(actions = applyGlobalDelayToAllPhysicalActions(branch.actions))
+              },
             elseActions = applyGlobalDelayToAllPhysicalActions(action.elseActions),
           )
         is ScriptAction.LoopBlock ->
@@ -388,7 +481,16 @@ object ActionTreeUtils {
         "${PlainLanguageFormatter.textEngineLabel(action.engine)}: \"${action.textTemplate.take(28)}\""
       is ScriptAction.IfBlock -> {
         val label = action.name.trim().ifBlank { "Condition Check" }
-        "$label • ${action.thenActions.size} Then, ${action.elseActions.size} Else"
+        val parts = buildList {
+          add("${action.thenActions.size} Yes")
+          if (action.elseIfBranches.isNotEmpty()) {
+            add("${action.elseIfBranches.size} Else If")
+          }
+          if (action.elseActions.isNotEmpty()) {
+            add("${action.elseActions.size} Otherwise")
+          }
+        }
+        "$label • ${parts.joinToString(", ")}"
       }
       is ScriptAction.LoopBlock -> {
         val modeLabel =
@@ -433,30 +535,43 @@ object ActionTreeUtils {
 
   private fun insertIntoContainer(
     container: ScriptAction,
-    branchKind: BranchKind,
+    location: ActionBranchLocation,
     index: Int,
     newAction: ScriptAction,
   ): ScriptAction {
     return when (container) {
       is ScriptAction.IfBlock ->
-        when (branchKind) {
+        when (location.branchKind) {
           BranchKind.IF_THEN -> {
             val next = container.thenActions.toMutableList()
             next.add(index.coerceIn(0, next.size), newAction)
-            container.copy(thenActions = next)
+            container.copy(isExpanded = true, thenActions = next)
+          }
+          BranchKind.IF_ELSE_IF -> {
+            val nextBranches =
+              container.elseIfBranches.map { branch ->
+                if (branch.id == location.branchId) {
+                  val next = branch.actions.toMutableList()
+                  next.add(index.coerceIn(0, next.size), newAction)
+                  branch.copy(actions = next)
+                } else {
+                  branch
+                }
+              }
+            container.copy(isExpanded = true, elseIfBranches = nextBranches)
           }
           BranchKind.IF_ELSE -> {
             val next = container.elseActions.toMutableList()
             next.add(index.coerceIn(0, next.size), newAction)
-            container.copy(elseActions = next)
+            container.copy(isExpanded = true, elseActions = next)
           }
           else -> container
         }
       is ScriptAction.LoopBlock ->
-        if (branchKind == BranchKind.LOOP_BODY) {
+        if (location.branchKind == BranchKind.LOOP_BODY) {
           val next = container.bodyActions.toMutableList()
           next.add(index.coerceIn(0, next.size), newAction)
-          container.copy(bodyActions = next)
+          container.copy(isExpanded = true, bodyActions = next)
         } else {
           container
         }
@@ -472,6 +587,7 @@ object ActionTreeUtils {
       is ScriptAction.IfBlock ->
         action.copy(
           thenActions = transform(action.thenActions),
+          elseIfBranches = action.elseIfBranches.map { it.copy(actions = transform(it.actions)) },
           elseActions = transform(action.elseActions),
         )
       is ScriptAction.LoopBlock ->

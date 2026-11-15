@@ -49,7 +49,10 @@ fun isValidHexColor(hex: String): Boolean {
  */
 object ActionValidator {
 
-  fun validate(action: ScriptAction): Map<String, String> {
+  fun validate(
+    action: ScriptAction,
+    editingElseIfBranchId: String? = null,
+  ): Map<String, String> {
     val errors = linkedMapOf<String, String>()
     when (action) {
       is ScriptAction.Tap -> {
@@ -141,7 +144,17 @@ object ActionValidator {
       }
 
       is ScriptAction.IfBlock -> {
-        validateConditionGroup(action.conditionRoot, isRoot = true, errors = errors)
+        if (editingElseIfBranchId != null) {
+          val branch = action.elseIfBranches.firstOrNull { it.id == editingElseIfBranchId }
+          if (branch != null) {
+            validateElseIfBranch(branch, errors)
+          }
+        } else {
+          validateConditionGroup(action.conditionRoot, isRoot = true, errors = errors)
+          action.elseIfBranches.forEach { branch ->
+            validateElseIfBranch(branch, errors)
+          }
+        }
       }
 
       is ScriptAction.LoopBlock -> {
@@ -258,6 +271,13 @@ object ActionValidator {
         }
       }
     }
+  }
+
+  fun validateElseIfBranch(
+    branch: ScriptAction.ElseIfBranch,
+    errors: MutableMap<String, String>,
+  ) {
+    validateConditionGroup(branch.conditionRoot, isRoot = true, errors = errors)
   }
 
   private fun validateConditionGroup(
@@ -592,7 +612,7 @@ object PlainLanguageFormatter {
                 "(pick spot)"
               }
             val verb = if (leaf.inverted) "is NOT" else "is"
-            "Pixel $posText $verb $colorWord"
+            "screen color $posText $verb $colorWord"
           }
           ColorMatchMode.MULTI_POINT -> {
             val count = p.targets.size
@@ -626,7 +646,7 @@ object PlainLanguageFormatter {
       is ConditionPredicate.AppMatch -> {
         val appName = p.appLabel.ifBlank { p.packageName }.ifBlank { "selected app" }
         val verb = if (leaf.inverted) "is NOT open" else "is open"
-        "App $appName $verb"
+        "app $appName $verb"
       }
 
       is ConditionPredicate.VariableCompare -> {

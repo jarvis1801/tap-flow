@@ -226,6 +226,10 @@ object EntitlementValidator {
         gates += ProFeatureGate.IF_BLOCK
         scanConditionNode(action.conditionRoot, gates)
         action.thenActions.forEach { scanAction(it, gates) }
+        action.elseIfBranches.forEach { branch ->
+          scanConditionNode(branch.conditionRoot, gates)
+          branch.actions.forEach { scanAction(it, gates) }
+        }
         action.elseActions.forEach { scanAction(it, gates) }
       }
       is ScriptAction.LoopBlock -> {

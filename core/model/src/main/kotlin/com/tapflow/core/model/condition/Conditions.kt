@@ -224,15 +224,16 @@ object ConditionValidator {
     return when (predicate) {
       is ConditionPredicate.ColorMatch -> {
         val first = predicate.targets.firstOrNull()
-        if (first != null) {
-          "Color ${first.hexColor}@(${first.x},${first.y})"
+        if (first != null && first.x >= 0 && first.y >= 0) {
+          val colorText = first.hexColor.ifBlank { "selected color" }
+          "screen color at (${first.x}, ${first.y}) is $colorText"
         } else {
-          "ColorMatch"
+          "screen color matches"
         }
       }
-      is ConditionPredicate.ImageMatch -> "ImageMatch(${(predicate.similarityThreshold * 100).toInt()}%)"
+      is ConditionPredicate.ImageMatch -> "image appears (${(predicate.similarityThreshold * 100).toInt()}%)"
       is ConditionPredicate.AppMatch ->
-        "App=${predicate.appLabel.ifBlank { predicate.packageName }}"
+        "app ${predicate.appLabel.ifBlank { predicate.packageName }.ifBlank { "selected app" }} is open"
       is ConditionPredicate.VariableCompare -> {
         val op = predicate.stringOp?.name ?: predicate.numberOp?.name ?: predicate.booleanOp?.name ?: "=="
         "${predicate.variableKey} $op ${predicate.expectedValue}".trim()

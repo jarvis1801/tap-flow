@@ -26,11 +26,29 @@ data class Script(
 ) {
   fun requiresVision(): Boolean = actions.any(::actionRequiresVision)
 
+  fun totalActionCount(): Int = actions.sumOf(::countActionTree)
+
+  private fun countActionTree(action: ScriptAction): Int {
+    return 1 +
+      when (action) {
+        is ScriptAction.IfBlock ->
+          action.thenActions.sumOf(::countActionTree) +
+            action.elseIfBranches.sumOf { branch -> branch.actions.sumOf(::countActionTree) } +
+            action.elseActions.sumOf(::countActionTree)
+        is ScriptAction.LoopBlock -> action.bodyActions.sumOf(::countActionTree)
+        else -> 0
+      }
+  }
+
   private fun actionRequiresVision(action: ScriptAction): Boolean {
     return when (action) {
       is ScriptAction.IfBlock ->
         conditionRequiresVision(action.conditionRoot) ||
           action.thenActions.any(::actionRequiresVision) ||
+          action.elseIfBranches.any { branch ->
+            conditionRequiresVision(branch.conditionRoot) ||
+              branch.actions.any(::actionRequiresVision)
+          } ||
           action.elseActions.any(::actionRequiresVision)
       is ScriptAction.LoopBlock -> {
         val loopCond =

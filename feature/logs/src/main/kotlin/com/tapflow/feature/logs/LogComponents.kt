@@ -487,7 +487,12 @@ private fun ActionTimelineRow(entry: ActionLogEntry) {
                 modifier = Modifier.size(16.dp),
               )
               Text(
-                text = "IF Condition Trace (${if (trace.passed) "Matched" else "Did Not Match"})",
+                text =
+                  if (trace.actualSummary.startsWith("Matched ") || trace.actualSummary.startsWith("No rule matched")) {
+                    "IF / ELSE IF Trace (${trace.actualSummary})"
+                  } else {
+                    "IF Condition Trace (${if (trace.passed) "Matched" else "Did Not Match"})"
+                  },
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
               )

@@ -145,7 +145,7 @@ class ConditionEvaluator @Inject constructor(
             }
           val expected =
             predicate.targets.firstOrNull()?.let { t ->
-              "${t.hexColor}@(${t.x},${t.y}) ±${t.tolerance}"
+              "${t.hexColor} at (${t.x}, ${t.y}) ±${t.tolerance}"
             } ?: "ColorMatch(${predicate.mode.name})"
           Triple(result.matched, actual, expected)
         }

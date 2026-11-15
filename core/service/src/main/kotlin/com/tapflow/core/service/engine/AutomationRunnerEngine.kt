@@ -28,6 +28,7 @@ import com.tapflow.core.model.action.TextInjectionEngine
 import com.tapflow.core.model.action.VibratePattern
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.VariableType
+import com.tapflow.core.model.condition.ConditionGroup
 import com.tapflow.core.model.log.ActionLogEntry
 import com.tapflow.core.model.log.ConditionEvalTrace
 import com.tapflow.core.model.log.ExecutionSessionLog
@@ -529,9 +530,12 @@ class AutomationRunnerEngine @Inject constructor(
       }
 
       is ScriptAction.IfBlock -> {
-        val eval = conditionEvaluator.evaluate(action.conditionRoot, variables, shizukuPrefs.silentScreenshots)
-        condTrace = eval.trace
-        summary = "${action.name}: ${if (eval.passed) "THEN" else "ELSE"}"
+        val chainEval =
+          evaluateIfBlockChain(action) { group ->
+            conditionEvaluator.evaluate(group, variables, shizukuPrefs.silentScreenshots)
+          }
+        condTrace = chainEval.conditionTrace
+        summary = "${action.name.ifBlank { "If Block" }}: ${chainEval.branchLabel}"
         val ifEntry =
           ActionLogEntry(
             id = UUID.randomUUID().toString(),
@@ -547,8 +551,7 @@ class AutomationRunnerEngine @Inject constructor(
         controlHub.emitActionLog(ifEntry)
         onCountExecuted()
 
-        val branch = if (eval.passed) action.thenActions else action.elseActions
-        for ((idx, child) in branch.withIndex()) {
+        for ((idx, child) in chainEval.actionsToRun.withIndex()) {
           val childSignal =
             executeActionTreeStep(
               action = child,
@@ -1015,4 +1018,90 @@ class AutomationRunnerEngine @Inject constructor(
       bitmap.recycle()
     }
   }
+}
+
+internal data class IfChainEvaluation(
+  val branchLabel: String,
+  val actionsToRun: List<ScriptAction>,
+  val conditionTrace: ConditionEvalTrace,
+)
+
+internal suspend fun evaluateIfBlockChain(
+  action: ScriptAction.IfBlock,
+  evaluateCondition: suspend (ConditionGroup) -> ConditionEvalResult,
+): IfChainEvaluation {
+  val ifEval = evaluateCondition(action.conditionRoot)
+  val ifTrace = ifEval.trace.copy(label = "If")
+
+  if (ifEval.passed) {
+    val trace =
+      if (action.elseIfBranches.isEmpty()) {
+        ifTrace
+      } else {
+        ConditionEvalTrace(
+          nodeId = "${action.id}_chain",
+          label = action.name.trim().ifBlank { "If / Else If Chain" },
+          passed = true,
+          actualSummary = "Matched If",
+          expectedSummary = "1 If + ${action.elseIfBranches.size} Else If rules",
+          children = listOf(ifTrace),
+        )
+      }
+    return IfChainEvaluation(
+      branchLabel = "THEN",
+      actionsToRun = action.thenActions,
+      conditionTrace = trace,
+    )
+  }
+
+  val branchTraces = mutableListOf(ifTrace)
+  for ((branchIdx, branch) in action.elseIfBranches.withIndex()) {
+    val branchNum = branchIdx + 1
+    val defaultLabel = "Else If #$branchNum"
+    val branchLabel =
+      if (branch.name.isNotBlank()) "$defaultLabel (${branch.name.trim()})" else defaultLabel
+    val branchEval = evaluateCondition(branch.conditionRoot)
+    val branchTrace = branchEval.trace.copy(label = branchLabel)
+    branchTraces += branchTrace
+    if (branchEval.passed) {
+      return IfChainEvaluation(
+        branchLabel = defaultLabel,
+        actionsToRun = branch.actions,
+        conditionTrace =
+          ConditionEvalTrace(
+            nodeId = "${action.id}_chain",
+            label = action.name.trim().ifBlank { "If / Else If Chain" },
+            passed = true,
+            actualSummary = "Matched $defaultLabel",
+            expectedSummary = "Evaluated ${branchTraces.size} of ${1 + action.elseIfBranches.size} rules",
+            children = branchTraces,
+          ),
+      )
+    }
+  }
+
+  val finalTrace =
+    if (action.elseIfBranches.isEmpty()) {
+      ifTrace
+    } else {
+      ConditionEvalTrace(
+        nodeId = "${action.id}_chain",
+        label = action.name.trim().ifBlank { "If / Else If Chain" },
+        passed = false,
+        actualSummary =
+          if (action.elseActions.isNotEmpty()) {
+            "No rule matched -> Otherwise (Else)"
+          } else {
+            "No rule matched"
+          },
+        expectedSummary = "Evaluated ${branchTraces.size} rules",
+        children = branchTraces,
+      )
+    }
+
+  return IfChainEvaluation(
+    branchLabel = if (action.elseActions.isNotEmpty()) "ELSE" else "SKIPPED",
+    actionsToRun = action.elseActions,
+    conditionTrace = finalTrace,
+  )
 }

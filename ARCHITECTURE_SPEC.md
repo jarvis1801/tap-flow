@@ -273,11 +273,8 @@ Page Architecture & Navigation Flow:
 
   Action Tree Viewport (Inline Nested Architecture):
     List Layout & Insertion Rules:
-      - `LazyColumn` rendering the sequential top-level action list, with inline indented child action containers inside `If Block` (`Then Branch` & `Else Branch`) and `Loop Block` (`Body Branch`).
-      - Persistent `[+ Add Action]` insertion buttons located at:
-          - The head of every branch (Index 0).
-          - Between every adjacent action item within the same branch.
-          - The tail of every branch (Appends to the end of that branch).
+      - `LazyColumn` rendering the sequential top-level action list, with inline indented child action containers inside `If Block` (`If Yes / Then Branch`, `Otherwise, if / Else If Branches`, & optional `Otherwise / Else Branch`) and `Loop Block` (`Body Branch`).
+      - Persistent `+ Add Step` / `[+ Insert]` buttons located inside every branch and between sibling actions, allowing sequential `IfBlock` placement and nesting up to 3 levels deep.
       - Branch Collapse/Expand: Each `If Block` and `Loop Block` supports collapsing/expanding its child branches to stay readable on mobile portrait screens.
     Action Item Card UI:
       - Leading Section: Hierarchical Step Index Number (e.g., "#01", "#01.1"), Action Type Badge (Color-coded icon + Label).
@@ -400,7 +397,7 @@ Flow Control:
         - Variable Comparison [Pro]:
             - String (`eq`, `ne`, `contains`, `length gt/lt/eq`), Number (`gt`, `gte`, `lt`, `lte`, `eq`, `ne`), Boolean (`isTrue`, `isFalse`).
       Child Blocks:
-        - Then Branch & Else Branch.
+        - `Then Branch` ("If Yes, do these:"), ordered `Else If Branches` ("Otherwise, if:"), and optional `Else Branch` ("Otherwise (if none above matched):"). Mutually exclusive evaluation exits on the first matching branch.
 
   - Delay:
       Parameters:
@@ -531,7 +528,8 @@ Core Domain Models (:core:model - Zero Android Dependencies):
 
   ScriptAction (Sealed Interface - Tree Node):
     - Tap, DoubleTap, LongPress, MultiTouch, SwipeDrag, InputText
-    - IfBlock(id, name, conditionRoot: ConditionGroup, thenActions: List<ScriptAction>, elseActions: List<ScriptAction>)
+    - IfBlock(id, name, conditionRoot: ConditionGroup, thenActions: List<ScriptAction>, elseIfBranches: List<ElseIfBranch>, elseActions: List<ScriptAction>)
+    - ElseIfBranch(id, name, conditionRoot: ConditionGroup, actions: List<ScriptAction>)
     - LoopBlock(id, name, mode: LoopMode, safeguards: LoopSafeguards, bodyActions: List<ScriptAction>)
     - Delay(id, config: DelayConfig), Break(id), Continue(id), EndScript(id)
     - KeyEvent, LaunchApp, ForceStopApp, ClipboardOp, Vibrate, PlayAlertSound

@@ -290,12 +290,22 @@ sealed interface ScriptAction {
 
   @Immutable
   @Serializable
+  data class ElseIfBranch(
+    val id: String,
+    val name: String = "",
+    val conditionRoot: ConditionGroup,
+    val actions: List<ScriptAction> = emptyList(),
+  )
+
+  @Immutable
+  @Serializable
   @SerialName("if_block")
   data class IfBlock(
     override val id: String,
     val name: String = "If Condition",
     val conditionRoot: ConditionGroup,
     val thenActions: List<ScriptAction> = emptyList(),
+    val elseIfBranches: List<ElseIfBranch> = emptyList(),
     val elseActions: List<ScriptAction> = emptyList(),
     val isExpanded: Boolean = true,
   ) : ScriptAction
