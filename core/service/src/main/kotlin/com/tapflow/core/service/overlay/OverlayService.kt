@@ -78,6 +78,7 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.database.asset.ScriptAssetManager
 import com.tapflow.core.database.repository.InspectRepository
 import com.tapflow.core.database.repository.PipelineRepository
@@ -91,7 +92,7 @@ import com.tapflow.core.model.action.SwipeTrajectoryMode
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.DurationInput
 import com.tapflow.core.model.common.NumericInput
-import com.tapflow.core.model.inspect.InspectCrop
+import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.inspect.InspectGroup
 import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.InspectPixel
@@ -103,6 +104,7 @@ import com.tapflow.core.service.engine.PipelineExecutionEngine
 import com.tapflow.core.service.engine.RunnerControlHub
 import com.tapflow.core.service.engine.RunnerPhase
 import com.tapflow.core.service.projection.MediaProjectionBridge
+import com.tapflow.core.service.projection.MediaProjectionService
 import com.tapflow.core.service.projection.ScreenCaptureState
 import com.tapflow.core.service.shizuku.ShizukuManager
 import com.tapflow.core.service.theme.TapFlowTheme
@@ -150,9 +152,9 @@ class OverlayService :
     private const val NOTIFICATION_ID = 3101
     private const val MOVE_THRESHOLD_PX = 24f
     private const val LONG_PRESS_THRESHOLD_MS = 450L
-    private const val DEFAULT_INSPECT_CROP_SIZE_PX = 64
   }
 
+  @Inject lateinit var entitlementRepository: EntitlementRepository
   @Inject lateinit var preferencesRepository: TapFlowPreferencesRepository
   @Inject lateinit var scriptRepository: ScriptRepository
   @Inject lateinit var pipelineRepository: PipelineRepository
@@ -469,17 +471,11 @@ class OverlayService :
   }
 
   override fun onDestroy() {
-    edgeSnapAnimator?.cancel()
-    displayListener?.let { listener ->
-      val dm = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
-      runCatching { dm?.unregisterDisplayListener(listener) }
-    }
-    displayListener = null
+    runnerControlHub.stopExecution()
+    accessibilityBridge.forceReleaseActiveStroke()
+    stopMediaProjectionIfNotStreamingToDesktop()
+    detachOverlayWindowsAndListeners()
     serviceScope.cancel()
-    captureRootView?.let { runCatching { windowManager.removeViewImmediate(it) } }
-    dockComposeView?.let { runCatching { windowManager.removeViewImmediate(it) } }
-    captureRootView = null
-    dockComposeView = null
     lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
     store.clear()
     super.onDestroy()
@@ -519,10 +515,12 @@ class OverlayService :
         setContent {
           val state by uiState.collectAsStateWithLifecycle()
           val prefs by preferencesRepository.preferencesFlow.collectAsStateWithLifecycle(initialValue = AppPreferences())
+          val entitlementState by entitlementRepository.entitlementState.collectAsStateWithLifecycle()
           val provider = optionalContentProvider.orElse(null)
           TapFlowTheme(
             darkMode = prefs.darkMode,
             themePalette = prefs.themePalette,
+            isLifetimePro = entitlementState is EntitlementState.ProLifetime,
           ) {
             if (provider != null) {
               provider.CaptureLayerFeedbackContent(state)
@@ -578,10 +576,12 @@ class OverlayService :
         setContent {
           val state by uiState.collectAsStateWithLifecycle()
           val prefs by preferencesRepository.preferencesFlow.collectAsStateWithLifecycle(initialValue = AppPreferences())
+          val entitlementState by entitlementRepository.entitlementState.collectAsStateWithLifecycle()
           val provider = optionalContentProvider.orElse(null)
           TapFlowTheme(
             darkMode = prefs.darkMode,
             themePalette = prefs.themePalette,
+            isLifetimePro = entitlementState is EntitlementState.ProLifetime,
           ) {
             if (provider != null) {
               provider.FloatingDockContent(state, callbacks)
@@ -1294,7 +1294,6 @@ class OverlayService :
           foregroundPackage = foregroundPackage,
           tapX = startX,
           tapY = startY,
-          includeDefaultCrop = false,
         )
       } finally {
         bitmap.recycle()
@@ -1317,7 +1316,6 @@ class OverlayService :
         foregroundPackage = foregroundPackage,
         tapX = tapX,
         tapY = tapY,
-        includeDefaultCrop = true,
       )
       uiState.update { it.copy(inspectedItemCount = it.inspectedItemCount + 1) }
     } finally {
@@ -1331,7 +1329,6 @@ class OverlayService :
     foregroundPackage: String,
     tapX: Int,
     tapY: Int,
-    includeDefaultCrop: Boolean,
   ) {
     ensureInspectGroupPersisted(groupId)
     val itemId = UUID.randomUUID().toString()
@@ -1352,33 +1349,6 @@ class OverlayService :
         hexColor = hexColor,
       )
 
-    val crops =
-      if (includeDefaultCrop) {
-        val cropSize = DEFAULT_INSPECT_CROP_SIZE_PX
-        val cropX = (safeX - cropSize / 2).coerceIn(0, (bitmap.width - cropSize).coerceAtLeast(0))
-        val cropY = (safeY - cropSize / 2).coerceIn(0, (bitmap.height - cropSize).coerceAtLeast(0))
-        val cropW = cropSize.coerceAtMost(bitmap.width)
-        val cropH = cropSize.coerceAtMost(bitmap.height)
-        val cropFile = File(scriptAssetManager.getInspectCropsDir(), "crop_${itemId}.png")
-        if (visionEngine.cropAndSaveLosslessPng(bitmap, cropX, cropY, cropW, cropH, cropFile)) {
-          listOf(
-            InspectCrop(
-              id = UUID.randomUUID().toString(),
-              label = "Target ${cropW}x${cropH}",
-              cropPngPath = cropFile.absolutePath,
-              x = cropX,
-              y = cropY,
-              width = cropW,
-              height = cropH,
-            ),
-          )
-        } else {
-          emptyList()
-        }
-      } else {
-        emptyList()
-      }
-
     val pkg = foregroundPackage
     val appLabel = resolveAppLabel(pkg)
 
@@ -1392,7 +1362,7 @@ class OverlayService :
         appName = appLabel,
         packageName = pkg,
         pixels = listOf(pixelEntry),
-        crops = crops,
+        crops = emptyList(),
         createdAtMs = System.currentTimeMillis(),
       ),
     )
@@ -1490,9 +1460,41 @@ class OverlayService :
   }
 
   private fun closeOverlayService() {
-    setCaptureLayerInterceptable(visible = false, interceptable = false)
+    runnerControlHub.stopExecution()
+    accessibilityBridge.forceReleaseActiveStroke()
+    stopMediaProjectionIfNotStreamingToDesktop()
+    detachOverlayWindowsAndListeners()
     stopForeground(STOP_FOREGROUND_REMOVE)
     stopSelf()
+  }
+
+  private fun stopMediaProjectionIfNotStreamingToDesktop() {
+    if (!mediaProjectionBridge.isDesktopLiveStreamActive.value) {
+      runCatching { stopService(Intent(this, MediaProjectionService::class.java)) }
+    }
+  }
+
+  private fun detachOverlayWindowsAndListeners() {
+    edgeSnapAnimator?.cancel()
+    edgeSnapAnimator = null
+    displayListener?.let { listener ->
+      val dm = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+      runCatching { dm?.unregisterDisplayListener(listener) }
+    }
+    displayListener = null
+    setCaptureLayerInterceptable(visible = false, interceptable = false)
+    captureRootView?.let { root ->
+      root.setOnTouchListener(null)
+      runCatching { windowManager.removeViewImmediate(root) }
+    }
+    dockComposeView?.let { dock ->
+      runCatching { windowManager.removeViewImmediate(dock) }
+    }
+    captureRootView = null
+    captureFeedbackComposeView = null
+    captureLayoutParams = null
+    dockComposeView = null
+    dockLayoutParams = null
   }
 
   private fun bringMainActivityToFrontPreservingState() {

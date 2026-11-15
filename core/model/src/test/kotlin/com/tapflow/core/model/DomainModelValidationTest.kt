@@ -133,6 +133,7 @@ class DomainModelValidationTest {
       listOf(
         ProFeatureGate.DESKTOP_CONSOLE,
         ProFeatureGate.DATA_BACKUP,
+        ProFeatureGate.AMOLED_THEME,
       )
 
     trialUnlockedGates.forEach { gate ->

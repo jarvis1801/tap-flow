@@ -382,14 +382,17 @@ class TapFlowLocalServer @Inject constructor(
     if (!anyStreaming) {
       liveStreamJob?.cancel()
       liveStreamJob = null
+      mediaProjectionBridge.setDesktopLiveStreamActive(false)
       _status.update { it.copy(isLiveStreaming = false) }
       return
     }
     if (liveStreamJob?.isActive == true) {
+      mediaProjectionBridge.setDesktopLiveStreamActive(true)
       _status.update { it.copy(isLiveStreaming = true) }
       return
     }
 
+    mediaProjectionBridge.setDesktopLiveStreamActive(true)
     _status.update { it.copy(isLiveStreaming = true) }
     liveStreamJob =
       scope.launch {
@@ -460,6 +463,7 @@ class TapFlowLocalServer @Inject constructor(
 
     runCatching { embeddedEngine?.stop(gracePeriodMillis = 250L, timeoutMillis = 1_000L) }
     embeddedEngine = null
+    mediaProjectionBridge.setDesktopLiveStreamActive(false)
 
     _status.update {
       it.copy(

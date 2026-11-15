@@ -46,8 +46,15 @@ class MediaProjectionBridge @Inject constructor() {
   private val _captureState = MutableStateFlow<ScreenCaptureState>(ScreenCaptureState.Idle)
   val captureState: StateFlow<ScreenCaptureState> = _captureState.asStateFlow()
 
+  private val _isDesktopLiveStreamActive = MutableStateFlow(false)
+  val isDesktopLiveStreamActive: StateFlow<Boolean> = _isDesktopLiveStreamActive.asStateFlow()
+
   val isCaptureActive: Boolean
     get() = _captureState.value is ScreenCaptureState.Active
+
+  fun setDesktopLiveStreamActive(active: Boolean) {
+    _isDesktopLiveStreamActive.value = active
+  }
 
   fun createWholeScreenCaptureIntent(manager: MediaProjectionManager): Intent =
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {

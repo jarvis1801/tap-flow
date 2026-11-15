@@ -13,6 +13,7 @@ import com.tapflow.core.database.repository.InspectRepository
 import com.tapflow.core.database.repository.PipelineRepository
 import com.tapflow.core.database.repository.ScriptRepository
 import com.tapflow.core.datastore.AppPreferences
+import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.EntitlementValidator
@@ -709,6 +710,15 @@ class HomeViewModel @Inject constructor(
         }
       }
       is HomeUiIntent.SetDarkMode -> {
+        if (intent.option == DarkModeOption.AMOLED) {
+          val isLifetimePro =
+            entitlementRepository.entitlementState.value is EntitlementState.ProLifetime &&
+              entitlementRepository.canUseFeature(ProFeatureGate.AMOLED_THEME)
+          if (!isLifetimePro) {
+            sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.AMOLED_THEME.displayName))
+            return
+          }
+        }
         viewModelScope.launch { preferencesRepository.setDarkMode(intent.option) }
       }
       is HomeUiIntent.SetThemePalette -> {

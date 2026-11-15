@@ -35,11 +35,11 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.rounded.StayCurrentLandscape
 import androidx.compose.material.icons.rounded.StayCurrentPortrait
 import androidx.compose.material.icons.rounded.TabletAndroid
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -85,11 +85,14 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.tapflow.core.database.R as DbR
 import com.tapflow.core.model.inspect.InspectCrop
 import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.InspectPixel
 import com.tapflow.core.model.inspect.ScreenOrientation
+import java.io.File
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @Composable
@@ -232,6 +235,17 @@ fun InspectStudioContent(
     )
   }
 
+  state.inspectedMarkerPopup?.let { popup ->
+    MarkerInfoPopupDialog(
+      popup = popup,
+      loadedImage = loadedImage,
+      onDelete = { id, label, isCrop ->
+        onIntent(InspectStudioUiIntent.RequestDeleteMarker(id = id, label = label, isCrop = isCrop))
+      },
+      onDismiss = { onIntent(InspectStudioUiIntent.DismissMarkerInfo) },
+    )
+  }
+
   state.markerToDelete?.let { marker ->
     AlertDialog(
       onDismissRequest = { onIntent(InspectStudioUiIntent.DismissDeleteMarker) },
@@ -336,7 +350,7 @@ private fun StudioTopBar(
         ) {
           Icon(
             imageVector =
-              if (markersVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff,
+              if (markersVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
             contentDescription = if (markersVisible) "Hide markers" else "Show markers",
           )
         }
@@ -820,6 +834,181 @@ private fun StudioSaveConfirmationSheet(
       Spacer(modifier = Modifier.height(12.dp))
     }
   }
+}
+
+@Composable
+private fun MarkerInfoPopupDialog(
+  popup: StudioMarkerInfoPopup,
+  loadedImage: StudioLoadedImage?,
+  onDelete: (id: String, label: String, isCrop: Boolean) -> Unit,
+  onDismiss: () -> Unit,
+) {
+  AlertDialog(
+    onDismissRequest = onDismiss,
+    modifier = Modifier.testTag("studio_marker_info_dialog"),
+    title = {
+      Text(
+        text =
+          when (popup) {
+            is StudioMarkerInfoPopup.Pixel -> popup.pixel.label.ifBlank { "Saved Pixel Marker" }
+            is StudioMarkerInfoPopup.Crop -> popup.crop.label.ifBlank { "Saved Crop Marker" }
+          },
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis,
+      )
+    },
+    text = {
+      when (popup) {
+        is StudioMarkerInfoPopup.Pixel -> {
+          val px = popup.pixel
+          val rgbTriple = parseRgbBreakdown(px.hexColor)
+          Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+              Box(
+                modifier =
+                  Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .background(parseStudioHexColor(px.hexColor))
+                    .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape),
+              )
+              Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                  text = px.hexColor.uppercase(Locale.US),
+                  style = MaterialTheme.typography.titleMedium,
+                  fontFamily = FontFamily.Monospace,
+                  fontWeight = FontWeight.Bold,
+                )
+                Text(
+                  text = "RGB (${rgbTriple.first}, ${rgbTriple.second}, ${rgbTriple.third})",
+                  style = MaterialTheme.typography.bodySmall,
+                  fontFamily = FontFamily.Monospace,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+              }
+            }
+
+            MarkerInfoDetailRow(label = "Coordinates", value = "(${px.x}, ${px.y})")
+            MarkerInfoDetailRow(label = "Color Tolerance", value = "±${px.tolerance}")
+          }
+        }
+
+        is StudioMarkerInfoPopup.Crop -> {
+          val crop = popup.crop
+          val cropFile = remember(crop.cropPngPath) {
+            crop.cropPngPath.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.exists() }
+          }
+          Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Box(
+              modifier =
+                Modifier
+                  .fillMaxWidth()
+                  .height(112.dp)
+                  .clip(RoundedCornerShape(12.dp))
+                  .background(Color(0xFF14181F))
+                  .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp)),
+              contentAlignment = Alignment.Center,
+            ) {
+              if (cropFile != null) {
+                AsyncImage(
+                  model = cropFile,
+                  contentDescription = crop.label.ifBlank { "Saved crop thumbnail" },
+                  modifier = Modifier.fillMaxSize().padding(6.dp),
+                )
+              } else if (loadedImage != null) {
+                Canvas(modifier = Modifier.fillMaxSize().padding(6.dp)) {
+                  val img = loadedImage.imageBitmap
+                  val sx = crop.x.coerceIn(0, (img.width - 1).coerceAtLeast(0))
+                  val sy = crop.y.coerceIn(0, (img.height - 1).coerceAtLeast(0))
+                  val sw = crop.width.coerceIn(1, (img.width - sx).coerceAtLeast(1))
+                  val sh = crop.height.coerceIn(1, (img.height - sy).coerceAtLeast(1))
+                  drawImage(
+                    image = img,
+                    srcOffset = IntOffset(sx, sy),
+                    srcSize = IntSize(sw, sh),
+                    dstOffset = IntOffset.Zero,
+                    dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                    filterQuality = FilterQuality.None,
+                  )
+                }
+              } else {
+                Text(
+                  text = "${crop.width} × ${crop.height} px",
+                  style = MaterialTheme.typography.labelLarge,
+                  fontFamily = FontFamily.Monospace,
+                  color = Color.White.copy(alpha = 0.7f),
+                )
+              }
+            }
+
+            MarkerInfoDetailRow(label = "Origin (X, Y)", value = "(${crop.x}, ${crop.y})")
+            MarkerInfoDetailRow(label = "Size (W × H)", value = "${crop.width} × ${crop.height} px")
+            MarkerInfoDetailRow(
+              label = "Similarity Threshold",
+              value = "${(crop.similarityThreshold * 100f).roundToInt()}%",
+            )
+          }
+        }
+      }
+    },
+    confirmButton = {
+      TextButton(onClick = onDismiss, modifier = Modifier.testTag("studio_marker_info_close")) {
+        Text("Close")
+      }
+    },
+    dismissButton = {
+      TextButton(
+        onClick = {
+          when (popup) {
+            is StudioMarkerInfoPopup.Pixel ->
+              onDelete(popup.pixel.id, popup.pixel.label.ifBlank { popup.pixel.hexColor }, false)
+            is StudioMarkerInfoPopup.Crop ->
+              onDelete(popup.crop.id, popup.crop.label.ifBlank { "${popup.crop.width}x${popup.crop.height}" }, true)
+          }
+        },
+        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+        modifier = Modifier.testTag("studio_marker_info_delete"),
+      ) {
+        Icon(Icons.Filled.DeleteOutline, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text("Delete")
+      }
+    },
+  )
+}
+
+@Composable
+private fun MarkerInfoDetailRow(
+  label: String,
+  value: String,
+) {
+  Row(
+    modifier = Modifier.fillMaxWidth(),
+    horizontalArrangement = Arrangement.SpaceBetween,
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Text(
+      text = label,
+      style = MaterialTheme.typography.bodySmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(
+      text = value,
+      style = MaterialTheme.typography.bodyMedium,
+      fontFamily = FontFamily.Monospace,
+      fontWeight = FontWeight.SemiBold,
+    )
+  }
+}
+
+private fun parseRgbBreakdown(hex: String): Triple<Int, Int, Int> {
+  val clean = hex.removePrefix("#").trim()
+  val parsed = clean.toLongOrNull(16) ?: return Triple(0, 0, 0)
+  val rgb = parsed.toInt()
+  return Triple((rgb shr 16) and 0xFF, (rgb shr 8) and 0xFF, rgb and 0xFF)
 }
 
 @Preview(showBackground = true)

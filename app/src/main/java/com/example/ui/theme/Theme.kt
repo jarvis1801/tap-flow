@@ -10,13 +10,15 @@ import com.tapflow.core.service.theme.resolveIsDarkTheme
 fun TapFlowTheme(
   darkMode: DarkModeOption = DarkModeOption.SYSTEM,
   themePalette: ThemePaletteOption = ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
-  darkTheme: Boolean = resolveIsDarkTheme(darkMode),
+  isLifetimePro: Boolean = false,
+  darkTheme: Boolean = resolveIsDarkTheme(darkMode, isLifetimePro),
   dynamicColor: Boolean = themePalette == ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
   content: @Composable () -> Unit,
 ) {
   SharedTapFlowTheme(
     darkMode = darkMode,
     themePalette = themePalette,
+    isLifetimePro = isLifetimePro,
     darkTheme = darkTheme,
     dynamicColor = dynamicColor,
     typography = TapFlowTypography,

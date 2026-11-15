@@ -31,13 +31,14 @@ Entitlement Matrix (Free vs. TapFlow Pro):
   - TapFlow Lifetime Pro Exclusive (`EntitlementState.ProLifetime` ONLY — Excluded from 7-Day Trial):
       - Desktop Studio Bridge: Ktor WebSocket Server (`Console Tab`, `ProFeatureGate.DESKTOP_CONSOLE`).
       - Data Backup & Transfer: `.tapflow` Export/Import (`Settings Tab`, `ProFeatureGate.DATA_BACKUP`).
+      - AMOLED Pure Black Theme (`Settings Tab`, `ProFeatureGate.AMOLED_THEME`).
 
 Paywall & Guard Behavior:
   - Paywall Screen / Sheet (`Route.Paywall`):
       - Displays remaining Trial countdown (`"7-Day Trial Active (Xd Xh left)"`) OR expired banner, feature comparison checklist distinguishing `[7-Day Trial + Lifetime]` vs `[Lifetime Only]`, localized One-Time Price fetched from `ProductDetails` (handling both `oneTimePurchaseOfferDetailsList` and legacy fallback), `[Activate 7-Day Free Trial]` (hidden once trial is active/used), `[Unlock Lifetime Pro]` CTA, and `[Restore Purchase]`.
-      - When an active `ProTrial` user opens `Route.Paywall`, highlights `"Upgrade to Lifetime Pro to unlock Desktop Console & Data Backup"`.
+      - When an active `ProTrial` user opens `Route.Paywall`, highlights `"Upgrade to Lifetime Pro to unlock Desktop Console, Data Backup & AMOLED Theme"`.
   - Soft Feature Guard:
-      - Tapping any Pro-locked feature (or tapping Desktop Console / Data Backup without `ProLifetime`) opens `Route.Paywall`.
+      - Tapping any Pro-locked feature (or tapping Desktop Console, Data Backup, or AMOLED Theme without `ProLifetime`) opens `Route.Paywall`.
       - Attempting to Run (`▶`) an imported/existing Script or Pipeline that contains Pro actions after trial expiration blocks execution and prompts `Route.Paywall` (identifying which Pro features are used).
 
 ---
@@ -232,7 +233,7 @@ Tabs:
             - Shows current tier: `[Pro Lifetime Active ✓]` / `[7-Day Trial: Xd Xh Left]` / `[Free Plan]`.
             - Actions: `[Upgrade to Lifetime Pro]`, `[Start 7-Day Free Trial]` (if unused), `[Restore Google Play Purchase]`.
         - Appearance:
-            - Dark Mode: System Default / Force Light / Force Dark.
+            - Dark Mode: System Default / Force Light / Force Dark / AMOLED Black (`#000000` surfaces, strictly gated to `EntitlementState.ProLifetime` ONLY via `ProFeatureGate.AMOLED_THEME`; falls back cleanly if not Lifetime Pro and routes Trial/Free taps to `Route.Paywall`).
             - Theme Palette: Dynamic Material You (Android 12+) / Custom Color Accent Schemes.
         - Localization:
             - Language Picker: English / Traditional Chinese (繁體中文) / Simplified Chinese (简体中文).
@@ -467,7 +468,8 @@ Pipeline Log Page:
   - Outer Pipeline Card + Inner Nested Script Log Cards with run badges (`Run #1`, `Run #2`).
 Inspect Studio Page:
   - Fullscreen Interactive Canvas loading the full-screen 100% Lossless PNG via Coil; 100%–1000% Pinch-to-Zoom with Pixel Grid at high zoom, two-finger Pan, single-finger Inspect Drag.
-  - Top Bar: Back (unsaved check), Title (`Group / Item`), Toggle Markers, Mode Switcher (`Pixel Inspect` / `Image Crop [Pro]`).
+  - Top Bar: Back (unsaved check), Title (`Group / Item`), Saved Markers On/Off toggle (`Icons.Rounded.Visibility` / `VisibilityOff`, default ON), Mode Switcher (`Pixel Inspect` / `Image Crop [Pro]`).
+  - Saved Marker Overlays & Info Popup: When markers are visible, draws all saved `InspectPixel` dots (color-filled + high-contrast ring) and `InspectCrop` rectangles (translucent fill + corners + compact label badge). Single-tapping a saved marker opens a Material 3 Info Popup (Pixel swatch/HEX/RGB/(X,Y)/tolerance or Crop PNG thumbnail/(X,Y)/W×H/threshold + `[Delete]` / `[Close]`) WITHOUT overwriting the user's active unsaved picker reticle or crop box.
   - Dynamic Touch Loupe: Smart-flips above/below finger; 10x lens + HEX + (X, Y) in Pixel Mode; live rectangle + (W × H) in Crop Mode.
   - Bottom Control Bar: Color Swatch + HEX + ±1px Nudge D-Pad + Save in Pixel Mode; Thumbnail + Crop Box Nudge/Resize + Save (lossless PNG) in Crop Mode.
 
@@ -494,8 +496,9 @@ Touch Intercept & Passthrough Execution State Machine (Modes 2, 3, 4):
 Modes:
   - Mode 1 (Runner): Play/Pause, Previous (`⏮`: decrements top-level action index only; does NOT roll back Variables or external app state), Progress `[Current Top-Level Action / Total Top-Level Actions]`, Next (`⏭`: executes 1 top-level action/block atomically), Stop (`⏹`), Close (`✕`).
   - Mode 2 (Gesture Picker): Activated via `[Pick via Overlay]` (`moveTaskToBack`). Captures 1 gesture via state machine, writes result to singleton `GesturePickerBridge`, and brings TapFlow back via `FLAG_ACTIVITY_REORDER_TO_FRONT | FLAG_ACTIVITY_SINGLE_TOP` (or `PendingIntent` with `ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS`) without resetting the open Action BottomSheet.
-  - Mode 3 (Live Script Recorder): Requires `MediaProjection` (or Shizuku Silent Screenshot). Starts in `STANDBY` (passthrough allowed) so users can open their target app before tapping `[Record]`. Supports `Start -> Pause -> Resume -> Stop` (`OverlaySessionState`); `[Pause]` preserves recorded actions and `InspectGroup`, adjusts inter-action pause gaps, and allows free navigation; `[Stop]`/`[Close]` compiles and saves the `Script` and returns to `STANDBY`/TapFlow. Starts inter-action delay timer ONLY after the 1st gesture executes.
-  - Mode 4 (Live Image & Target Inspector [Pro]): Requires `MediaProjection` (or Shizuku Silent Screenshot). Starts in `STANDBY` (passthrough allowed) until user taps `[Inspect]`, which creates a new `InspectGroup`. Supports `Start -> Pause -> Resume -> Stop`; `[Pause]` re-enables full touch passthrough while keeping the active `InspectGroup` open so `[Resume]` continues adding items to the exact same group, and `[Stop]` finalizes/clears the group session back to `STANDBY`. During active inspection, taps/long-presses replay cleanly to the underlying app AND capture full-screen 100% Lossless PNG + Foreground App Name/Package + Pixel + `64 × 64 px` Crop, while swipe/drag scrolls replay cleanly to the underlying app without creating spurious tap snapshots.
+  - Mode 3 (Live Script Recorder): Requires `MediaProjection` (or Shizuku Silent Screenshot). Starts in `STANDBY` (passthrough allowed) so users can open their target app before tapping `[Record]`. Supports `Start -> Pause -> Resume -> Stop` (`OverlaySessionState`); `[Pause]` preserves recorded actions and `InspectGroup`, adjusts inter-action pause gaps, and allows free navigation; `[Stop]`/`[Close]` compiles and saves the `Script` and returns to `STANDBY`/TapFlow. Saves full-screen lossless PNG + clicked pixel color ONLY (`crops = emptyList()`, no auto-cropped PNGs) and starts the inter-action delay timer ONLY after the 1st gesture executes.
+  - Mode 4 (Live Image & Target Inspector [Pro]): Requires `MediaProjection` (or Shizuku Silent Screenshot). Starts in `STANDBY` (passthrough allowed) until user taps `[Inspect]`, which creates a new `InspectGroup`. Supports `Start -> Pause -> Resume -> Stop`; `[Pause]` re-enables full touch passthrough while keeping the active `InspectGroup` open so `[Resume]` continues adding items to the exact same group, and `[Stop]` finalizes/clears the group session back to `STANDBY`. During active inspection, taps/long-presses replay cleanly to the underlying app AND capture full-screen 100% Lossless PNG + Foreground App Name/Package + Pixel color ONLY (`crops = emptyList()`; crops are created manually inside `Inspect Studio`), while swipe/drag scrolls replay cleanly to the underlying app without creating spurious tap snapshots.
+  - Overlay Close Resource Release: Closing the overlay (`[Close ✕]`, notification Stop, or `onDestroy`) stops active runner/pipeline jobs, releases any held Accessibility stroke, stops `MediaProjectionService` (`releaseAll()` closing `ImageReader`, `VirtualDisplay`, `DisplayListener`, `MediaProjection`, and foreground notification) unless an independent Desktop Console WebSocket live stream is active, cancels dock animators/display listeners, and removes all `WindowManager` views cleanly.
 
 ---
 

@@ -331,6 +331,14 @@ class AccessibilityManagerBridge @Inject constructor(
       )
     }
 
+  fun forceReleaseActiveStroke() {
+    cancelHoldLoopLocked()
+    if (activeStroke == null && !_hasActiveLongPressStroke.value) return
+    scope.launch {
+      releaseActivePress()
+    }
+  }
+
   suspend fun holdUntil(
     x: Float,
     y: Float,

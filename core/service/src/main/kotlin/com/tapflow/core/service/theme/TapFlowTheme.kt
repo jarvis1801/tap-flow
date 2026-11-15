@@ -157,33 +157,62 @@ private val AmberLightColorScheme =
   )
 
 @Composable
-fun resolveIsDarkTheme(darkMode: DarkModeOption): Boolean =
+fun resolveIsDarkTheme(
+  darkMode: DarkModeOption,
+  isLifetimePro: Boolean = false,
+): Boolean =
   when (darkMode) {
     DarkModeOption.SYSTEM -> isSystemInDarkTheme()
     DarkModeOption.LIGHT -> false
     DarkModeOption.DARK -> true
+    DarkModeOption.AMOLED -> if (isLifetimePro) true else true
   }
 
 @Composable
 fun TapFlowTheme(
   darkMode: DarkModeOption = DarkModeOption.SYSTEM,
   themePalette: ThemePaletteOption = ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
-  darkTheme: Boolean = resolveIsDarkTheme(darkMode),
+  isLifetimePro: Boolean = false,
+  darkTheme: Boolean = resolveIsDarkTheme(darkMode, isLifetimePro),
   dynamicColor: Boolean = themePalette == ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
   typography: Typography = MaterialTheme.typography,
   content: @Composable () -> Unit,
 ) {
-  val colorScheme =
+  val isAmoledActive = darkMode == DarkModeOption.AMOLED && isLifetimePro
+  val effectiveDarkTheme = if (isAmoledActive) true else darkTheme
+
+  val baseColorScheme =
     when {
       dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
         val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        if (effectiveDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
       }
       themePalette == ThemePaletteOption.COBALT_TACTICAL ->
-        if (darkTheme) CobaltDarkColorScheme else CobaltLightColorScheme
+        if (effectiveDarkTheme) CobaltDarkColorScheme else CobaltLightColorScheme
       themePalette == ThemePaletteOption.AMBER_INDUSTRIAL ->
-        if (darkTheme) AmberDarkColorScheme else AmberLightColorScheme
-      else -> if (darkTheme) TapFlowDarkColorScheme else TapFlowLightColorScheme
+        if (effectiveDarkTheme) AmberDarkColorScheme else AmberLightColorScheme
+      else -> if (effectiveDarkTheme) TapFlowDarkColorScheme else TapFlowLightColorScheme
+    }
+
+  val colorScheme =
+    if (isAmoledActive) {
+      baseColorScheme.copy(
+        background = Color.Black,
+        onBackground = Color(0xFFF2F5F8),
+        surface = Color.Black,
+        onSurface = Color(0xFFF2F5F8),
+        surfaceVariant = Color(0xFF1A1A1A),
+        onSurfaceVariant = Color(0xFFB8C4D0),
+        surfaceContainerLowest = Color.Black,
+        surfaceContainerLow = Color(0xFF0A0A0A),
+        surfaceContainer = Color(0xFF121212),
+        surfaceContainerHigh = Color(0xFF1A1A1A),
+        surfaceContainerHighest = Color(0xFF222222),
+        outline = Color(0xFF424A54),
+        outlineVariant = Color(0xFF262B31),
+      )
+    } else {
+      baseColorScheme
     }
 
   MaterialTheme(

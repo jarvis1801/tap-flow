@@ -91,6 +91,7 @@ enum class ProFeatureGate(val displayName: String) {
   SHIZUKU_INTEGRATION("Seamless Shizuku Integration"),
   DESKTOP_CONSOLE("Desktop Studio WebSocket Server"),
   DATA_BACKUP("Backup Export / Import (.tapflow)"),
+  AMOLED_THEME("AMOLED Pure Black Theme"),
   PIPELINE_SKIP_CONTINUE("Pipeline Skip & Continue Recovery"),
   FULL_EXECUTION_LOGS("Full Execution History & Export"),
   FORCE_STOP_APP("Rootless App Force-Stop"),
@@ -98,7 +99,7 @@ enum class ProFeatureGate(val displayName: String) {
   ;
 
   val requiresLifetimePro: Boolean
-    get() = this == DESKTOP_CONSOLE || this == DATA_BACKUP
+    get() = this == DESKTOP_CONSOLE || this == DATA_BACKUP || this == AMOLED_THEME
 }
 
 object EntitlementValidator {

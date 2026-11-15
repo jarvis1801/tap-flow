@@ -6,6 +6,7 @@ enum class DarkModeOption {
   SYSTEM,
   LIGHT,
   DARK,
+  AMOLED,
 }
 
 enum class ThemePaletteOption {

@@ -72,7 +72,7 @@ class MediaProjectionService : Service() {
           } else {
             "Screen capture was stopped by the system (screen lock or status-bar toggle)."
           }
-        releaseResources(
+        releaseAll(
           nextState =
             if (reason != null) {
               ScreenCaptureState.StoppedBySystem(reason)
@@ -96,7 +96,7 @@ class MediaProjectionService : Service() {
     when (intent?.action) {
       ACTION_STOP -> {
         isStoppingInternally = true
-        releaseResources(ScreenCaptureState.Idle)
+        releaseAll(ScreenCaptureState.Idle)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
         return START_NOT_STICKY
@@ -135,7 +135,7 @@ class MediaProjectionService : Service() {
 
   override fun onDestroy() {
     isStoppingInternally = true
-    releaseResources(
+    releaseAll(
       nextState =
         if (mediaProjectionBridge.captureState.value is ScreenCaptureState.StoppedBySystem) {
           mediaProjectionBridge.captureState.value
@@ -143,13 +143,14 @@ class MediaProjectionService : Service() {
           ScreenCaptureState.Idle
         },
     )
+    runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
     serviceScope.cancel()
     super.onDestroy()
   }
 
   private fun startProjectionSession(resultCode: Int, resultData: Intent) {
     isStoppingInternally = false
-    releaseResources(ScreenCaptureState.Idle)
+    releaseAll(ScreenCaptureState.Idle)
 
     val projectionManager =
       getSystemService(Context.MEDIA_PROJECTION_SERVICE) as? MediaProjectionManager
@@ -174,7 +175,7 @@ class MediaProjectionService : Service() {
     val (width, height, densityDpi) = readCurrentDisplayMetrics()
     if (width <= 0 || height <= 0) {
       mediaProjectionBridge.emitError("Invalid display metrics for VirtualDisplay.")
-      releaseResources(mediaProjectionBridge.captureState.value)
+      releaseAll(mediaProjectionBridge.captureState.value)
       stopSelf()
       return
     }
@@ -202,7 +203,7 @@ class MediaProjectionService : Service() {
 
     if (createdDisplay == null) {
       mediaProjectionBridge.emitError("Unable to create VirtualDisplay.")
-      releaseResources(mediaProjectionBridge.captureState.value)
+      releaseAll(mediaProjectionBridge.captureState.value)
       stopSelf()
       return
     }
@@ -262,7 +263,7 @@ class MediaProjectionService : Service() {
     mediaProjectionBridge.swapActiveReader(newReader, newWidth, newHeight, safeDpi)
   }
 
-  private fun releaseResources(nextState: ScreenCaptureState) {
+  fun releaseAll(nextState: ScreenCaptureState = ScreenCaptureState.Idle) {
     resizeDebounceJob?.cancel()
     resizeDebounceJob = null
 
@@ -281,6 +282,10 @@ class MediaProjectionService : Service() {
       runCatching { projection.unregisterCallback(projectionCallback) }
       runCatching { projection.stop() }
     }
+
+    currentWidth = 0
+    currentHeight = 0
+    currentDensityDpi = 0
 
     mediaProjectionBridge.clearReader(nextState)
   }

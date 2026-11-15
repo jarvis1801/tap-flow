@@ -89,6 +89,13 @@ private val PAYWALL_COMPARISON_ROWS =
       proTier = "Export / Import [Lifetime Only]",
       lifetimeOnly = true,
     ),
+    PaywallComparisonRow(
+      id = "amoled",
+      feature = "AMOLED Pure Black Theme",
+      freeTier = "System / Light / Dark",
+      proTier = "True #000000 Black [Lifetime Only]",
+      lifetimeOnly = true,
+    ),
   )
 
 @Composable
@@ -377,7 +384,7 @@ private fun PaywallHeroCard(state: PaywallUiState) {
             modifier = Modifier.fillMaxWidth().testTag("paywall_trial_lifetime_callout"),
           ) {
             Text(
-              text = "Upgrade to Lifetime Pro to unlock Desktop Console & Data Backup",
+              text = "Upgrade to Lifetime Pro to unlock Desktop Console, Data Backup & AMOLED Theme",
               style = MaterialTheme.typography.bodyMedium,
               fontWeight = FontWeight.SemiBold,
               color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -468,7 +475,7 @@ private fun PaywallHeroCard(state: PaywallUiState) {
             text =
               when (entitlement.trialStatus) {
                 TrialStatus.NOT_STARTED ->
-                  "Unlock unlimited scripts, template matching, nested logic, Bezier humanization, and Shizuku for 7 days with no credit card required. Desktop Console & Data Backup unlock with Lifetime Pro."
+                  "Unlock unlimited scripts, template matching, nested logic, Bezier humanization, and Shizuku for 7 days with no credit card required. Desktop Console, Data Backup & AMOLED Theme unlock with Lifetime Pro."
                 TrialStatus.EXPIRED ->
                   "Basic scripts remain free forever. Unlock Lifetime Pro with a single one-time purchase to continue using Pro automation tools."
                 TrialStatus.EXPIRED_TAMPERED ->

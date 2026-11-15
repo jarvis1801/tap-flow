@@ -28,11 +28,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -44,11 +46,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import coil.imageLoader
 import coil.request.ImageRequest
@@ -184,6 +190,17 @@ fun InteractiveInspectCanvas(
 
   val primaryColor = MaterialTheme.colorScheme.primary
   val tertiaryColor = MaterialTheme.colorScheme.tertiary
+  val density = LocalDensity.current
+  val touchHitRadiusPx = with(density) { 24.dp.toPx() }
+  val cropSlopPx = with(density) { 8.dp.toPx() }
+  val textMeasurer = rememberTextMeasurer()
+
+  val latestState by rememberUpdatedState(state)
+  val latestItem by rememberUpdatedState(item)
+  val latestLoadedImage by rememberUpdatedState(loadedImage)
+  val latestZoom by rememberUpdatedState(zoom)
+  val latestOnZoomChange by rememberUpdatedState(onZoomChange)
+  val latestOnIntent by rememberUpdatedState(onIntent)
 
   Box(
     modifier =
@@ -196,27 +213,27 @@ fun InteractiveInspectCanvas(
       modifier =
         Modifier
           .fillMaxSize()
-          .pointerInput(item.id, state.mode, state.markersVisible, imgW, imgH) {
+          .pointerInput(item.id, imgW, imgH) {
             awaitEachGesture {
               val firstDown = awaitFirstDown(requireUnconsumed = false)
-              var singleFingerDownPos = firstDown.position
+              val singleFingerDownPos = firstDown.position
               var isMultiTouch = false
               var hasDraggedSingleFinger = false
               var cropAnchorImg: Pair<Int, Int>? = null
               var dragMode = SingleDragKind.POINT_OR_NEW_CROP
-              val initialCrop =
-                IntSize(state.cropWidth, state.cropHeight)
-              val initialCropOrigin = IntOffset(state.cropX, state.cropY)
+              val downState = latestState
+              val initialCrop = IntSize(downState.cropWidth, downState.cropHeight)
+              val initialCropOrigin = IntOffset(downState.cropX, downState.cropY)
 
-              val downTf = computeImageTransform(viewportSize, imgW, imgH, zoom, panOffset)
-              if (downTf != null && state.mode == StudioMode.IMAGE_CROP) {
+              val downTf = computeImageTransform(viewportSize, imgW, imgH, latestZoom, panOffset)
+              if (downTf != null && downState.mode == StudioMode.IMAGE_CROP) {
                 val (ix, iy) = downTf.screenToImage(firstDown.position.x, firstDown.position.y)
                 val insideCrop =
-                  ix in state.cropX..(state.cropX + state.cropWidth) &&
-                    iy in state.cropY..(state.cropY + state.cropHeight)
+                  ix in downState.cropX..(downState.cropX + downState.cropWidth) &&
+                    iy in downState.cropY..(downState.cropY + downState.cropHeight)
                 val nearBottomRight =
-                  abs(ix - (state.cropX + state.cropWidth)) <= (24f / downTf.totalScale).coerceAtLeast(12f) &&
-                    abs(iy - (state.cropY + state.cropHeight)) <= (24f / downTf.totalScale).coerceAtLeast(12f)
+                  abs(ix - (downState.cropX + downState.cropWidth)) <= (24f / downTf.totalScale).coerceAtLeast(12f) &&
+                    abs(iy - (downState.cropY + downState.cropHeight)) <= (24f / downTf.totalScale).coerceAtLeast(12f)
                 dragMode =
                   when {
                     nearBottomRight -> SingleDragKind.RESIZE_CROP
@@ -230,15 +247,19 @@ fun InteractiveInspectCanvas(
                 val event = awaitPointerEvent()
                 val pressed = event.changes.filter { it.pressed }
                 if (pressed.isEmpty()) {
-                  // Touch released
-                  if (!isMultiTouch && !hasDraggedSingleFinger && downTf != null) {
+                  // Clean single-tap release
+                  val currentState = latestState
+                  val releaseTf = computeImageTransform(viewportSize, imgW, imgH, latestZoom, panOffset) ?: downTf
+                  if (!isMultiTouch && !hasDraggedSingleFinger && releaseTf != null) {
                     handleSingleTap(
                       tapPos = singleFingerDownPos,
-                      tf = downTf,
-                      state = state,
-                      item = item,
-                      loadedImage = loadedImage,
-                      onIntent = onIntent,
+                      tf = releaseTf,
+                      touchHitRadiusPx = touchHitRadiusPx,
+                      cropSlopPx = cropSlopPx,
+                      state = currentState,
+                      item = latestItem,
+                      loadedImage = latestLoadedImage,
+                      onIntent = latestOnIntent,
                     )
                   }
                   activeTouchOffset = null
@@ -251,12 +272,13 @@ fun InteractiveInspectCanvas(
                   val zoomDelta = event.calculateZoom()
                   val panDelta = event.calculatePan()
                   val centroid = event.calculateCentroid(useCurrent = true)
+                  val curZoom = latestZoom
                   val currentTransform =
-                    computeImageTransform(viewportSize, imgW, imgH, zoom, panOffset)
-                  val nextZoom = (zoom * zoomDelta).coerceIn(1.0f, 10.0f)
+                    computeImageTransform(viewportSize, imgW, imgH, curZoom, panOffset)
+                  val nextZoom = (curZoom * zoomDelta).coerceIn(1.0f, 10.0f)
 
                   if (currentTransform != null && zoomDelta != 1f) {
-                    val scaleRatio = nextZoom / zoom
+                    val scaleRatio = nextZoom / curZoom
                     val focalX = (centroid.x - viewportSize.width / 2f)
                     val focalY = (centroid.y - viewportSize.height / 2f)
                     val zoomedPan =
@@ -268,65 +290,68 @@ fun InteractiveInspectCanvas(
                   } else {
                     panOffset += panDelta
                   }
-                  onZoomChange(nextZoom)
+                  latestOnZoomChange(nextZoom)
                   pressed.forEach { it.consume() }
                 } else if (!isMultiTouch) {
                   val pointer = pressed.first()
                   val deltaFromDown = pointer.position - singleFingerDownPos
-                  if (hypot(deltaFromDown.x, deltaFromDown.y) > viewConfiguration.touchSlop) {
+                  if (!hasDraggedSingleFinger && hypot(deltaFromDown.x, deltaFromDown.y) > viewConfiguration.touchSlop) {
                     hasDraggedSingleFinger = true
                   }
-                  activeTouchOffset = pointer.position
-                  val tf = computeImageTransform(viewportSize, imgW, imgH, zoom, panOffset)
-                  if (tf != null) {
-                    val (ix, iy) = tf.screenToImage(pointer.position.x, pointer.position.y)
-                    when (state.mode) {
-                      StudioMode.PIXEL_INSPECT -> {
-                        val hex =
-                          loadedImage?.softwareBitmap?.let { bmp ->
-                            StudioBitmapProcessor.formatArgbToHex(
-                              bmp.getPixel(
-                                ix.coerceIn(0, bmp.width - 1),
-                                iy.coerceIn(0, bmp.height - 1),
-                              ),
-                            )
-                          }
-                        onIntent(InspectStudioUiIntent.UpdatePixelCursor(ix, iy, hex))
-                      }
+                  if (hasDraggedSingleFinger) {
+                    activeTouchOffset = pointer.position
+                    val currentState = latestState
+                    val tf = computeImageTransform(viewportSize, imgW, imgH, latestZoom, panOffset)
+                    if (tf != null) {
+                      val (ix, iy) = tf.screenToImage(pointer.position.x, pointer.position.y)
+                      when (currentState.mode) {
+                        StudioMode.PIXEL_INSPECT -> {
+                          val hex =
+                            latestLoadedImage?.softwareBitmap?.let { bmp ->
+                              StudioBitmapProcessor.formatArgbToHex(
+                                bmp.getPixel(
+                                  ix.coerceIn(0, bmp.width - 1),
+                                  iy.coerceIn(0, bmp.height - 1),
+                                ),
+                              )
+                            }
+                          latestOnIntent(InspectStudioUiIntent.UpdatePixelCursor(ix, iy, hex))
+                        }
 
-                      StudioMode.IMAGE_CROP -> {
-                        val anchor = cropAnchorImg ?: (ix to iy)
-                        when (dragMode) {
-                          SingleDragKind.NEW_CROP, SingleDragKind.POINT_OR_NEW_CROP -> {
-                            val left = min(anchor.first, ix)
-                            val top = min(anchor.second, iy)
-                            val w = max(8, abs(ix - anchor.first))
-                            val h = max(8, abs(iy - anchor.second))
-                            onIntent(InspectStudioUiIntent.UpdateCropBox(left, top, w, h))
-                          }
-                          SingleDragKind.MOVE_CROP -> {
-                            val dx = ix - anchor.first
-                            val dy = iy - anchor.second
-                            onIntent(
-                              InspectStudioUiIntent.UpdateCropBox(
-                                x = initialCropOrigin.x + dx,
-                                y = initialCropOrigin.y + dy,
-                                width = initialCrop.width,
-                                height = initialCrop.height,
-                              ),
-                            )
-                          }
-                          SingleDragKind.RESIZE_CROP -> {
-                            val newW = max(12, ix - initialCropOrigin.x)
-                            val newH = max(12, iy - initialCropOrigin.y)
-                            onIntent(
-                              InspectStudioUiIntent.UpdateCropBox(
-                                x = initialCropOrigin.x,
-                                y = initialCropOrigin.y,
-                                width = newW,
-                                height = newH,
-                              ),
-                            )
+                        StudioMode.IMAGE_CROP -> {
+                          val anchor = cropAnchorImg ?: (ix to iy)
+                          when (dragMode) {
+                            SingleDragKind.NEW_CROP, SingleDragKind.POINT_OR_NEW_CROP -> {
+                              val left = min(anchor.first, ix)
+                              val top = min(anchor.second, iy)
+                              val w = max(8, abs(ix - anchor.first))
+                              val h = max(8, abs(iy - anchor.second))
+                              latestOnIntent(InspectStudioUiIntent.UpdateCropBox(left, top, w, h))
+                            }
+                            SingleDragKind.MOVE_CROP -> {
+                              val dx = ix - anchor.first
+                              val dy = iy - anchor.second
+                              latestOnIntent(
+                                InspectStudioUiIntent.UpdateCropBox(
+                                  x = initialCropOrigin.x + dx,
+                                  y = initialCropOrigin.y + dy,
+                                  width = initialCrop.width,
+                                  height = initialCrop.height,
+                                ),
+                              )
+                            }
+                            SingleDragKind.RESIZE_CROP -> {
+                              val newW = max(12, ix - initialCropOrigin.x)
+                              val newH = max(12, iy - initialCropOrigin.y)
+                              latestOnIntent(
+                                InspectStudioUiIntent.UpdateCropBox(
+                                  x = initialCropOrigin.x,
+                                  y = initialCropOrigin.y,
+                                  width = newW,
+                                  height = newH,
+                                ),
+                              )
+                            }
                           }
                         }
                       }
@@ -386,35 +411,101 @@ fun InteractiveInspectCanvas(
         }
       }
 
-      // Render saved markers if visible
+      // Render all saved Pixel & Crop markers if toggled ON
       if (state.markersVisible) {
+        val popupTarget = state.inspectedMarkerPopup
         item.crops.forEach { crop ->
           val tl = tf.imageToScreen(crop.x.toFloat(), crop.y.toFloat())
           val wPx = crop.width * tf.totalScale
           val hPx = crop.height * tf.totalScale
-          val isSelected = crop.id == state.selectedCropId
+          val isHighlighted =
+            crop.id == state.selectedCropId ||
+              (popupTarget is StudioMarkerInfoPopup.Crop && popupTarget.crop.id == crop.id)
+          val strokeColor = if (isHighlighted) tertiaryColor else Color(0xFFFFC107)
+
+          // Subtle translucent fill + outer dark halo + crisp stroke
           drawRect(
-            color = if (isSelected) tertiaryColor else Color(0xFFFFC107),
+            color = strokeColor.copy(alpha = 0.14f),
             topLeft = tl,
             size = Size(wPx, hPx),
-            style = Stroke(width = if (isSelected) 4.dp.toPx() else 2.dp.toPx()),
+          )
+          drawRect(
+            color = Color.Black.copy(alpha = 0.55f),
+            topLeft = tl,
+            size = Size(wPx, hPx),
+            style = Stroke(width = (if (isHighlighted) 5.dp else 3.5.dp).toPx()),
+          )
+          drawRect(
+            color = strokeColor,
+            topLeft = tl,
+            size = Size(wPx, hPx),
+            style = Stroke(width = (if (isHighlighted) 3.dp else 2.dp).toPx()),
+          )
+
+          // Corner markers
+          val cornerR = if (isHighlighted) 4.dp.toPx() else 3.dp.toPx()
+          listOf(
+            tl,
+            Offset(tl.x + wPx, tl.y),
+            Offset(tl.x, tl.y + hPx),
+            Offset(tl.x + wPx, tl.y + hPx),
+          ).forEach { corner ->
+            drawCircle(color = Color.Black.copy(alpha = 0.7f), radius = cornerR + 1.dp.toPx(), center = corner)
+            drawCircle(color = strokeColor, radius = cornerR, center = corner)
+          }
+
+          // Compact label badge
+          val badgeLabel = crop.label.ifBlank { "${crop.width}×${crop.height}" }
+          val textLayout =
+            textMeasurer.measure(
+              text = badgeLabel,
+              style = TextStyle(
+                color = Color.White,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+              ),
+              maxLines = 1,
+            )
+          val padH = 5.dp.toPx()
+          val padV = 2.dp.toPx()
+          val pillW = textLayout.size.width + padH * 2f
+          val pillH = textLayout.size.height + padV * 2f
+          val badgeTop = if (tl.y - pillH - 3.dp.toPx() >= 0f) tl.y - pillH - 3.dp.toPx() else tl.y + 3.dp.toPx()
+          val badgeLeft = tl.x.coerceIn(2.dp.toPx(), (size.width - pillW - 2.dp.toPx()).coerceAtLeast(2.dp.toPx()))
+          drawRoundRect(
+            color = Color(0xCC0D1117),
+            topLeft = Offset(badgeLeft, badgeTop),
+            size = Size(pillW, pillH),
+            cornerRadius = CornerRadius(4.dp.toPx(), 4.dp.toPx()),
+          )
+          drawText(
+            textLayoutResult = textLayout,
+            topLeft = Offset(badgeLeft + padH, badgeTop + padV),
           )
         }
 
         item.pixels.forEach { px ->
           val center = tf.imageToScreen(px.x.toFloat(), px.y.toFloat())
-          val isSelected = px.id == state.selectedPixelId
-          val radius = if (isSelected) 11.dp.toPx() else 8.dp.toPx()
+          val isHighlighted =
+            px.id == state.selectedPixelId ||
+              (popupTarget is StudioMarkerInfoPopup.Pixel && popupTarget.pixel.id == px.id)
+          val radius = if (isHighlighted) 11.dp.toPx() else 8.5.dp.toPx()
+          drawCircle(
+            color = Color.Black.copy(alpha = 0.65f),
+            radius = radius + 2.dp.toPx(),
+            center = center,
+            style = Stroke(width = 2.dp.toPx()),
+          )
           drawCircle(
             color = parseStudioHexColor(px.hexColor),
             radius = radius,
             center = center,
           )
           drawCircle(
-            color = if (isSelected) primaryColor else Color.White,
+            color = if (isHighlighted) primaryColor else Color.White,
             radius = radius,
             center = center,
-            style = Stroke(width = if (isSelected) 3.dp.toPx() else 2.dp.toPx()),
+            style = Stroke(width = if (isHighlighted) 3.dp.toPx() else 2.dp.toPx()),
           )
         }
       }
@@ -511,30 +602,47 @@ private enum class SingleDragKind {
 private fun handleSingleTap(
   tapPos: Offset,
   tf: ImageTransform,
+  touchHitRadiusPx: Float,
+  cropSlopPx: Float,
   state: InspectStudioUiState,
   item: InspectItem,
   loadedImage: StudioLoadedImage?,
   onIntent: (InspectStudioUiIntent) -> Unit,
 ) {
   if (state.markersVisible) {
-    val hitRadiusPx = 44f
+    // Hit-test saved InspectPixel markers first (~24.dp screen touch radius)
     val hitPixel =
-      item.pixels.firstOrNull { px ->
-        val screenPt = tf.imageToScreen(px.x.toFloat(), px.y.toFloat())
-        hypot(screenPt.x - tapPos.x, screenPt.y - tapPos.y) <= hitRadiusPx
-      }
+      item.pixels
+        .mapNotNull { px ->
+          val screenPt = tf.imageToScreen(px.x.toFloat(), px.y.toFloat())
+          val dist = hypot(screenPt.x - tapPos.x, screenPt.y - tapPos.y)
+          if (dist <= touchHitRadiusPx) px to dist else null
+        }
+        .minByOrNull { it.second }
+        ?.first
     if (hitPixel != null) {
-      onIntent(InspectStudioUiIntent.SelectPixelMarker(hitPixel))
+      onIntent(InspectStudioUiIntent.ShowMarkerInfo(StudioMarkerInfoPopup.Pixel(hitPixel)))
       return
     }
 
+    // Hit-test saved InspectCrop rectangles regardless of active StudioMode
     val (tapIx, tapIy) = tf.screenToImage(tapPos.x, tapPos.y)
     val hitCrop =
-      item.crops.firstOrNull { c ->
-        tapIx in c.x..(c.x + c.width) && tapIy in c.y..(c.y + c.height)
+      item.crops.firstOrNull { crop ->
+        val insideImg =
+          tapIx in crop.x..(crop.x + crop.width) && tapIy in crop.y..(crop.y + crop.height)
+        if (insideImg) {
+          true
+        } else {
+          val tl = tf.imageToScreen(crop.x.toFloat(), crop.y.toFloat())
+          val wPx = crop.width * tf.totalScale
+          val hPx = crop.height * tf.totalScale
+          tapPos.x in (tl.x - cropSlopPx)..(tl.x + wPx + cropSlopPx) &&
+            tapPos.y in (tl.y - cropSlopPx)..(tl.y + hPx + cropSlopPx)
+        }
       }
-    if (hitCrop != null && state.mode == StudioMode.IMAGE_CROP) {
-      onIntent(InspectStudioUiIntent.SelectCropMarker(hitCrop))
+    if (hitCrop != null) {
+      onIntent(InspectStudioUiIntent.ShowMarkerInfo(StudioMarkerInfoPopup.Crop(hitCrop)))
       return
     }
   }

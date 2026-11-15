@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Verified
@@ -112,15 +113,35 @@ fun SettingsTabContent(
               verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
               DarkModeOption.entries.forEach { option ->
+                val isAmoled = option == DarkModeOption.AMOLED
+                val isSelected =
+                  if (isAmoled) {
+                    state.preferences.darkMode == option && state.isLifetimePro
+                  } else {
+                    state.preferences.darkMode == option
+                  }
                 FilterChip(
-                  selected = state.preferences.darkMode == option,
+                  selected = isSelected,
                   onClick = { onIntent(HomeUiIntent.SetDarkMode(option)) },
+                  leadingIcon =
+                    if (isAmoled && !state.isLifetimePro) {
+                      {
+                        Icon(
+                          imageVector = Icons.Filled.Lock,
+                          contentDescription = "Lifetime Pro required",
+                          modifier = Modifier.size(16.dp),
+                        )
+                      }
+                    } else {
+                      null
+                    },
                   label = {
                     Text(
                       when (option) {
                         DarkModeOption.SYSTEM -> "System Default"
                         DarkModeOption.LIGHT -> "Force Light"
                         DarkModeOption.DARK -> "Force Dark"
+                        DarkModeOption.AMOLED -> "AMOLED Black [Lifetime]"
                       },
                     )
                   },

@@ -18,6 +18,15 @@ data class StudioMarkerToDelete(
 )
 
 @Immutable
+sealed interface StudioMarkerInfoPopup {
+  @Immutable
+  data class Pixel(val pixel: InspectPixel) : StudioMarkerInfoPopup
+
+  @Immutable
+  data class Crop(val crop: InspectCrop) : StudioMarkerInfoPopup
+}
+
+@Immutable
 data class InspectStudioUiState(
   val itemId: String = "",
   val groupTitle: String = "Inspect",
@@ -39,6 +48,7 @@ data class InspectStudioUiState(
   val hasUnsavedChanges: Boolean = false,
   val showUnsavedDialog: Boolean = false,
   val showSaveSheet: Boolean = false,
+  val inspectedMarkerPopup: StudioMarkerInfoPopup? = null,
   val markerToDelete: StudioMarkerToDelete? = null,
   val isSaving: Boolean = false,
 )
@@ -69,6 +79,10 @@ sealed interface InspectStudioUiIntent {
   data class SelectPixelMarker(val pixel: InspectPixel) : InspectStudioUiIntent
 
   data class SelectCropMarker(val crop: InspectCrop) : InspectStudioUiIntent
+
+  data class ShowMarkerInfo(val popup: StudioMarkerInfoPopup) : InspectStudioUiIntent
+
+  data object DismissMarkerInfo : InspectStudioUiIntent
 
   data class RequestDeleteMarker(val id: String, val label: String, val isCrop: Boolean) :
     InspectStudioUiIntent

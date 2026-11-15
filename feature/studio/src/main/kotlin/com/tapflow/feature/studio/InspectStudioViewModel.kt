@@ -234,9 +234,18 @@ class InspectStudioViewModel @Inject constructor(
         }
       }
 
+      is InspectStudioUiIntent.ShowMarkerInfo -> {
+        _uiState.update { it.copy(inspectedMarkerPopup = intent.popup) }
+      }
+
+      InspectStudioUiIntent.DismissMarkerInfo -> {
+        _uiState.update { it.copy(inspectedMarkerPopup = null) }
+      }
+
       is InspectStudioUiIntent.RequestDeleteMarker -> {
         _uiState.update {
           it.copy(
+            inspectedMarkerPopup = null,
             markerToDelete = StudioMarkerToDelete(intent.id, intent.label, intent.isCrop),
           )
         }
@@ -253,13 +262,31 @@ class InspectStudioViewModel @Inject constructor(
         viewModelScope.launch {
           if (target.isCrop) {
             inspectRepository.deleteCropFromItem(itemId, target.id)
-            _uiState.update {
-              it.copy(selectedCropId = if (it.selectedCropId == target.id) null else it.selectedCropId)
+            _uiState.update { state ->
+              val currentPopup = state.inspectedMarkerPopup
+              state.copy(
+                selectedCropId = if (state.selectedCropId == target.id) null else state.selectedCropId,
+                inspectedMarkerPopup =
+                  if (currentPopup is StudioMarkerInfoPopup.Crop && currentPopup.crop.id == target.id) {
+                    null
+                  } else {
+                    currentPopup
+                  },
+              )
             }
           } else {
             inspectRepository.deletePixelFromItem(itemId, target.id)
-            _uiState.update {
-              it.copy(selectedPixelId = if (it.selectedPixelId == target.id) null else it.selectedPixelId)
+            _uiState.update { state ->
+              val currentPopup = state.inspectedMarkerPopup
+              state.copy(
+                selectedPixelId = if (state.selectedPixelId == target.id) null else state.selectedPixelId,
+                inspectedMarkerPopup =
+                  if (currentPopup is StudioMarkerInfoPopup.Pixel && currentPopup.pixel.id == target.id) {
+                    null
+                  } else {
+                    currentPopup
+                  },
+              )
             }
           }
           sendEffect(InspectStudioUiEffect.ShowSnackbar("Deleted marker \"${target.label}\""))
