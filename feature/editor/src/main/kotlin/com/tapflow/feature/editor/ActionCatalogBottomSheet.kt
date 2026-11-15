@@ -304,6 +304,7 @@ fun ActionCatalogBottomSheet(
               isPro = isPro,
               onChange = { onIntent(ScriptEditorUiIntent.UpdateDraftAction(it)) },
               onIntent = onIntent,
+              validationErrors = session.validationErrors,
             )
           is ScriptAction.DoubleTap ->
             DoubleTapActionEditor(
@@ -312,6 +313,7 @@ fun ActionCatalogBottomSheet(
               isPro = isPro,
               onChange = { onIntent(ScriptEditorUiIntent.UpdateDraftAction(it)) },
               onIntent = onIntent,
+              validationErrors = session.validationErrors,
             )
           is ScriptAction.LongPress ->
             LongPressActionEditor(
@@ -320,12 +322,14 @@ fun ActionCatalogBottomSheet(
               isPro = isPro,
               onChange = { onIntent(ScriptEditorUiIntent.UpdateDraftAction(it)) },
               onIntent = onIntent,
+              validationErrors = session.validationErrors,
             )
           is ScriptAction.MultiTouch ->
             MultiTouchActionEditor(
               action = draft,
               onChange = { onIntent(ScriptEditorUiIntent.UpdateDraftAction(it)) },
               onIntent = onIntent,
+              validationErrors = session.validationErrors,
             )
           is ScriptAction.SwipeDrag ->
             SwipeDragActionEditor(
@@ -334,6 +338,7 @@ fun ActionCatalogBottomSheet(
               isPro = isPro,
               onChange = { onIntent(ScriptEditorUiIntent.UpdateDraftAction(it)) },
               onIntent = onIntent,
+              validationErrors = session.validationErrors,
             )
           is ScriptAction.InputText ->
             InputTextActionEditor(
@@ -342,6 +347,7 @@ fun ActionCatalogBottomSheet(
               isPro = isPro,
               onChange = { onIntent(ScriptEditorUiIntent.UpdateDraftAction(it)) },
               onIntent = onIntent,
+              validationErrors = session.validationErrors,
             )
           is ScriptAction.IfBlock ->
             IfBlockActionEditor(
@@ -350,6 +356,7 @@ fun ActionCatalogBottomSheet(
               isPro = isPro,
               onChange = { onIntent(ScriptEditorUiIntent.UpdateDraftAction(it)) },
               onIntent = onIntent,
+              validationErrors = session.validationErrors,
             )
           is ScriptAction.LoopBlock ->
             LoopBlockActionEditor(
@@ -358,6 +365,7 @@ fun ActionCatalogBottomSheet(
               isPro = isPro,
               onChange = { onIntent(ScriptEditorUiIntent.UpdateDraftAction(it)) },
               onIntent = onIntent,
+              validationErrors = session.validationErrors,
             )
           is ScriptAction.Delay ->
             DelayActionEditor(
@@ -379,6 +387,7 @@ fun ActionCatalogBottomSheet(
               isForceStop = false,
               packageName = draft.packageName,
               appLabel = draft.appLabel,
+              validationErrors = session.validationErrors,
               onOpenPicker = {
                 onIntent(ScriptEditorUiIntent.OpenAppPicker(AppPickerTarget.ActionLaunchApp))
               },
@@ -388,6 +397,7 @@ fun ActionCatalogBottomSheet(
               isForceStop = true,
               packageName = draft.packageName,
               appLabel = draft.appLabel,
+              validationErrors = session.validationErrors,
               onOpenPicker = {
                 onIntent(ScriptEditorUiIntent.OpenAppPicker(AppPickerTarget.ActionForceStopApp))
               },
@@ -396,6 +406,7 @@ fun ActionCatalogBottomSheet(
             ClipboardActionEditor(
               action = draft,
               variables = variables,
+              validationErrors = session.validationErrors,
               onChange = { onIntent(ScriptEditorUiIntent.UpdateDraftAction(it)) },
             )
           is ScriptAction.Vibrate ->
@@ -412,6 +423,7 @@ fun ActionCatalogBottomSheet(
             VariableOpActionEditor(
               action = draft,
               variables = variables,
+              validationErrors = session.validationErrors,
               onChange = { onIntent(ScriptEditorUiIntent.UpdateDraftAction(it)) },
             )
         }
@@ -438,12 +450,26 @@ fun ActionCatalogBottomSheet(
             modifier = Modifier.fillMaxWidth(),
           ) {
             Text(
-              text = "Post-Action Delay: 0ms (Excluded for Flow Control, Delay & Variable Ops)",
+              text = "Wait After This Step: 0ms (Flow, Wait & Variable steps run right away)",
               style = MaterialTheme.typography.labelSmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
               modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             )
           }
+        }
+      }
+
+      if (session.showValidationErrors && session.validationErrors.isNotEmpty()) {
+        Surface(
+          color = MaterialTheme.colorScheme.errorContainer,
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          Text(
+            text = session.validationErrors.values.first(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+          )
         }
       }
 
@@ -583,73 +609,79 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
       listOf(
         ActionTemplateSpec(
           label = "Tap",
-          hint = "Single screen tap",
+          hint = "Tap one spot",
           icon = Icons.Rounded.TouchApp,
           category = ActionCategoryGroup.TOUCH_GESTURES,
           isPro = false,
           factory = { id ->
-            ScriptAction.Tap(id = id, x = NumericInput.Literal(540), y = NumericInput.Literal(960))
+            ScriptAction.Tap(
+              id = id,
+              x = NumericInput.Literal(UNSET_COORD),
+              y = NumericInput.Literal(UNSET_COORD),
+            )
           },
           matcher = { it is ScriptAction.Tap },
         ),
         ActionTemplateSpec(
           label = "Double Tap",
-          hint = "Two rapid taps",
+          hint = "Two quick taps",
           icon = Icons.Rounded.AdsClick,
           category = ActionCategoryGroup.TOUCH_GESTURES,
           isPro = false,
           factory = { id ->
             ScriptAction.DoubleTap(
               id = id,
-              x = NumericInput.Literal(540),
-              y = NumericInput.Literal(960),
+              x = NumericInput.Literal(UNSET_COORD),
+              y = NumericInput.Literal(UNSET_COORD),
             )
           },
           matcher = { it is ScriptAction.DoubleTap },
         ),
         ActionTemplateSpec(
           label = "Long Press",
-          hint = "Touch & hold",
+          hint = "Touch and hold",
           icon = Icons.Rounded.PanToolAlt,
           category = ActionCategoryGroup.TOUCH_GESTURES,
           isPro = false,
           factory = { id ->
             ScriptAction.LongPress(
               id = id,
-              x = NumericInput.Literal(540),
-              y = NumericInput.Literal(960),
+              x = NumericInput.Literal(UNSET_COORD),
+              y = NumericInput.Literal(UNSET_COORD),
             )
           },
           matcher = { it is ScriptAction.LongPress },
         ),
         ActionTemplateSpec(
-          label = "Multi-touch",
-          hint = "Pinch, rotate, multi",
+          label = "Multi-Finger",
+          hint = "Pinch, zoom, multi-tap",
           icon = Icons.Rounded.Pinch,
           category = ActionCategoryGroup.TOUCH_GESTURES,
           isPro = true,
-          factory = { id -> ScriptAction.MultiTouch(id = id, centerX = 540, centerY = 960) },
+          factory = { id ->
+            ScriptAction.MultiTouch(id = id, centerX = UNSET_COORD, centerY = UNSET_COORD)
+          },
           matcher = { it is ScriptAction.MultiTouch },
         ),
         ActionTemplateSpec(
           label = "Swipe & Drag",
-          hint = "Linear or curved",
+          hint = "Straight or curved",
           icon = Icons.Rounded.Swipe,
           category = ActionCategoryGroup.TOUCH_GESTURES,
           isPro = false,
           factory = { id ->
             ScriptAction.SwipeDrag(
               id = id,
-              startX = NumericInput.Literal(540),
-              startY = NumericInput.Literal(1400),
-              endX = NumericInput.Literal(540),
-              endY = NumericInput.Literal(600),
+              startX = NumericInput.Literal(UNSET_COORD),
+              startY = NumericInput.Literal(UNSET_COORD),
+              endX = NumericInput.Literal(UNSET_COORD),
+              endY = NumericInput.Literal(UNSET_COORD),
             )
           },
           matcher = { it is ScriptAction.SwipeDrag },
         ),
         ActionTemplateSpec(
-          label = "Input Text",
+          label = "Type Text",
           hint = "Type or paste text",
           icon = Icons.Rounded.Keyboard,
           category = ActionCategoryGroup.TOUCH_GESTURES,
@@ -663,7 +695,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
       listOf(
         ActionTemplateSpec(
           label = "If Block",
-          hint = "Conditional branch",
+          hint = "Run steps if rule matches",
           icon = Icons.AutoMirrored.Rounded.AltRoute,
           category = ActionCategoryGroup.FLOW_CONTROL,
           isPro = true,
@@ -671,13 +703,13 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
             ScriptAction.IfBlock(
               id = id,
               conditionRoot =
-                ConditionGroup(id = UUID.randomUUID().toString(), name = "If Condition Root"),
+                ConditionGroup(id = UUID.randomUUID().toString(), name = "When..."),
             )
           },
           matcher = { it is ScriptAction.IfBlock },
         ),
         ActionTemplateSpec(
-          label = "Loop Block",
+          label = "Repeat (Loop)",
           hint = "Repeat steps",
           icon = Icons.Rounded.Repeat,
           category = ActionCategoryGroup.FLOW_CONTROL,
@@ -686,17 +718,17 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           matcher = { it is ScriptAction.LoopBlock },
         ),
         ActionTemplateSpec(
-          label = "Delay",
-          hint = "Pause execution",
+          label = "Wait / Pause",
+          hint = "Pause before next step",
           icon = Icons.Rounded.HourglassBottom,
           category = ActionCategoryGroup.FLOW_CONTROL,
           isPro = false,
-          factory = { id -> ScriptAction.Delay(id = id, config = DelayConfig.Fixed(500L)) },
+          factory = { id -> ScriptAction.Delay(id = id, config = DelayConfig.Fixed(1000L)) },
           matcher = { it is ScriptAction.Delay },
         ),
         ActionTemplateSpec(
-          label = "Break",
-          hint = "Exit current loop",
+          label = "Exit Loop",
+          hint = "Stop repeating now",
           icon = Icons.AutoMirrored.Rounded.ExitToApp,
           category = ActionCategoryGroup.FLOW_CONTROL,
           isPro = false,
@@ -704,8 +736,8 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           matcher = { it is ScriptAction.Break },
         ),
         ActionTemplateSpec(
-          label = "Continue",
-          hint = "Next loop cycle",
+          label = "Next Repeat",
+          hint = "Skip to next turn",
           icon = Icons.Rounded.SkipNext,
           category = ActionCategoryGroup.FLOW_CONTROL,
           isPro = false,
@@ -713,8 +745,8 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           matcher = { it is ScriptAction.Continue },
         ),
         ActionTemplateSpec(
-          label = "End Script",
-          hint = "Stop script run",
+          label = "Stop Script",
+          hint = "End script run",
           icon = Icons.Rounded.OutlinedFlag,
           category = ActionCategoryGroup.FLOW_CONTROL,
           isPro = false,
@@ -726,8 +758,8 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
     ActionCategoryGroup.SYSTEM_HARDWARE ->
       listOf(
         ActionTemplateSpec(
-          label = "Key Event",
-          hint = "Back, Home, Recents",
+          label = "Phone Button",
+          hint = "Back, Home, Recent Apps",
           icon = Icons.Rounded.Smartphone,
           category = ActionCategoryGroup.SYSTEM_HARDWARE,
           isPro = false,
@@ -735,7 +767,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           matcher = { it is ScriptAction.KeyEvent },
         ),
         ActionTemplateSpec(
-          label = "Launch App",
+          label = "Open App",
           hint = "Open installed app",
           icon = Icons.AutoMirrored.Rounded.OpenInNew,
           category = ActionCategoryGroup.SYSTEM_HARDWARE,
@@ -744,8 +776,8 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           matcher = { it is ScriptAction.LaunchApp },
         ),
         ActionTemplateSpec(
-          label = "Force Stop",
-          hint = "Kill target app",
+          label = "Force Stop App",
+          hint = "Close target app",
           icon = Icons.Rounded.Cancel,
           category = ActionCategoryGroup.SYSTEM_HARDWARE,
           isPro = true,
@@ -765,7 +797,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
         ),
         ActionTemplateSpec(
           label = "Vibrate",
-          hint = "Haptic pulse",
+          hint = "Phone vibration",
           icon = Icons.Rounded.Vibration,
           category = ActionCategoryGroup.SYSTEM_HARDWARE,
           isPro = false,
@@ -774,7 +806,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
         ),
         ActionTemplateSpec(
           label = "Alert Sound",
-          hint = "Audio notification",
+          hint = "Play sound alert",
           icon = Icons.Rounded.NotificationsActive,
           category = ActionCategoryGroup.SYSTEM_HARDWARE,
           isPro = false,
@@ -786,43 +818,43 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
     ActionCategoryGroup.VARIABLE_OPS ->
       listOf(
         ActionTemplateSpec(
-          label = "Set Variable",
-          hint = "Assign value",
+          label = "Save Value",
+          hint = "Store a value",
           icon = Icons.Rounded.DataObject,
           category = ActionCategoryGroup.VARIABLE_OPS,
           isPro = true,
           factory = { id ->
-            ScriptAction.SetVariable(id = id, targetKey = "counter", valueTemplate = "1")
+            ScriptAction.SetVariable(id = id, targetKey = "", valueTemplate = "")
           },
           matcher = { it is ScriptAction.SetVariable },
         ),
         ActionTemplateSpec(
-          label = "Math",
-          hint = "Arithmetic ops",
+          label = "Calculate (Math)",
+          hint = "Add, subtract, divide",
           icon = Icons.Rounded.Calculate,
           category = ActionCategoryGroup.VARIABLE_OPS,
           isPro = true,
           factory = { id ->
             ScriptAction.MathOp(
               id = id,
-              targetKey = "counter",
+              targetKey = "",
               operator = MathOperator.ADD,
-              leftOperand = "{counter}",
-              rightOperand = "1",
+              leftOperand = "",
+              rightOperand = "",
             )
           },
           matcher = { it is ScriptAction.MathOp },
         ),
         ActionTemplateSpec(
-          label = "Random",
-          hint = "Random number/bool",
+          label = "Random Value",
+          hint = "Random number or Yes/No",
           icon = Icons.Rounded.Casino,
           category = ActionCategoryGroup.VARIABLE_OPS,
           isPro = true,
           factory = { id ->
             ScriptAction.RandomOp(
               id = id,
-              targetKey = "rand_val",
+              targetKey = "",
               targetType = RandomTargetType.INT,
               minValue = 1.0,
               maxValue = 100.0,
@@ -831,49 +863,49 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           matcher = { it is ScriptAction.RandomOp },
         ),
         ActionTemplateSpec(
-          label = "String",
-          hint = "Text transforms",
+          label = "Edit Text",
+          hint = "Join, trim, replace text",
           icon = Icons.Rounded.TextFields,
           category = ActionCategoryGroup.VARIABLE_OPS,
           isPro = true,
           factory = { id ->
             ScriptAction.StringOp(
               id = id,
-              targetKey = "text_var",
+              targetKey = "",
               operator = StringOperator.CONCATENATE,
-              inputA = "{text_var}",
+              inputA = "",
               inputB = "",
             )
           },
           matcher = { it is ScriptAction.StringOp },
         ),
         ActionTemplateSpec(
-          label = "Boolean",
-          hint = "Logic toggle/gate",
+          label = "Yes / No Logic",
+          hint = "Flip or combine flags",
           icon = Icons.Rounded.ToggleOn,
           category = ActionCategoryGroup.VARIABLE_OPS,
           isPro = true,
           factory = { id ->
             ScriptAction.BooleanOp(
               id = id,
-              targetKey = "flag",
+              targetKey = "",
               operator = BooleanOperator.TOGGLE,
-              leftKey = "flag",
+              leftKey = "",
             )
           },
           matcher = { it is ScriptAction.BooleanOp },
         ),
         ActionTemplateSpec(
-          label = "Type Cast",
-          hint = "Convert var type",
+          label = "Convert Value",
+          hint = "Text to number & back",
           icon = Icons.Rounded.SwapHoriz,
           category = ActionCategoryGroup.VARIABLE_OPS,
           isPro = true,
           factory = { id ->
             ScriptAction.TypeCastOp(
               id = id,
-              targetKey = "cast_val",
-              sourceKey = "counter",
+              targetKey = "",
+              sourceKey = "",
               operator = TypeCastOperator.NUMBER_TO_STRING,
             )
           },

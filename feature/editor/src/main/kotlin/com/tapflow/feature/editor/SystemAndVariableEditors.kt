@@ -48,7 +48,7 @@ fun KeyEventActionEditor(
   action: ScriptAction.KeyEvent,
   onChange: (ScriptAction.KeyEvent) -> Unit,
 ) {
-  EditorSectionCard(title = "System Key Action") {
+  EditorSectionCard(title = "Phone Button") {
     FlowRow(
       horizontalArrangement = Arrangement.spacedBy(8.dp),
       verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -57,7 +57,7 @@ fun KeyEventActionEditor(
         FilterChip(
           selected = action.key == keyType,
           onClick = { onChange(action.copy(key = keyType)) },
-          label = { Text(keyType.name.replace('_', ' ')) },
+          label = { Text(PlainLanguageFormatter.systemKeyLabel(keyType)) },
         )
       }
     }
@@ -69,20 +69,33 @@ fun AppLifecycleActionEditor(
   isForceStop: Boolean,
   packageName: String,
   appLabel: String,
+  validationErrors: Map<String, String> = emptyMap(),
   onOpenPicker: () -> Unit,
 ) {
+  val appError = validationErrors["app_package"]
   EditorSectionCard(
-    title = if (isForceStop) "Rootless Force Stop" else "Launch Application",
-    subtitle = if (isForceStop) "Uses Shizuku `am force-stop`" else "Launches target app launcher intent",
+    title = if (isForceStop) "Close & Restart App (Force Stop)" else "Open App",
+    subtitle =
+      if (isForceStop) {
+        "Stops the app completely (requires Shizuku permission)"
+      } else {
+        "Opens the selected app on your phone"
+      },
   ) {
     Text(
       text =
         if (packageName.isBlank()) {
-          "No target app selected"
+          appError ?: "No app selected yet"
         } else {
           "${appLabel.ifBlank { packageName }} ($packageName)"
         },
       style = MaterialTheme.typography.bodyMedium,
+      color =
+        if (packageName.isBlank() && appError != null) {
+          MaterialTheme.colorScheme.error
+        } else {
+          MaterialTheme.colorScheme.onSurface
+        },
     )
     FilledTonalButton(
       onClick = onOpenPicker,
@@ -90,7 +103,7 @@ fun AppLifecycleActionEditor(
     ) {
       Icon(Icons.Rounded.Apps, contentDescription = null, modifier = Modifier.size(18.dp))
       Spacer(modifier = Modifier.width(8.dp))
-      Text("Choose Installed App")
+      Text(if (packageName.isBlank()) "Choose App" else "Change App")
     }
   }
 }
@@ -100,9 +113,11 @@ fun AppLifecycleActionEditor(
 fun ClipboardActionEditor(
   action: ScriptAction.ClipboardOp,
   variables: List<VariableDefinition>,
+  validationErrors: Map<String, String> = emptyMap(),
   onChange: (ScriptAction.ClipboardOp) -> Unit,
 ) {
-  EditorSectionCard(title = "Clipboard Operation") {
+  val textError = validationErrors["clipboard_text"]
+  EditorSectionCard(title = "Clipboard Action") {
     val ops = ClipboardActionType.entries
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
       ops.forEachIndexed { index, type ->
@@ -127,13 +142,21 @@ fun ClipboardActionEditor(
         OutlinedTextField(
           value = action.valueTemplate,
           onValueChange = { onChange(action.copy(valueTemplate = it)) },
-          label = { Text("Text Template to Copy (supports {var})") },
+          label = { Text("Text to Copy") },
+          placeholder = { Text("Enter text to copy to clipboard...") },
+          isError = textError != null,
+          supportingText =
+            if (textError != null) {
+              { Text(textError) }
+            } else {
+              null
+            },
           modifier = Modifier.fillMaxWidth(),
         )
         OutlinedTextField(
           value = action.targetVariableKey.orEmpty(),
           onValueChange = { onChange(action.copy(targetVariableKey = it.ifBlank { null })) },
-          label = { Text("Or Read Current Clipboard Into Variable Key (Optional)") },
+          label = { Text("Also Save Copy Into Variable (Optional)") },
           singleLine = true,
           modifier = Modifier.fillMaxWidth(),
         )
@@ -142,20 +165,26 @@ fun ClipboardActionEditor(
         OutlinedTextField(
           value = action.valueTemplate,
           onValueChange = { onChange(action.copy(valueTemplate = it)) },
-          label = { Text("Optional Override Text Template Before Paste") },
+          label = { Text("Custom Text to Paste Instead (Optional)") },
+          placeholder = { Text("Leave blank to paste whatever is on clipboard") },
           modifier = Modifier.fillMaxWidth(),
         )
       }
       ClipboardActionType.CLEAR -> {
         Text(
-          text = "Clears the primary system clipboard.",
+          text = "Erases whatever text is currently copied on your phone.",
           style = MaterialTheme.typography.bodySmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
       }
     }
 
-    if (variables.isNotEmpty()) {
+    if (variables.isNotEmpty() && action.operation != ClipboardActionType.CLEAR) {
+      Text(
+        text = "Tap a variable to insert it:",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
       FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         variables.forEach { v ->
           AssistChip(
@@ -167,7 +196,7 @@ fun ClipboardActionEditor(
                 ),
               )
             },
-            label = { Text("{${v.key}}") },
+            label = { Text(v.key) },
           )
         }
       }
@@ -181,16 +210,10 @@ fun VibrateActionEditor(
   action: ScriptAction.Vibrate,
   onChange: (ScriptAction.Vibrate) -> Unit,
 ) {
-  EditorSectionCard(title = "Vibrate Pattern") {
+  EditorSectionCard(title = "Vibration Style") {
     val patterns = VibratePattern.entries
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
       patterns.forEachIndexed { index, pattern ->
-        val label =
-          when (pattern) {
-            VibratePattern.SHORT -> "Short"
-            VibratePattern.LONG -> "Long"
-            VibratePattern.CUSTOM -> "Custom"
-          }
         SegmentedButton(
           selected = action.pattern == pattern,
           onClick = {
@@ -204,7 +227,11 @@ fun VibrateActionEditor(
           },
           shape = SegmentedButtonDefaults.itemShape(index = index, count = patterns.size),
         ) {
-          Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          Text(
+            text = PlainLanguageFormatter.vibratePatternLabel(pattern),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
         }
       }
     }
@@ -216,7 +243,7 @@ fun VibrateActionEditor(
           horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
           LongTextField(
-            label = "Step #${idx + 1} (ms)",
+            label = "Pulse #${idx + 1} (ms)",
             value = dur,
             min = 10L,
             onChange = { next ->
@@ -238,7 +265,7 @@ fun VibrateActionEditor(
               )
             },
           ) {
-            Icon(Icons.Rounded.DeleteOutline, contentDescription = "Remove vibration segment")
+            Icon(Icons.Rounded.DeleteOutline, contentDescription = "Remove vibration pulse")
           }
         }
       }
@@ -247,7 +274,7 @@ fun VibrateActionEditor(
       ) {
         Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
         Spacer(modifier = Modifier.width(4.dp))
-        Text("Add Vibration Pulse (ms)")
+        Text("Add Vibration Pulse")
       }
     }
   }
@@ -258,7 +285,10 @@ fun PlayAlertSoundActionEditor(
   action: ScriptAction.PlayAlertSound,
   onChange: (ScriptAction.PlayAlertSound) -> Unit,
 ) {
-  EditorSectionCard(title = "Alert Sound Type") {
+  EditorSectionCard(
+    title = "Alert Sound",
+    subtitle = "Choose a phone sound or paste a custom sound link",
+  ) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       listOf("default", "notification", "alarm", "ringtone").forEach { type ->
         FilterChip(
@@ -271,7 +301,7 @@ fun PlayAlertSoundActionEditor(
     OutlinedTextField(
       value = action.soundUriOrType,
       onValueChange = { onChange(action.copy(soundUriOrType = it)) },
-      label = { Text("Sound Type or Custom URI") },
+      label = { Text("Sound Name or Link") },
       singleLine = true,
       modifier = Modifier.fillMaxWidth(),
     )
@@ -283,11 +313,13 @@ fun PlayAlertSoundActionEditor(
 fun VariableOpActionEditor(
   action: ScriptAction.VariableOp,
   variables: List<VariableDefinition>,
+  validationErrors: Map<String, String> = emptyMap(),
   onChange: (ScriptAction.VariableOp) -> Unit,
 ) {
+  val targetKeyError = validationErrors["var_target_key"]
   Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
     if (variables.isNotEmpty()) {
-      EditorSectionCard(title = "Quick Variable Keys") {
+      EditorSectionCard(title = "Tap a Saved Variable to Fill") {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
           variables.forEach { v ->
             AssistChip(
@@ -316,14 +348,20 @@ fun VariableOpActionEditor(
           OutlinedTextField(
             value = action.targetKey,
             onValueChange = { onChange(action.copy(targetKey = it)) },
-            label = { Text("Target Variable Key") },
+            label = { Text("Save Result In (Variable Name)") },
+            isError = targetKeyError != null,
+            supportingText = targetKeyError?.let { err -> { Text(err) } },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
           )
+          val valueErr = validationErrors["var_value"]
           OutlinedTextField(
             value = action.valueTemplate,
             onValueChange = { onChange(action.copy(valueTemplate = it)) },
-            label = { Text("Value Template (supports {var}, {CLIPBOARD}, etc.)") },
+            label = { Text("Value to Store") },
+            placeholder = { Text("Enter text, number, or {variable}") },
+            isError = valueErr != null,
+            supportingText = valueErr?.let { err -> { Text(err) } },
             modifier = Modifier.fillMaxWidth(),
           )
         }
@@ -335,7 +373,9 @@ fun VariableOpActionEditor(
           OutlinedTextField(
             value = action.targetKey,
             onValueChange = { onChange(action.copy(targetKey = it)) },
-            label = { Text("Result Variable Key") },
+            label = { Text("Save Result In (Variable Name)") },
+            isError = targetKeyError != null,
+            supportingText = targetKeyError?.let { err -> { Text(err) } },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
           )
@@ -347,22 +387,28 @@ fun VariableOpActionEditor(
               FilterChip(
                 selected = action.operator == op,
                 onClick = { onChange(action.copy(operator = op)) },
-                label = { Text(op.name) },
+                label = { Text(PlainLanguageFormatter.mathOpLabel(op)) },
               )
             }
           }
+          val leftErr = validationErrors["var_left"]
           OutlinedTextField(
             value = action.leftOperand,
             onValueChange = { onChange(action.copy(leftOperand = it)) },
-            label = { Text("Left Operand (number or {var})") },
+            label = { Text("First Number or {variable}") },
+            isError = leftErr != null,
+            supportingText = leftErr?.let { err -> { Text(err) } },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
           )
           if (!isUnary) {
+            val rightErr = validationErrors["var_right"]
             OutlinedTextField(
               value = action.rightOperand,
               onValueChange = { onChange(action.copy(rightOperand = it)) },
-              label = { Text("Right Operand (number or {var})") },
+              label = { Text("Second Number or {variable}") },
+              isError = rightErr != null,
+              supportingText = rightErr?.let { err -> { Text(err) } },
               singleLine = true,
               modifier = Modifier.fillMaxWidth(),
             )
@@ -373,7 +419,9 @@ fun VariableOpActionEditor(
           OutlinedTextField(
             value = action.targetKey,
             onValueChange = { onChange(action.copy(targetKey = it)) },
-            label = { Text("Target Variable Key") },
+            label = { Text("Save Result In (Variable Name)") },
+            isError = targetKeyError != null,
+            supportingText = targetKeyError?.let { err -> { Text(err) } },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
           )
@@ -385,20 +433,24 @@ fun VariableOpActionEditor(
                 onClick = { onChange(action.copy(targetType = type)) },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = types.size),
               ) {
-                Text(type.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                  text = PlainLanguageFormatter.randomTargetLabel(type),
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                )
               }
             }
           }
           if (action.targetType != RandomTargetType.BOOLEAN) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
               DoubleField(
-                label = "Min",
+                label = "Lowest",
                 value = action.minValue,
                 onChange = { onChange(action.copy(minValue = it)) },
                 modifier = Modifier.weight(1f),
               )
               DoubleField(
-                label = "Max",
+                label = "Highest",
                 value = action.maxValue,
                 onChange = { onChange(action.copy(maxValue = it)) },
                 modifier = Modifier.weight(1f),
@@ -411,7 +463,9 @@ fun VariableOpActionEditor(
           OutlinedTextField(
             value = action.targetKey,
             onValueChange = { onChange(action.copy(targetKey = it)) },
-            label = { Text("Target Variable Key") },
+            label = { Text("Save Result In (Variable Name)") },
+            isError = targetKeyError != null,
+            supportingText = targetKeyError?.let { err -> { Text(err) } },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
           )
@@ -423,14 +477,17 @@ fun VariableOpActionEditor(
               FilterChip(
                 selected = action.operator == op,
                 onClick = { onChange(action.copy(operator = op)) },
-                label = { Text(op.name) },
+                label = { Text(PlainLanguageFormatter.stringOpLabel(op)) },
               )
             }
           }
+          val inputAErr = validationErrors["var_input_a"]
           OutlinedTextField(
             value = action.inputA,
             onValueChange = { onChange(action.copy(inputA = it)) },
-            label = { Text("Input A (text or {var})") },
+            label = { Text("Text or {variable}") },
+            isError = inputAErr != null,
+            supportingText = inputAErr?.let { err -> { Text(err) } },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
           )
@@ -438,18 +495,21 @@ fun VariableOpActionEditor(
             action.operator == StringOperator.REPLACE ||
             action.operator == StringOperator.REPLACE_REGEX
           ) {
+            val inputBErr = validationErrors["var_input_b"]
             OutlinedTextField(
               value = action.inputB,
               onValueChange = { onChange(action.copy(inputB = it)) },
               label = {
                 Text(
                   if (action.operator == StringOperator.CONCATENATE) {
-                    "Append Input B"
+                    "Text to Join Afterward"
                   } else {
-                    "Find Pattern|Replacement"
+                    "Find|Replace (e.g. old|new)"
                   },
                 )
               },
+              isError = inputBErr != null,
+              supportingText = inputBErr?.let { err -> { Text(err) } },
               singleLine = true,
               modifier = Modifier.fillMaxWidth(),
             )
@@ -457,14 +517,14 @@ fun VariableOpActionEditor(
           if (action.operator == StringOperator.SUBSTRING) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
               IntTextField(
-                label = "Start Index",
+                label = "Start Position",
                 value = action.startIndex,
                 min = 0,
                 onChange = { onChange(action.copy(startIndex = it)) },
                 modifier = Modifier.weight(1f),
               )
               IntTextField(
-                label = "End Index",
+                label = "End Position",
                 value = action.endIndex,
                 min = 0,
                 onChange = { onChange(action.copy(endIndex = it)) },
@@ -478,7 +538,9 @@ fun VariableOpActionEditor(
           OutlinedTextField(
             value = action.targetKey,
             onValueChange = { onChange(action.copy(targetKey = it)) },
-            label = { Text("Target Boolean Variable Key") },
+            label = { Text("Save Result In (Yes/No Variable)") },
+            isError = targetKeyError != null,
+            supportingText = targetKeyError?.let { err -> { Text(err) } },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
           )
@@ -487,22 +549,28 @@ fun VariableOpActionEditor(
               FilterChip(
                 selected = action.operator == op,
                 onClick = { onChange(action.copy(operator = op)) },
-                label = { Text(op.name) },
+                label = { Text(PlainLanguageFormatter.booleanOpLabel(op)) },
               )
             }
           }
+          val leftKeyErr = validationErrors["var_left_key"]
           OutlinedTextField(
             value = action.leftKey,
             onValueChange = { onChange(action.copy(leftKey = it)) },
-            label = { Text("Left Variable Key") },
+            label = { Text("Yes/No Variable Name") },
+            isError = leftKeyErr != null,
+            supportingText = leftKeyErr?.let { err -> { Text(err) } },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
           )
           if (action.operator != BooleanOperator.TOGGLE) {
+            val rightKeyErr = validationErrors["var_right_key"]
             OutlinedTextField(
               value = action.rightKey.orEmpty(),
               onValueChange = { onChange(action.copy(rightKey = it.ifBlank { null })) },
-              label = { Text("Right Variable Key") },
+              label = { Text("Second Yes/No Variable Name") },
+              isError = rightKeyErr != null,
+              supportingText = rightKeyErr?.let { err -> { Text(err) } },
               singleLine = true,
               modifier = Modifier.fillMaxWidth(),
             )
@@ -513,14 +581,19 @@ fun VariableOpActionEditor(
           OutlinedTextField(
             value = action.targetKey,
             onValueChange = { onChange(action.copy(targetKey = it)) },
-            label = { Text("Target Variable Key") },
+            label = { Text("Save Result In (Variable Name)") },
+            isError = targetKeyError != null,
+            supportingText = targetKeyError?.let { err -> { Text(err) } },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
           )
+          val sourceErr = validationErrors["var_source_key"]
           OutlinedTextField(
             value = action.sourceKey,
             onValueChange = { onChange(action.copy(sourceKey = it)) },
-            label = { Text("Source Variable Key") },
+            label = { Text("Variable to Convert") },
+            isError = sourceErr != null,
+            supportingText = sourceErr?.let { err -> { Text(err) } },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
           )
@@ -532,7 +605,7 @@ fun VariableOpActionEditor(
               FilterChip(
                 selected = action.operator == op,
                 onClick = { onChange(action.copy(operator = op)) },
-                label = { Text(op.name.replace('_', ' ')) },
+                label = { Text(PlainLanguageFormatter.typeCastLabel(op)) },
               )
             }
           }

@@ -5,7 +5,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.DeadObjectException
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
@@ -396,14 +395,7 @@ class ShizukuManager @Inject constructor(
   private fun checkProjectMediaViaAppOpsManager(): Boolean =
     runCatching {
       val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager ?: return false
-      val uid = Process.myUid()
-      val mode =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-          appOps.unsafeCheckOpNoThrow(APP_OP_PROJECT_MEDIA_STR, uid, context.packageName)
-        } else {
-          @Suppress("DEPRECATION")
-          appOps.checkOpNoThrow(APP_OP_PROJECT_MEDIA_STR, uid, context.packageName)
-        }
+      val mode = appOps.checkOpNoThrow(APP_OP_PROJECT_MEDIA_STR, Process.myUid(), context.packageName)
       mode == AppOpsManager.MODE_ALLOWED
     }.getOrDefault(false)
 

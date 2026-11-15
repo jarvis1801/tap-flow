@@ -3,19 +3,25 @@ package com.tapflow.feature.editor
 import com.tapflow.core.model.action.ClipboardActionType
 import com.tapflow.core.model.action.LoopMode
 import com.tapflow.core.model.action.MathOperator
+import com.tapflow.core.model.action.MultiTouchMode
+import com.tapflow.core.model.action.MultiTouchPoint
 import com.tapflow.core.model.action.ScriptAction
+import com.tapflow.core.model.action.TextInjectionEngine
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
 import com.tapflow.core.model.common.PostActionDelay
+import com.tapflow.core.model.common.VariableType
 import com.tapflow.core.model.condition.ColorTarget
 import com.tapflow.core.model.condition.ConditionGroup
 import com.tapflow.core.model.condition.ConditionLeaf
 import com.tapflow.core.model.condition.ConditionPredicate
 import com.tapflow.core.model.condition.ConditionValidator
 import com.tapflow.core.model.condition.LogicOperator
+import com.tapflow.core.model.condition.NumberCompareOp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -61,7 +67,6 @@ class ActionTreeAndConditionTest {
     val root = listOf(ifBlock)
     val thenLoc = ActionBranchLocation(parentActionId = "if1", branchKind = BranchKind.IF_THEN)
 
-    // Insert into index 1 of Then branch
     val inserted =
       ActionTreeUtils.insertActionAt(
         actions = root,
@@ -72,12 +77,10 @@ class ActionTreeAndConditionTest {
     val insertedThen = (inserted.first() as ScriptAction.IfBlock).thenActions
     assertEquals(listOf("t1", "d_mid", "t2"), insertedThen.map { it.id })
 
-    // Move d_mid up to index 0
     val moved = ActionTreeUtils.moveSibling(inserted, thenLoc, index = 1, delta = -1)
     val movedThen = (moved.first() as ScriptAction.IfBlock).thenActions
     assertEquals(listOf("d_mid", "t1", "t2"), movedThen.map { it.id })
 
-    // Delete t1 and restore via Undo record
     val (afterDelete, undoRecord) = ActionTreeUtils.deleteActionById(moved, "t1")
     assertNotNull(undoRecord)
     assertEquals(1, undoRecord!!.index)
@@ -103,13 +106,11 @@ class ActionTreeAndConditionTest {
     var tree = ConditionTreeUtils.addNodeToGroup(l1, "g1", l2)
     tree = ConditionTreeUtils.addNodeToGroup(tree, "g2", l3)
 
-    // Level 3 cannot nest a Level 4 subgroup
     assertFalse(ConditionValidator.canAddSubGroup(tree, "g3"))
     val attemptedL4 = ConditionGroup(id = "g4")
     val afterBlockedAdd = ConditionTreeUtils.addNodeToGroup(tree, "g3", attemptedL4)
     assertEquals(3, ConditionValidator.calculateMaxDepth(afterBlockedAdd))
 
-    // Add leaf to L3
     val leaf =
       ConditionLeaf(
         id = "leaf1",
@@ -181,5 +182,143 @@ class ActionTreeAndConditionTest {
     val loopBlock = updated[2] as ScriptAction.LoopBlock
     assertEquals(PostActionDelay.Global, (loopBlock.bodyActions[0] as ScriptAction.SwipeDrag).postDelay)
     assertEquals(DelayConfig.Fixed(250L), (loopBlock.bodyActions[1] as ScriptAction.Delay).config)
+  }
+
+  @Test
+  fun actionValidator_rejectsEmptyTargets_whileAllowingValidZeroCoordinates() {
+    val invalidTap =
+      ScriptAction.Tap(
+        id = "tap_empty",
+        x = NumericInput.Literal(UNSET_COORD),
+        y = NumericInput.Literal(UNSET_COORD),
+      )
+    val tapErrors = ActionValidator.validate(invalidTap)
+    assertTrue(tapErrors.containsKey("x"))
+    assertTrue(tapErrors.containsKey("y"))
+
+    val zeroTap =
+      ScriptAction.Tap(
+        id = "tap_origin",
+        x = NumericInput.Literal(0),
+        y = NumericInput.Literal(0),
+      )
+    assertTrue(ActionValidator.validate(zeroTap).isEmpty())
+
+    val invalidInput =
+      ScriptAction.InputText(
+        id = "in_empty",
+        tapToFocus = true,
+        focusX = null,
+        focusY = null,
+        textTemplate = "   ",
+      )
+    val inputErrors = ActionValidator.validate(invalidInput)
+    assertTrue(inputErrors.containsKey("focus_x"))
+    assertTrue(inputErrors.containsKey("focus_y"))
+    assertTrue(inputErrors.containsKey("text_template"))
+
+    val invalidMultiTouch =
+      ScriptAction.MultiTouch(
+        id = "mt_empty",
+        mode = MultiTouchMode.CUSTOM_POINTS,
+        customPoints = listOf(MultiTouchPoint(x = UNSET_COORD, y = 200)),
+      )
+    val mtErrors = ActionValidator.validate(invalidMultiTouch)
+    assertTrue(mtErrors.containsKey("finger_0_x"))
+    assertFalse(mtErrors.containsKey("finger_0_y"))
+
+    assertTrue(ActionValidator.validate(ScriptAction.LaunchApp(id = "l1", packageName = "")).containsKey("app_package"))
+    assertTrue(ActionValidator.validate(ScriptAction.ForceStopApp(id = "f1", packageName = "")).containsKey("app_package"))
+    assertTrue(
+      ActionValidator.validate(
+        ScriptAction.ClipboardOp(id = "cb1", operation = ClipboardActionType.COPY, valueTemplate = ""),
+      ).containsKey("clipboard_text"),
+    )
+
+    val emptyIf = ScriptAction.IfBlock(id = "if_empty", conditionRoot = ConditionGroup(id = "root"))
+    assertTrue(ActionValidator.validate(emptyIf).containsKey("cond_group_root"))
+
+    val incompleteVarIf =
+      ScriptAction.IfBlock(
+        id = "if_var",
+        conditionRoot =
+          ConditionGroup(
+            id = "root",
+            children =
+              listOf(
+                ConditionLeaf(
+                  id = "lf1",
+                  predicate =
+                    ConditionPredicate.VariableCompare(
+                      variableKey = "",
+                      variableType = VariableType.NUMBER,
+                      numberOp = NumberCompareOp.GT,
+                      expectedValue = "",
+                    ),
+                ),
+              ),
+          ),
+      )
+    val leafErrors = ActionValidator.validate(incompleteVarIf)
+    assertTrue(leafErrors.containsKey("cond_leaf_lf1_var_key"))
+    assertTrue(leafErrors.containsKey("cond_leaf_lf1_var_expected"))
+  }
+
+  @Test
+  fun plainLanguageFormatter_generatesFriendlySentencesAndSummariesWithoutJargon() {
+    val whiteLeaf =
+      ConditionLeaf(
+        id = "c1",
+        predicate =
+          ConditionPredicate.ColorMatch(
+            targets = listOf(ColorTarget(x = 540, y = 960, hexColor = "#FFFFFF")),
+          ),
+      )
+    val nestedGroup =
+      ConditionGroup(
+        id = "sub",
+        operator = LogicOperator.ANY,
+        children =
+          listOf(
+            ConditionLeaf(
+              id = "c2",
+              predicate = ConditionPredicate.AppMatch(packageName = "com.game", appLabel = "Game"),
+            ),
+            ConditionLeaf(
+              id = "c3",
+              predicate =
+                ConditionPredicate.VariableCompare(
+                  variableKey = "coins",
+                  variableType = VariableType.NUMBER,
+                  numberOp = NumberCompareOp.GTE,
+                  expectedValue = "100",
+                ),
+            ),
+          ),
+      )
+    val root = ConditionGroup(id = "root", operator = LogicOperator.ALL, children = listOf(whiteLeaf, nestedGroup))
+
+    val sentence = PlainLanguageFormatter.formatConditionSentence(root)
+    assertEquals(
+      "Run 'Then' steps when: Pixel at (540, 960) is White AND (App Game is open OR coins is at least 100)",
+      sentence,
+    )
+    assertEquals("#FFFFFF", PlainLanguageFormatter.extractFirstColorHex(root))
+    assertNull(PlainLanguageFormatter.extractFirstColorHex(ConditionGroup(id = "empty")))
+
+    val ifAction = ScriptAction.IfBlock(id = "if1", conditionRoot = root)
+    val ifSummary = ActionTreeUtils.summarizeAction(ifAction)
+    assertFalse(ifSummary.contains("When ["))
+
+    val inputSummary =
+      ActionTreeUtils.summarizeAction(
+        ScriptAction.InputText(
+          id = "in1",
+          textTemplate = "hello",
+          engine = TextInjectionEngine.CLIPBOARD_PASTE,
+        ),
+      )
+    assertTrue(inputSummary.contains("Paste Text"))
+    assertFalse(inputSummary.contains("CLIPBOARD_PASTE"))
   }
 }

@@ -105,53 +105,49 @@ fun NumericInputField(
   onValueChange: (NumericInput) -> Unit,
   onProRequested: (String) -> Unit,
   modifier: Modifier = Modifier,
+  errorText: String? = null,
+  placeholder: String = "",
+  supportingHint: String? = null,
+  unsetValue: Int = UNSET_COORD,
+  allowNegative: Boolean = false,
 ) {
   val numberVars = remember(variables) { variables.filter { it.type == VariableType.NUMBER } }
   val isVar = value is NumericInput.VariableRef
+  val showVarToggle = numberVars.isNotEmpty() || isVar
 
-  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-    val options = listOf("Fixed", "Variable")
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-      options.forEachIndexed { index, text ->
-        val selected = (index == 0 && !isVar) || (index == 1 && isVar)
-        val locked = index == 1 && !isPro
-        SegmentedButton(
-          selected = selected,
-          onClick = {
-            if (index == 0) {
-              if (isVar) onValueChange(NumericInput.Literal(0))
-            } else if (!isPro) {
-              onProRequested(ProFeatureGate.DYNAMIC_VARIABLES.displayName)
-            } else {
-              val defaultKey = numberVars.firstOrNull()?.key ?: "var"
-              onValueChange(NumericInput.VariableRef(defaultKey))
-            }
-          },
-          shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-          icon = {
-            if (locked) {
-              Icon(Icons.Rounded.Lock, contentDescription = "Pro feature", modifier = Modifier.size(14.dp))
-            } else {
-              SegmentedButtonDefaults.Icon(active = selected)
-            }
-          },
-        ) {
-          Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-      }
-    }
-
+  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
     when (value) {
       is NumericInput.Literal -> {
-        var text by remember(value.value) { mutableStateOf(value.value.toString()) }
+        var text by remember(value.value) {
+          mutableStateOf(if (value.value == unsetValue) "" else value.value.toString())
+        }
+        val activeSupport = errorText ?: supportingHint
         OutlinedTextField(
           value = text,
           onValueChange = { raw ->
-            val clean = raw.filterIndexed { idx, c -> c.isDigit() || (idx == 0 && c == '-') }
+            val clean =
+              raw.filterIndexed { idx, c -> c.isDigit() || (allowNegative && idx == 0 && c == '-') }
             text = clean
-            clean.toIntOrNull()?.let { onValueChange(NumericInput.Literal(it)) }
+            if (clean.isEmpty()) {
+              onValueChange(NumericInput.Literal(unsetValue))
+            } else {
+              clean.toIntOrNull()?.let { onValueChange(NumericInput.Literal(it)) }
+            }
           },
           label = { Text(label) },
+          placeholder =
+            if (placeholder.isNotBlank()) {
+              { Text(placeholder) }
+            } else {
+              null
+            },
+          isError = errorText != null,
+          supportingText =
+            if (activeSupport != null) {
+              { Text(activeSupport) }
+            } else {
+              null
+            },
           singleLine = true,
           keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
           modifier = Modifier.fillMaxWidth(),
@@ -161,7 +157,14 @@ fun NumericInputField(
         OutlinedTextField(
           value = value.variableKey,
           onValueChange = { onValueChange(NumericInput.VariableRef(it)) },
-          label = { Text("$label (Number Var Key)") },
+          label = { Text("$label (Variable)") },
+          isError = errorText != null,
+          supportingText =
+            if (errorText != null) {
+              { Text(errorText) }
+            } else {
+              null
+            },
           singleLine = true,
           modifier = Modifier.fillMaxWidth(),
         )
@@ -170,11 +173,50 @@ fun NumericInputField(
             numberVars.forEach { v ->
               AssistChip(
                 onClick = { onValueChange(NumericInput.VariableRef(v.key)) },
-                label = { Text("{${v.key}}") },
+                label = { Text(v.key) },
               )
             }
           }
         }
+      }
+    }
+
+    if (showVarToggle) {
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        AssistChip(
+          onClick = {
+            if (isVar) {
+              onValueChange(NumericInput.Literal(unsetValue))
+            } else if (!isPro) {
+              onProRequested(ProFeatureGate.DYNAMIC_VARIABLES.displayName)
+            } else {
+              val defaultKey = numberVars.firstOrNull()?.key.orEmpty()
+              onValueChange(NumericInput.VariableRef(defaultKey))
+            }
+          },
+          leadingIcon =
+            if (!isVar && !isPro) {
+              {
+                Icon(
+                  imageVector = Icons.Rounded.Lock,
+                  contentDescription = "Pro feature",
+                  modifier = Modifier.size(14.dp),
+                )
+              }
+            } else {
+              null
+            },
+          label = {
+            Text(
+              text = if (isVar) "Switch to Number" else "Use variable",
+              style = MaterialTheme.typography.labelSmall,
+            )
+          },
+        )
       }
     }
   }
@@ -190,8 +232,10 @@ fun DurationInputField(
   onValueChange: (DurationInput) -> Unit,
   onProRequested: (String) -> Unit,
   modifier: Modifier = Modifier,
+  suggestedHint: String? = null,
 ) {
   val numberVars = remember(variables) { variables.filter { it.type == VariableType.NUMBER } }
+  val includeVarTab = numberVars.isNotEmpty() || value is DurationInput.VariableRef
   val selectedIdx =
     when (value) {
       is DurationInput.Fixed -> 0
@@ -200,7 +244,12 @@ fun DurationInputField(
     }
 
   Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-    val options = listOf("Fixed", "Random", "Var")
+    val options =
+      if (includeVarTab) {
+        listOf("Number", "Random Range", "Variable")
+      } else {
+        listOf("Number", "Random Range")
+      }
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
       options.forEachIndexed { index, text ->
         val locked = index > 0 && !isPro
@@ -219,7 +268,7 @@ fun DurationInputField(
                 if (!isPro) {
                   onProRequested(ProFeatureGate.DYNAMIC_VARIABLES.displayName)
                 } else {
-                  onValueChange(DurationInput.VariableRef(numberVars.firstOrNull()?.key ?: "dur"))
+                  onValueChange(DurationInput.VariableRef(numberVars.firstOrNull()?.key.orEmpty()))
                 }
             }
           },
@@ -247,6 +296,12 @@ fun DurationInputField(
             text.toLongOrNull()?.let { onValueChange(DurationInput.Fixed(it.coerceAtLeast(10L))) }
           },
           label = { Text("$label (ms)") },
+          supportingText =
+            if (suggestedHint != null) {
+              { Text(suggestedHint) }
+            } else {
+              null
+            },
           singleLine = true,
           keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
           modifier = Modifier.fillMaxWidth(),
@@ -264,7 +319,7 @@ fun DurationInputField(
                 onValueChange(DurationInput.RandomRange(min, value.maxMs.coerceAtLeast(min)))
               }
             },
-            label = { Text("Min ms") },
+            label = { Text("Min (ms)") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.weight(1f),
@@ -277,7 +332,7 @@ fun DurationInputField(
                 onValueChange(DurationInput.RandomRange(value.minMs, max.coerceAtLeast(value.minMs)))
               }
             },
-            label = { Text("Max ms") },
+            label = { Text("Max (ms)") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier.weight(1f),
@@ -288,10 +343,20 @@ fun DurationInputField(
         OutlinedTextField(
           value = value.variableKey,
           onValueChange = { onValueChange(DurationInput.VariableRef(it)) },
-          label = { Text("$label (Number Variable Key)") },
+          label = { Text("$label (Variable)") },
           singleLine = true,
           modifier = Modifier.fillMaxWidth(),
         )
+        if (numberVars.isNotEmpty()) {
+          FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            numberVars.forEach { v ->
+              AssistChip(
+                onClick = { onValueChange(DurationInput.VariableRef(v.key)) },
+                label = { Text(v.key) },
+              )
+            }
+          }
+        }
       }
     }
   }
@@ -847,12 +912,16 @@ private fun PickerCropRegionThumbnail(
   }
 }
 
-internal fun parseEditorHexColor(hex: String): Color {
+internal fun parseEditorHexColorOrNull(hex: String): Color? {
   val clean = hex.removePrefix("#").trim()
-  val parsed = clean.toLongOrNull(16) ?: return Color.Gray
+  if (clean.length != 6 && clean.length != 8) return null
+  val parsed = clean.toLongOrNull(16) ?: return null
   return when (clean.length) {
     6 -> Color((0xFF000000L or parsed).toInt())
     8 -> Color(parsed.toInt())
-    else -> Color.Gray
+    else -> null
   }
 }
+
+internal fun parseEditorHexColor(hex: String): Color =
+  parseEditorHexColorOrNull(hex) ?: Color.Gray

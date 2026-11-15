@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -100,7 +101,6 @@ import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
 import com.tapflow.core.model.common.PostActionDelay
 import com.tapflow.core.model.condition.ConditionGroup
-import com.tapflow.core.model.condition.ConditionValidator
 import com.tapflow.core.service.overlay.OverlayLaunchIntents
 import kotlinx.coroutines.launch
 
@@ -302,7 +302,7 @@ fun ScriptEditorContent(
                       }
                     } else {
                       InlineInsertDivider(
-                        label = "Insert",
+                        label = row.label,
                         onClick = onInsert,
                         testTag = row.key,
                       )
@@ -620,7 +620,7 @@ private fun ScriptEditorTopHeaderBar(
                 },
                 label = {
                   Text(
-                    text = "Global Delay: ${ActionTreeUtils.formatDelayConfig(state.globalDelay)}",
+                    text = "Default Wait: ${ActionTreeUtils.formatDelayConfig(state.globalDelay)}",
                     maxLines = 1,
                   )
                 },
@@ -692,12 +692,12 @@ private fun EmptyActionsCard(onAddFirst: () -> Unit) {
         cornerRadius = 16.dp,
       )
       Text(
-        text = "No actions yet",
+        text = "No steps yet",
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.SemiBold,
       )
       Text(
-        text = "Build an automation flow with taps, swipes, conditional logic, loops, or app actions.",
+        text = "Build an automation flow with taps, swipes, smart checks, loops, or app actions.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
@@ -709,7 +709,7 @@ private fun EmptyActionsCard(onAddFirst: () -> Unit) {
       ) {
         Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.width(6.dp))
-        Text("Add Action")
+        Text("Add First Step")
       }
     }
   }
@@ -993,19 +993,42 @@ private fun ActionTreeItemCard(
       }
 
       if (action is ScriptAction.IfBlock) {
+        val clause = PlainLanguageFormatter.formatConditionClause(action.conditionRoot)
+        val swatchHex = PlainLanguageFormatter.extractFirstColorHex(action.conditionRoot)
+        val swatchColor = swatchHex?.let(::parseEditorHexColorOrNull)
         Surface(
           shape = RoundedCornerShape(10.dp),
           color = MaterialTheme.colorScheme.surfaceContainerHighest,
           modifier = Modifier.fillMaxWidth(),
         ) {
-          Text(
-            text = ConditionValidator.formatNaturalLanguagePreview(action.conditionRoot),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
+          Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-          )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            if (swatchColor != null) {
+              Box(
+                modifier =
+                  Modifier
+                    .size(10.dp)
+                    .clip(CircleShape)
+                    .background(swatchColor)
+                    .border(0.75.dp, MaterialTheme.colorScheme.outline, CircleShape),
+              )
+            }
+            Text(
+              text =
+                if (clause.isBlank()) {
+                  "If no rules added yet"
+                } else {
+                  "If $clause"
+                },
+              style = MaterialTheme.typography.labelMedium,
+              color = MaterialTheme.colorScheme.onSurface,
+              maxLines = 2,
+              overflow = TextOverflow.Ellipsis,
+            )
+          }
         }
       }
     }
@@ -1029,9 +1052,9 @@ private fun extractActionPostDelay(action: ScriptAction): PostActionDelay =
 
 private fun formatPostDelayBadge(postDelay: PostActionDelay, globalDelay: DelayConfig): String =
   when (postDelay) {
-    PostActionDelay.Global -> "Global (${ActionTreeUtils.formatDelayConfig(globalDelay)})"
-    is PostActionDelay.Override -> "Custom: ${ActionTreeUtils.formatDelayConfig(postDelay.config)}"
-    PostActionDelay.Off -> "Off (0ms)"
+    PostActionDelay.Global -> "Wait (${ActionTreeUtils.formatDelayConfig(globalDelay)})"
+    is PostActionDelay.Override -> "Custom Wait: ${ActionTreeUtils.formatDelayConfig(postDelay.config)}"
+    PostActionDelay.Off -> "No Wait (0ms)"
   }
 
 private fun flattenActionTree(actions: List<ScriptAction>): List<EditorTreeRow> {
@@ -1056,14 +1079,15 @@ private fun appendBranchRows(
   addLabel: String,
 ) {
   val branchKey = "${location.parentActionId ?: "root"}_${location.branchKind.name}"
+  val branchIsEmpty = branchActions.isEmpty()
   rows +=
     EditorTreeRow.InsertRow(
       key = "insert_${branchKey}_0",
       depth = depth,
       location = location,
       insertIndex = 0,
-      label = addLabel,
-      isTail = branchActions.isEmpty(),
+      label = if (branchIsEmpty) addLabel else "Insert",
+      isTail = branchIsEmpty,
     )
 
   branchActions.forEachIndexed { index, action ->
@@ -1102,21 +1126,33 @@ private fun appendBranchRows(
             prefix = "$stepNum.T",
             addLabel = "Add Then Action",
           )
-          rows +=
-            EditorTreeRow.BranchLabel(
-              key = "branch_else_${action.id}",
+          if (action.elseActions.isEmpty()) {
+            rows +=
+              EditorTreeRow.InsertRow(
+                key = "insert_${action.id}_IF_ELSE_0",
+                depth = depth + 1,
+                location = ActionBranchLocation(action.id, BranchKind.IF_ELSE),
+                insertIndex = 0,
+                label = "Add Else Action",
+                isTail = false,
+              )
+          } else {
+            rows +=
+              EditorTreeRow.BranchLabel(
+                key = "branch_else_${action.id}",
+                depth = depth + 1,
+                title = "Else Branch (${action.elseActions.size})",
+                branchKind = BranchKind.IF_ELSE,
+              )
+            appendBranchRows(
+              rows = rows,
+              branchActions = action.elseActions,
+              location = ActionBranchLocation(action.id, BranchKind.IF_ELSE),
               depth = depth + 1,
-              title = "Else Branch (${action.elseActions.size})",
-              branchKind = BranchKind.IF_ELSE,
+              prefix = "$stepNum.E",
+              addLabel = "Add Else Action",
             )
-          appendBranchRows(
-            rows = rows,
-            branchActions = action.elseActions,
-            location = ActionBranchLocation(action.id, BranchKind.IF_ELSE),
-            depth = depth + 1,
-            prefix = "$stepNum.E",
-            addLabel = "Add Else Action",
-          )
+          }
         }
       }
 
@@ -1143,14 +1179,15 @@ private fun appendBranchRows(
       else -> Unit
     }
 
+    val isLast = index == branchActions.lastIndex
     rows +=
       EditorTreeRow.InsertRow(
         key = "insert_${branchKey}_${index + 1}",
         depth = depth,
         location = location,
         insertIndex = index + 1,
-        label = addLabel,
-        isTail = index == branchActions.lastIndex,
+        label = if (isLast) addLabel else "Insert",
+        isTail = isLast,
       )
   }
 }

@@ -122,12 +122,19 @@ class ScriptEditorViewModel @Inject constructor(
         val updatedDraft = applyPickedGestureToDraft(session.draftAction, purpose, result)
         _uiState.update { state ->
           val activeSession = state.actionEditorSession ?: return@update state
+          val nextErrors =
+            if (activeSession.showValidationErrors) {
+              ActionValidator.validate(updatedDraft)
+            } else {
+              activeSession.validationErrors
+            }
           state.copy(
             actionEditorSession =
               activeSession.copy(
                 draftAction = updatedDraft,
                 activePickerRequestId = null,
                 activePickPurpose = null,
+                validationErrors = nextErrors,
               ),
           )
         }
@@ -328,8 +335,8 @@ class ScriptEditorViewModel @Inject constructor(
         val defaultAction =
           ScriptAction.Tap(
             id = UUID.randomUUID().toString(),
-            x = NumericInput.Literal(540),
-            y = NumericInput.Literal(960),
+            x = NumericInput.Literal(UNSET_COORD),
+            y = NumericInput.Literal(UNSET_COORD),
           )
         _uiState.update {
           it.copy(
@@ -385,6 +392,8 @@ class ScriptEditorViewModel @Inject constructor(
               session.copy(
                 draftAction = withId,
                 selectedCategory = withId.categoryGroup(),
+                validationErrors = emptyMap(),
+                showValidationErrors = false,
               ),
           )
         }
@@ -392,12 +401,39 @@ class ScriptEditorViewModel @Inject constructor(
       is ScriptEditorUiIntent.UpdateDraftAction -> {
         _uiState.update { state ->
           val session = state.actionEditorSession ?: return@update state
-          state.copy(actionEditorSession = session.copy(draftAction = intent.action))
+          val nextErrors =
+            if (session.showValidationErrors) {
+              ActionValidator.validate(intent.action)
+            } else {
+              session.validationErrors
+            }
+          state.copy(
+            actionEditorSession =
+              session.copy(
+                draftAction = intent.action,
+                validationErrors = nextErrors,
+              ),
+          )
         }
       }
       ScriptEditorUiIntent.CommitDraftAction -> {
         val session = _uiState.value.actionEditorSession ?: return
         if (!verifyProGateForAction(session.draftAction)) return
+        val errors = ActionValidator.validate(session.draftAction)
+        if (errors.isNotEmpty()) {
+          _uiState.update { state ->
+            val current = state.actionEditorSession ?: return@update state
+            state.copy(
+              actionEditorSession =
+                current.copy(
+                  validationErrors = errors,
+                  showValidationErrors = true,
+                ),
+            )
+          }
+          sendEffect(ScriptEditorUiEffect.ShowSnackbar(errors.values.first()))
+          return
+        }
         val nextActions =
           if (session.editingActionId != null) {
             ActionTreeUtils.replaceAction(_uiState.value.actions, session.draftAction)
@@ -487,9 +523,15 @@ class ScriptEditorViewModel @Inject constructor(
             }
           }
         _uiState.update {
+          val nextErrors =
+            if (session.showValidationErrors) ActionValidator.validate(updatedDraft) else session.validationErrors
           it.copy(
             appPickerTarget = null,
-            actionEditorSession = session.copy(draftAction = updatedDraft),
+            actionEditorSession =
+              session.copy(
+                draftAction = updatedDraft,
+                validationErrors = nextErrors,
+              ),
           )
         }
       }
@@ -532,9 +574,15 @@ class ScriptEditorViewModel @Inject constructor(
             )
           }
         _uiState.update {
+          val nextErrors =
+            if (session.showValidationErrors) ActionValidator.validate(updatedDraft) else session.validationErrors
           it.copy(
             inspectPickerTarget = null,
-            actionEditorSession = session.copy(draftAction = updatedDraft),
+            actionEditorSession =
+              session.copy(
+                draftAction = updatedDraft,
+                validationErrors = nextErrors,
+              ),
           )
         }
       }
@@ -567,9 +615,19 @@ class ScriptEditorViewModel @Inject constructor(
                 )
               }
             _uiState.update {
+              val nextErrors =
+                if (session.showValidationErrors) {
+                  ActionValidator.validate(updatedDraft)
+                } else {
+                  session.validationErrors
+                }
               it.copy(
                 inspectPickerTarget = null,
-                actionEditorSession = session.copy(draftAction = updatedDraft),
+                actionEditorSession =
+                  session.copy(
+                    draftAction = updatedDraft,
+                    validationErrors = nextErrors,
+                  ),
               )
             }
             sendEffect(
@@ -728,8 +786,7 @@ class ScriptEditorViewModel @Inject constructor(
               ColorTarget(
                 x = result.startX,
                 y = result.startY,
-                hexColor =
-                  current.targets.firstOrNull()?.hexColor ?: "#FFFFFF",
+                hexColor = current.targets.firstOrNull()?.hexColor ?: "",
               )
             val nextList =
               if (current.mode == ColorMatchMode.SINGLE_POINT) {

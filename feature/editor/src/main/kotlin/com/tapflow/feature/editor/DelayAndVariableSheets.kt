@@ -61,9 +61,9 @@ import com.tapflow.core.model.common.VariableType
 import com.tapflow.core.model.entitlement.ProFeatureGate
 
 private enum class DelayModeTab(val label: String, val requiresPro: Boolean) {
-  FIXED("Fixed", false),
-  RANDOM_RANGE("Random", true),
-  DEVIATION("Deviation", true),
+  FIXED("Exact Wait", false),
+  RANDOM_RANGE("Random Range", true),
+  DEVIATION("About (± Random)", true),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -135,7 +135,7 @@ fun DelayConfigEditor(
     when (config) {
       is DelayConfig.Fixed -> {
         HmsMsDurationRow(
-          label = if (minDelayMs > 0L) "Duration (min ${minDelayMs}ms)" else "Duration",
+          label = if (minDelayMs > 0L) "Wait Time (min ${minDelayMs}ms)" else "Wait Time",
           totalMs = config.durationMs,
           minClampMs = minDelayMs,
           onDurationChange = { ms -> onConfigChange(DelayConfig.fixed(ms, minDelayMs)) },
@@ -143,7 +143,7 @@ fun DelayConfigEditor(
       }
       is DelayConfig.RandomRange -> {
         HmsMsDurationRow(
-          label = if (minDelayMs > 0L) "Min Delay (min ${minDelayMs}ms)" else "Min Delay",
+          label = if (minDelayMs > 0L) "Minimum Wait (min ${minDelayMs}ms)" else "Minimum Wait",
           totalMs = config.minMs,
           minClampMs = minDelayMs,
           onDurationChange = { min ->
@@ -157,7 +157,7 @@ fun DelayConfigEditor(
           },
         )
         HmsMsDurationRow(
-          label = "Max Delay",
+          label = "Maximum Wait",
           totalMs = config.maxMs,
           minClampMs = minDelayMs,
           onDurationChange = { max ->
@@ -173,7 +173,7 @@ fun DelayConfigEditor(
       }
       is DelayConfig.Deviation -> {
         HmsMsDurationRow(
-          label = if (minDelayMs > 0L) "Base Delay (min ${minDelayMs}ms)" else "Base Delay",
+          label = if (minDelayMs > 0L) "Base Wait (min ${minDelayMs}ms)" else "Base Wait",
           totalMs = config.baseMs,
           minClampMs = minDelayMs,
           onDurationChange = { base ->
@@ -181,7 +181,7 @@ fun DelayConfigEditor(
           },
         )
         HmsMsDurationRow(
-          label = "Jitter ± Delta",
+          label = "Random Variation (±)",
           totalMs = config.deltaMs,
           minClampMs = 0L,
           onDurationChange = { delta ->
@@ -294,13 +294,13 @@ fun PostActionDelaySection(
       PostActionDelay.Off -> 2
     }
 
-  val globalLabel = "Global (${ActionTreeUtils.formatDelayConfig(globalDelay)})"
+  val globalLabel = "Script Default"
   EditorSectionCard(
-    title = "Post-Action Delay",
-    subtitle = "Global default: ${ActionTreeUtils.formatDelayConfig(globalDelay)}",
+    title = "Wait After This Step",
+    subtitle = "Script default: ${ActionTreeUtils.formatDelayConfig(globalDelay)}",
     containerColor = MaterialTheme.colorScheme.surfaceContainer,
   ) {
-    val options = listOf(globalLabel, "Override", "Off (0ms)")
+    val options = listOf(globalLabel, "Custom Wait", "No Wait (0ms)")
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
       options.forEachIndexed { index, label ->
         SegmentedButton(
@@ -364,13 +364,13 @@ fun GlobalDelayBottomSheet(
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       Text(
-        text = "Script Global Post-Action Delay",
+        text = "Default Wait After Each Step",
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
       )
       Text(
         text =
-          "Applied after every physical action set to Global delay. Set to 0ms for instant execution without pause.",
+          "Pauses this long after each tap, swipe, or key press set to Script Default. Set to 0ms for instant speed.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
@@ -393,7 +393,7 @@ fun GlobalDelayBottomSheet(
       ) {
         Icon(Icons.Rounded.DoneAll, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(modifier = Modifier.width(8.dp))
-        Text("Apply to All Actions")
+        Text("Use for All Steps")
       }
       Row(
         modifier = Modifier.fillMaxWidth(),
@@ -445,24 +445,24 @@ fun DynamicVariablesBottomSheet(
       verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
       Text(
-        text = "Dynamic Script Variables",
+        text = "Saved Variables",
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
       )
       Text(
-        text = "In-memory session variables shared across loop cycles and pipeline steps. Interpolate with {key}.",
+        text = "Save numbers, text, or Yes/No values while your script runs. Tap a variable chip in any text box to insert it.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
 
       EditorSectionCard(
-        title = if (editingKey == null) "Define Variable" else "Edit {$editingKey}",
+        title = if (editingKey == null) "Create Variable" else "Edit {$editingKey}",
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
       ) {
         OutlinedTextField(
           value = keyInput,
           onValueChange = { keyInput = it.replace(" ", "_") },
-          label = { Text("Variable Key (e.g. loop_count)") },
+          label = { Text("Variable Name (e.g. count)") },
           singleLine = true,
           modifier = Modifier.fillMaxWidth().testTag("variable_key_input"),
         )
@@ -488,7 +488,7 @@ fun DynamicVariablesBottomSheet(
         OutlinedTextField(
           value = defaultInput,
           onValueChange = { defaultInput = it },
-          label = { Text("Default Value") },
+          label = { Text("Starting Value") },
           singleLine = true,
           modifier = Modifier.fillMaxWidth().testTag("variable_default_input"),
         )

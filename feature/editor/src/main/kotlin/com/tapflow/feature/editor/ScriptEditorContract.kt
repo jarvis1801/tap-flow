@@ -45,6 +45,8 @@ data class ActionEditorSession(
   val selectedCategory: ActionCategoryGroup,
   val activePickerRequestId: String? = null,
   val activePickPurpose: OverlayPickPurpose? = null,
+  val validationErrors: Map<String, String> = emptyMap(),
+  val showValidationErrors: Boolean = false,
 )
 
 @Immutable

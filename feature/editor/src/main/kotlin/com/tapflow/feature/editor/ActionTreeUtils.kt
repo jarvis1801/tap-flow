@@ -286,7 +286,7 @@ object ActionTreeUtils {
 
   fun formatNumericInput(input: NumericInput): String =
     when (input) {
-      is NumericInput.Literal -> input.value.toString()
+      is NumericInput.Literal -> if (input.value < 0) "?" else input.value.toString()
       is NumericInput.VariableRef -> "{${input.variableKey}}"
     }
 
@@ -334,71 +334,101 @@ object ActionTreeUtils {
       is ScriptAction.InputText -> "Input Text"
       is ScriptAction.IfBlock -> "If Block"
       is ScriptAction.LoopBlock -> "Loop Block"
-      is ScriptAction.Delay -> "Delay"
-      is ScriptAction.Break -> "Break"
-      is ScriptAction.Continue -> "Continue"
-      is ScriptAction.EndScript -> "End Script"
-      is ScriptAction.KeyEvent -> "Key Event"
-      is ScriptAction.LaunchApp -> "Launch App"
-      is ScriptAction.ForceStopApp -> "Force Stop App"
+      is ScriptAction.Delay -> "Wait / Pause"
+      is ScriptAction.Break -> "Exit Loop"
+      is ScriptAction.Continue -> "Skip to Next Repeat"
+      is ScriptAction.EndScript -> "Stop Script"
+      is ScriptAction.KeyEvent -> "Phone Button"
+      is ScriptAction.LaunchApp -> "Open App"
+      is ScriptAction.ForceStopApp -> "Close & Restart App (Force Stop)"
       is ScriptAction.ClipboardOp -> "Clipboard"
       is ScriptAction.Vibrate -> "Vibrate"
       is ScriptAction.PlayAlertSound -> "Alert Sound"
-      is ScriptAction.SetVariable -> "Set Variable"
-      is ScriptAction.MathOp -> "Math Op"
+      is ScriptAction.SetVariable -> "Save Value"
+      is ScriptAction.MathOp -> "Calculate (Math)"
       is ScriptAction.RandomOp -> "Random Value"
-      is ScriptAction.StringOp -> "String Op"
-      is ScriptAction.BooleanOp -> "Boolean Op"
-      is ScriptAction.TypeCastOp -> "Type Cast"
+      is ScriptAction.StringOp -> "Edit Text"
+      is ScriptAction.BooleanOp -> "Yes / No Logic"
+      is ScriptAction.TypeCastOp -> "Convert Text / Number"
     }
 
   fun summarizeAction(action: ScriptAction): String =
     when (action) {
       is ScriptAction.Tap ->
-        "(${formatNumericInput(action.x)}, ${formatNumericInput(action.y)}) • ${formatDurationInput(action.pressDuration)}" +
+        "At (${formatNumericInput(action.x)}, ${formatNumericInput(action.y)}) • Hold ${formatDurationInput(action.pressDuration)}" +
           if (action.repeatCount != NumericInput.Literal(1)) {
             " ×${formatNumericInput(action.repeatCount)}"
           } else {
             ""
           }
       is ScriptAction.DoubleTap ->
-        "(${formatNumericInput(action.x)}, ${formatNumericInput(action.y)}) • ${action.tapIntervalMs}ms gap"
-      is ScriptAction.LongPress ->
-        "${action.mode.name} (${formatNumericInput(action.x)}, ${formatNumericInput(action.y)}) • ${formatDurationCompact(action.pressDurationMs)}"
-      is ScriptAction.MultiTouch ->
-        "${action.mode.name} • ${formatDurationCompact(action.durationMs)}"
+        "At (${formatNumericInput(action.x)}, ${formatNumericInput(action.y)}) • ${action.tapIntervalMs}ms apart"
+      is ScriptAction.LongPress -> {
+        val modeText =
+          when (action.mode) {
+            com.tapflow.core.model.action.LongPressMode.STANDARD -> "Hold"
+            com.tapflow.core.model.action.LongPressMode.PRESS_DOWN_ONLY -> "Press Down"
+            com.tapflow.core.model.action.LongPressMode.RELEASE_ONLY -> "Release Finger"
+            com.tapflow.core.model.action.LongPressMode.HOLD_UNTIL -> "Hold Until Rule"
+          }
+        "$modeText (${formatNumericInput(action.x)}, ${formatNumericInput(action.y)}) • ${formatDurationCompact(action.pressDurationMs)}"
+      }
+      is ScriptAction.MultiTouch -> {
+        val modeText =
+          when (action.mode) {
+            com.tapflow.core.model.action.MultiTouchMode.CUSTOM_POINTS -> "${action.customPoints.size} fingers"
+            com.tapflow.core.model.action.MultiTouchMode.PINCH_SPREAD -> "Pinch / Zoom"
+            com.tapflow.core.model.action.MultiTouchMode.ROTATE -> "Rotate"
+          }
+        "$modeText • ${formatDurationCompact(action.durationMs)}"
+      }
       is ScriptAction.SwipeDrag ->
-        "(${formatNumericInput(action.startX)},${formatNumericInput(action.startY)}) ➔ (${formatNumericInput(action.endX)},${formatNumericInput(action.endY)}) • ${action.trajectoryMode.name}"
+        "(${formatNumericInput(action.startX)}, ${formatNumericInput(action.startY)}) ➔ (${formatNumericInput(action.endX)}, ${formatNumericInput(action.endY)}) • ${PlainLanguageFormatter.swipeStyleLabel(action.trajectoryMode)}"
       is ScriptAction.InputText ->
-        "${action.engine.name}: \"${action.textTemplate.take(28)}\""
-      is ScriptAction.IfBlock ->
-        "${action.name} • ${ConditionValidator.formatNaturalLanguagePreview(action.conditionRoot)}"
+        "${PlainLanguageFormatter.textEngineLabel(action.engine)}: \"${action.textTemplate.take(28)}\""
+      is ScriptAction.IfBlock -> {
+        val label = action.name.trim().ifBlank { "Condition Check" }
+        "$label • ${action.thenActions.size} Then, ${action.elseActions.size} Else"
+      }
       is ScriptAction.LoopBlock -> {
         val modeLabel =
           when (val m = action.mode) {
-            is LoopMode.Count -> "Count ×${formatNumericInput(m.count)}"
-            is LoopMode.WhileCondition -> "While (${ConditionValidator.formatNaturalLanguagePreview(m.conditionRoot)})"
-            is LoopMode.UntilCondition -> "Until (${ConditionValidator.formatNaturalLanguagePreview(m.conditionRoot)})"
-            LoopMode.Unlimited -> "Unlimited"
+            is LoopMode.Count -> "Repeat ×${formatNumericInput(m.count)}"
+            is LoopMode.WhileCondition ->
+              "Repeat While: ${PlainLanguageFormatter.formatConditionClause(m.conditionRoot).ifBlank { "rule passes" }}"
+            is LoopMode.UntilCondition ->
+              "Repeat Until: ${PlainLanguageFormatter.formatConditionClause(m.conditionRoot).ifBlank { "rule passes" }}"
+            LoopMode.Unlimited -> "Repeat Forever"
           }
         "${action.name} • $modeLabel (${action.bodyActions.size} steps)"
       }
       is ScriptAction.Delay -> "Wait ${formatDelayConfig(action.config)}"
-      is ScriptAction.Break -> "Exit nearest enclosing loop"
-      is ScriptAction.Continue -> "Jump to next loop iteration"
-      is ScriptAction.EndScript -> "Stop script execution immediately"
-      is ScriptAction.KeyEvent -> "System key: ${action.key.name}"
-      is ScriptAction.LaunchApp -> action.appLabel.ifBlank { action.packageName }.ifBlank { "Select app" }
-      is ScriptAction.ForceStopApp -> "am force-stop ${action.appLabel.ifBlank { action.packageName }}"
-      is ScriptAction.ClipboardOp -> "${action.operation.name} ${action.targetVariableKey ?: action.valueTemplate}".trim()
-      is ScriptAction.Vibrate -> "Pattern: ${action.pattern.name}"
-      is ScriptAction.PlayAlertSound -> "Alert: ${action.soundUriOrType}"
+      is ScriptAction.Break -> "Leave the current loop immediately"
+      is ScriptAction.Continue -> "Jump to the next repeat of this loop"
+      is ScriptAction.EndScript -> "Stop running the script right here"
+      is ScriptAction.KeyEvent -> "Press ${PlainLanguageFormatter.systemKeyLabel(action.key)}"
+      is ScriptAction.LaunchApp ->
+        action.appLabel.ifBlank { action.packageName }.ifBlank { "Select app" }
+      is ScriptAction.ForceStopApp ->
+        "Close ${action.appLabel.ifBlank { action.packageName }.ifBlank { "app" }}"
+      is ScriptAction.ClipboardOp -> {
+        val label = PlainLanguageFormatter.clipboardOpLabel(action.operation)
+        val detail = action.targetVariableKey?.let { "{$it}" } ?: action.valueTemplate.take(24)
+        if (detail.isBlank()) label else "$label: $detail"
+      }
+      is ScriptAction.Vibrate -> PlainLanguageFormatter.vibratePatternLabel(action.pattern)
+      is ScriptAction.PlayAlertSound -> "Play ${action.soundUriOrType} sound"
       is ScriptAction.SetVariable -> "{${action.targetKey}} = \"${action.valueTemplate}\""
-      is ScriptAction.MathOp -> "{${action.targetKey}} = ${action.leftOperand} ${action.operator.name} ${action.rightOperand}".trim()
-      is ScriptAction.RandomOp -> "{${action.targetKey}} = random ${action.targetType.name}"
-      is ScriptAction.StringOp -> "{${action.targetKey}} = ${action.operator.name}(${action.inputA})"
-      is ScriptAction.BooleanOp -> "{${action.targetKey}} = ${action.operator.name}(${action.leftKey})"
-      is ScriptAction.TypeCastOp -> "{${action.targetKey}} = ${action.operator.name}(${action.sourceKey})"
+      is ScriptAction.MathOp ->
+        "{${action.targetKey}} = ${action.leftOperand} ${PlainLanguageFormatter.mathOpSymbol(action.operator)} ${action.rightOperand}".trim()
+      is ScriptAction.RandomOp ->
+        "{${action.targetKey}} = random ${PlainLanguageFormatter.randomTargetLabel(action.targetType)}"
+      is ScriptAction.StringOp ->
+        "{${action.targetKey}} = ${PlainLanguageFormatter.stringOpLabel(action.operator)}(${action.inputA})"
+      is ScriptAction.BooleanOp ->
+        "{${action.targetKey}} = ${PlainLanguageFormatter.booleanOpLabel(action.operator)}(${action.leftKey})"
+      is ScriptAction.TypeCastOp ->
+        "{${action.targetKey}} = ${PlainLanguageFormatter.typeCastLabel(action.operator)}(${action.sourceKey})"
     }
 
   private fun insertIntoContainer(

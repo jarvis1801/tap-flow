@@ -1,6 +1,8 @@
 package com.tapflow.feature.editor
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -16,6 +18,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.ExpandLess
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material3.AssistChip
@@ -27,12 +31,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,11 +74,12 @@ fun TapActionEditor(
   isPro: Boolean,
   onChange: (ScriptAction.Tap) -> Unit,
   onIntent: (ScriptEditorUiIntent) -> Unit,
+  validationErrors: Map<String, String> = emptyMap(),
 ) {
   Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    EditorSectionCard(title = "Target Coordinates") {
+    EditorSectionCard(title = "Where to Tap") {
       OverlayPickButton(
-        label = "Pick (X, Y) via Overlay",
+        label = "Pick Spot on Screen",
         onClick = {
           onIntent(
             ScriptEditorUiIntent.RequestOverlayPick(
@@ -91,6 +99,8 @@ fun TapActionEditor(
           isPro = isPro,
           onValueChange = { onChange(action.copy(x = it)) },
           onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          errorText = validationErrors["x"],
+          placeholder = "e.g. 540",
           modifier = Modifier.weight(1f),
         )
         NumericInputField(
@@ -100,54 +110,61 @@ fun TapActionEditor(
           isPro = isPro,
           onValueChange = { onChange(action.copy(y = it)) },
           onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          errorText = validationErrors["y"],
+          placeholder = "e.g. 960",
           modifier = Modifier.weight(1f),
         )
       }
 
       ProIntField(
-        label = "Anti-Ban Jitter Radius (px)",
+        label = "Random Tap Offset (Anti-Detection)",
         value = action.jitterPx,
         isPro = isPro,
         proGate = ProFeatureGate.ANTI_BAN_JITTER,
         onValueChange = { onChange(action.copy(jitterPx = it.coerceIn(0, 300))) },
         onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+        supportingHint = "Adds slight randomness so taps look human (0 = exact spot)",
       )
     }
 
     EditorSectionCard(title = "Timing & Repeat") {
       DurationInputField(
-        label = "Press Duration",
+        label = "Hold Time (ms)",
         value = action.pressDuration,
         variables = variables,
         isPro = isPro,
         onValueChange = { onChange(action.copy(pressDuration = it)) },
         onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+        suggestedHint = "Suggested: 50 ms",
       )
 
       NumericInputField(
-        label = "Repeat Count",
+        label = "How Many Taps",
         value = action.repeatCount,
         variables = variables,
         isPro = isPro,
         onValueChange = { next ->
           val safe =
             if (next is NumericInput.Literal) {
-              NumericInput.Literal(next.value.coerceAtLeast(1))
+              if (next.value == UNSET_COORD) next else NumericInput.Literal(next.value.coerceAtLeast(1))
             } else {
               next
             }
           onChange(action.copy(repeatCount = safe))
         },
         onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+        errorText = validationErrors["repeat_count"],
+        supportingHint = "Suggested: 1 tap",
       )
 
       DurationInputField(
-        label = "Repeat Interval",
+        label = "Wait Between Taps (ms)",
         value = action.repeatInterval,
         variables = variables,
         isPro = isPro,
         onValueChange = { onChange(action.copy(repeatInterval = it)) },
         onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+        suggestedHint = "Suggested: 100 ms",
       )
     }
   }
@@ -160,11 +177,12 @@ fun DoubleTapActionEditor(
   isPro: Boolean,
   onChange: (ScriptAction.DoubleTap) -> Unit,
   onIntent: (ScriptEditorUiIntent) -> Unit,
+  validationErrors: Map<String, String> = emptyMap(),
 ) {
   Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    EditorSectionCard(title = "Target Coordinates") {
+    EditorSectionCard(title = "Where to Double-Tap") {
       OverlayPickButton(
-        label = "Pick (X, Y) via Overlay",
+        label = "Pick Spot on Screen",
         onClick = {
           onIntent(
             ScriptEditorUiIntent.RequestOverlayPick(
@@ -184,6 +202,8 @@ fun DoubleTapActionEditor(
           isPro = isPro,
           onValueChange = { onChange(action.copy(x = it)) },
           onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          errorText = validationErrors["x"],
+          placeholder = "e.g. 540",
           modifier = Modifier.weight(1f),
         )
         NumericInputField(
@@ -193,34 +213,39 @@ fun DoubleTapActionEditor(
           isPro = isPro,
           onValueChange = { onChange(action.copy(y = it)) },
           onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          errorText = validationErrors["y"],
+          placeholder = "e.g. 960",
           modifier = Modifier.weight(1f),
         )
       }
 
       ProIntField(
-        label = "Anti-Ban Jitter Radius (px)",
+        label = "Random Tap Offset (Anti-Detection)",
         value = action.jitterPx,
         isPro = isPro,
         proGate = ProFeatureGate.ANTI_BAN_JITTER,
         onValueChange = { onChange(action.copy(jitterPx = it.coerceIn(0, 300))) },
         onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+        supportingHint = "Adds slight randomness so taps look human (0 = exact spot)",
       )
     }
 
     EditorSectionCard(title = "Tap Timing") {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         LongTextField(
-          label = "Press Duration (ms)",
+          label = "Hold Time (ms)",
           value = action.pressDurationMs,
           min = 10L,
           onChange = { onChange(action.copy(pressDurationMs = it)) },
+          supportingHint = "Suggested: 50 ms",
           modifier = Modifier.weight(1f),
         )
         LongTextField(
-          label = "Tap Interval (ms)",
+          label = "Pause Between Taps (ms)",
           value = action.tapIntervalMs,
           min = 20L,
           onChange = { onChange(action.copy(tapIntervalMs = it)) },
+          supportingHint = "Suggested: 100 ms",
           modifier = Modifier.weight(1f),
         )
       }
@@ -235,9 +260,10 @@ fun LongPressActionEditor(
   isPro: Boolean,
   onChange: (ScriptAction.LongPress) -> Unit,
   onIntent: (ScriptEditorUiIntent) -> Unit,
+  validationErrors: Map<String, String> = emptyMap(),
 ) {
   Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    EditorSectionCard(title = "Operation Mode") {
+    EditorSectionCard(title = "Hold Style") {
       FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -256,7 +282,7 @@ fun LongPressActionEditor(
               } else {
                 val nextHoldCond =
                   if (mode == LongPressMode.HOLD_UNTIL && action.holdUntilCondition == null) {
-                    ConditionGroup(id = UUID.randomUUID().toString(), name = "Release Condition")
+                    ConditionGroup(id = UUID.randomUUID().toString(), name = "Stop Holding When")
                   } else {
                     action.holdUntilCondition
                   }
@@ -272,10 +298,10 @@ fun LongPressActionEditor(
             label = {
               Text(
                 when (mode) {
-                  LongPressMode.STANDARD -> "Standard"
+                  LongPressMode.STANDARD -> "Press & Hold"
                   LongPressMode.PRESS_DOWN_ONLY -> "Press Down Only"
                   LongPressMode.RELEASE_ONLY -> "Release Only"
-                  LongPressMode.HOLD_UNTIL -> "Hold Until Condition"
+                  LongPressMode.HOLD_UNTIL -> "Hold Until Rule Passes"
                 },
               )
             },
@@ -285,9 +311,9 @@ fun LongPressActionEditor(
     }
 
     if (action.mode != LongPressMode.RELEASE_ONLY) {
-      EditorSectionCard(title = "Hold Coordinates & Duration") {
+      EditorSectionCard(title = "Where & How Long to Hold") {
         OverlayPickButton(
-          label = "Pick Anchor & Hold via Overlay",
+          label = "Pick Spot on Screen",
           onClick = {
             onIntent(
               ScriptEditorUiIntent.RequestOverlayPick(
@@ -307,6 +333,8 @@ fun LongPressActionEditor(
             isPro = isPro,
             onValueChange = { onChange(action.copy(x = it)) },
             onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+            errorText = validationErrors["x"],
+            placeholder = "e.g. 540",
             modifier = Modifier.weight(1f),
           )
           NumericInputField(
@@ -316,40 +344,52 @@ fun LongPressActionEditor(
             isPro = isPro,
             onValueChange = { onChange(action.copy(y = it)) },
             onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+            errorText = validationErrors["y"],
+            placeholder = "e.g. 960",
             modifier = Modifier.weight(1f),
           )
         }
 
         ProIntField(
-          label = "Initial Touch Jitter (px)",
+          label = "Random Tap Offset (Anti-Detection)",
           value = action.jitterPx,
           isPro = isPro,
           proGate = ProFeatureGate.ANTI_BAN_JITTER,
           onValueChange = { onChange(action.copy(jitterPx = it.coerceIn(0, 300))) },
           onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          supportingHint = "Adds slight randomness so taps look human (0 = exact spot)",
         )
 
         if (action.mode == LongPressMode.STANDARD) {
           LongTextField(
-            label = "Hold Duration (ms, supports >60s)",
+            label = "Hold Time (ms, supports > 60s)",
             value = action.pressDurationMs,
             min = 100L,
             onChange = { onChange(action.copy(pressDurationMs = it)) },
+            supportingHint = "Suggested: 800 ms",
             modifier = Modifier.fillMaxWidth(),
           )
         }
 
         if (action.mode == LongPressMode.HOLD_UNTIL) {
           LongTextField(
-            label = "Hold Safety Timeout (ms)",
+            label = "Max Hold Time Limit (ms)",
             value = action.holdTimeoutMs,
             min = 500L,
             onChange = { onChange(action.copy(holdTimeoutMs = it)) },
+            supportingHint = "Suggested: 10000 ms (releases automatically after timeout)",
             modifier = Modifier.fillMaxWidth(),
           )
+          validationErrors["hold_condition"]?.let { err ->
+            Text(
+              text = err,
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.error,
+            )
+          }
           val condRoot =
             action.holdUntilCondition
-              ?: ConditionGroup(id = UUID.randomUUID().toString(), name = "Release When")
+              ?: ConditionGroup(id = UUID.randomUUID().toString(), name = "Stop Holding When")
           ConditionGroupCardEditor(
             root = condRoot,
             currentGroup = condRoot,
@@ -358,6 +398,8 @@ fun LongPressActionEditor(
             variables = variables,
             onRootChange = { updated -> onChange(action.copy(holdUntilCondition = updated)) },
             onIntent = onIntent,
+            validationErrors = validationErrors,
+            previewPrefix = "Stop holding when:",
           )
         }
 
@@ -368,12 +410,17 @@ fun LongPressActionEditor(
         ) {
           Column(modifier = Modifier.weight(1f)) {
             Text(
-              text = "Micro-movement Jitter",
+              text = "Finger Tremble (Anti-Detection)",
               style = MaterialTheme.typography.bodyMedium,
               fontWeight = FontWeight.Medium,
             )
             Text(
-              text = if (isPro) "Simulates natural finger tremor during hold" else "Pro feature",
+              text =
+                if (isPro) {
+                  "Adds tiny natural finger movement while holding"
+                } else {
+                  "Pro feature — adds tiny natural finger movement"
+                },
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -394,10 +441,11 @@ fun LongPressActionEditor(
 
         if (action.microMovementJitter) {
           IntTextField(
-            label = "Micro-Jitter Amplitude (px)",
+            label = "Tremble Distance (px)",
             value = action.microJitterAmplitudePx,
             min = 1,
             onChange = { onChange(action.copy(microJitterAmplitudePx = it.coerceIn(1, 30))) },
+            supportingHint = "Suggested: 3 px",
             modifier = Modifier.fillMaxWidth(),
           )
         }
@@ -412,11 +460,12 @@ fun MultiTouchActionEditor(
   action: ScriptAction.MultiTouch,
   onChange: (ScriptAction.MultiTouch) -> Unit,
   onIntent: (ScriptEditorUiIntent) -> Unit,
+  validationErrors: Map<String, String> = emptyMap(),
 ) {
   Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    EditorSectionCard(title = "Gesture Mode & Anchor") {
+    EditorSectionCard(title = "Gesture Style") {
       OverlayPickButton(
-        label = "Pick Anchor / Point via Overlay",
+        label = "Pick Spot on Screen",
         onClick = {
           onIntent(
             ScriptEditorUiIntent.RequestOverlayPick(
@@ -433,8 +482,8 @@ fun MultiTouchActionEditor(
         modes.forEachIndexed { index, mode ->
           val label =
             when (mode) {
-              MultiTouchMode.CUSTOM_POINTS -> "Custom"
-              MultiTouchMode.PINCH_SPREAD -> "Pinch"
+              MultiTouchMode.CUSTOM_POINTS -> "Multi-Finger"
+              MultiTouchMode.PINCH_SPREAD -> "Pinch / Zoom"
               MultiTouchMode.ROTATE -> "Rotate"
             }
           SegmentedButton(
@@ -451,14 +500,15 @@ fun MultiTouchActionEditor(
     when (action.mode) {
       MultiTouchMode.CUSTOM_POINTS -> {
         EditorSectionCard(
-          title = "Touch Points (${action.customPoints.size}/10)",
+          title = "Finger Spots (${action.customPoints.size}/10)",
           trailing = {
             OutlinedButton(
               onClick = {
                 if (action.customPoints.size < 10) {
                   onChange(
                     action.copy(
-                      customPoints = action.customPoints + MultiTouchPoint(x = 540, y = 960),
+                      customPoints =
+                        action.customPoints + MultiTouchPoint(x = UNSET_COORD, y = UNSET_COORD),
                     ),
                   )
                 }
@@ -470,6 +520,20 @@ fun MultiTouchActionEditor(
             }
           },
         ) {
+          validationErrors["custom_points"]?.let { err ->
+            Text(
+              text = err,
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.error,
+            )
+          }
+          if (action.customPoints.isEmpty()) {
+            Text(
+              text = "Tap 'Add Finger' to place where each finger should touch.",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
           action.customPoints.forEachIndexed { idx, pt ->
             Surface(
               shape = RoundedCornerShape(12.dp),
@@ -501,7 +565,7 @@ fun MultiTouchActionEditor(
                   ) {
                     Icon(
                       imageVector = Icons.Rounded.DeleteOutline,
-                      contentDescription = "Remove touch point",
+                      contentDescription = "Remove finger spot",
                       tint = MaterialTheme.colorScheme.error,
                     )
                   }
@@ -521,6 +585,9 @@ fun MultiTouchActionEditor(
                         ),
                       )
                     },
+                    errorText = validationErrors["finger_${idx}_x"],
+                    unsetValue = UNSET_COORD,
+                    placeholder = "X",
                     modifier = Modifier.weight(1f),
                   )
                   IntTextField(
@@ -537,10 +604,13 @@ fun MultiTouchActionEditor(
                         ),
                       )
                     },
+                    errorText = validationErrors["finger_${idx}_y"],
+                    unsetValue = UNSET_COORD,
+                    placeholder = "Y",
                     modifier = Modifier.weight(1f),
                   )
                   IntTextField(
-                    label = "Jitter",
+                    label = "Random Offset",
                     value = pt.jitterPx,
                     min = 0,
                     onChange = { next ->
@@ -558,7 +628,7 @@ fun MultiTouchActionEditor(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                   LongTextField(
-                    label = "Press (ms)",
+                    label = "Hold Time (ms)",
                     value = pt.pressDurationMs,
                     min = 10L,
                     onChange = { next ->
@@ -571,10 +641,11 @@ fun MultiTouchActionEditor(
                         ),
                       )
                     },
+                    supportingHint = "Suggested: 80 ms",
                     modifier = Modifier.weight(1f),
                   )
                   LongTextField(
-                    label = "Stagger (ms)",
+                    label = "Finger Timing Offset (ms)",
                     value = pt.staggerDelayMs,
                     min = 0L,
                     onChange = { next ->
@@ -587,6 +658,7 @@ fun MultiTouchActionEditor(
                         ),
                       )
                     },
+                    supportingHint = "0 = press together",
                     modifier = Modifier.weight(1f),
                   )
                 }
@@ -597,13 +669,16 @@ fun MultiTouchActionEditor(
       }
 
       MultiTouchMode.PINCH_SPREAD -> {
-        EditorSectionCard(title = "Pinch / Spread Geometry") {
+        EditorSectionCard(title = "Pinch / Zoom Setup") {
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             IntTextField(
               label = "Center X",
               value = action.centerX,
               min = 0,
               onChange = { onChange(action.copy(centerX = it)) },
+              errorText = validationErrors["center_x"],
+              unsetValue = UNSET_COORD,
+              placeholder = "e.g. 540",
               modifier = Modifier.weight(1f),
             )
             IntTextField(
@@ -611,43 +686,52 @@ fun MultiTouchActionEditor(
               value = action.centerY,
               min = 0,
               onChange = { onChange(action.copy(centerY = it)) },
+              errorText = validationErrors["center_y"],
+              unsetValue = UNSET_COORD,
+              placeholder = "e.g. 960",
               modifier = Modifier.weight(1f),
             )
           }
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             IntTextField(
-              label = "Start Dist (px)",
+              label = "Start Width (px)",
               value = action.startDistancePx,
               min = 10,
               onChange = { onChange(action.copy(startDistancePx = it)) },
+              supportingHint = "Suggested: 120 px",
               modifier = Modifier.weight(1f),
             )
             IntTextField(
-              label = "End Dist (px)",
+              label = "End Width (px)",
               value = action.endDistancePx,
               min = 10,
               onChange = { onChange(action.copy(endDistancePx = it)) },
+              supportingHint = "Suggested: 420 px",
               modifier = Modifier.weight(1f),
             )
           }
           LongTextField(
-            label = "Duration (ms)",
+            label = "Swipe Time (ms)",
             value = action.durationMs,
             min = 50L,
             onChange = { onChange(action.copy(durationMs = it)) },
+            supportingHint = "Suggested: 350 ms",
             modifier = Modifier.fillMaxWidth(),
           )
         }
       }
 
       MultiTouchMode.ROTATE -> {
-        EditorSectionCard(title = "Rotate Geometry") {
+        EditorSectionCard(title = "Two-Finger Rotate Setup") {
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             IntTextField(
               label = "Center X",
               value = action.centerX,
               min = 0,
               onChange = { onChange(action.copy(centerX = it)) },
+              errorText = validationErrors["center_x"],
+              unsetValue = UNSET_COORD,
+              placeholder = "e.g. 540",
               modifier = Modifier.weight(1f),
             )
             IntTextField(
@@ -655,6 +739,9 @@ fun MultiTouchActionEditor(
               value = action.centerY,
               min = 0,
               onChange = { onChange(action.copy(centerY = it)) },
+              errorText = validationErrors["center_y"],
+              unsetValue = UNSET_COORD,
+              placeholder = "e.g. 960",
               modifier = Modifier.weight(1f),
             )
           }
@@ -674,17 +761,19 @@ fun MultiTouchActionEditor(
           }
           Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             IntTextField(
-              label = "Radius (px)",
+              label = "Finger Radius (px)",
               value = action.radiusPx,
               min = 20,
               onChange = { onChange(action.copy(radiusPx = it)) },
+              supportingHint = "Suggested: 180 px",
               modifier = Modifier.weight(1f),
             )
             LongTextField(
-              label = "Duration (ms)",
+              label = "Swipe Time (ms)",
               value = action.durationMs,
               min = 50L,
               onChange = { onChange(action.copy(durationMs = it)) },
+              supportingHint = "Suggested: 350 ms",
               modifier = Modifier.weight(1f),
             )
           }
@@ -702,11 +791,12 @@ fun SwipeDragActionEditor(
   isPro: Boolean,
   onChange: (ScriptAction.SwipeDrag) -> Unit,
   onIntent: (ScriptEditorUiIntent) -> Unit,
+  validationErrors: Map<String, String> = emptyMap(),
 ) {
   Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    EditorSectionCard(title = "Trajectory Mode") {
+    EditorSectionCard(title = "Swipe Style") {
       OverlayPickButton(
-        label = "Draw / Pick Swipe Path via Overlay",
+        label = "Draw Swipe on Screen",
         onClick = {
           onIntent(
             ScriptEditorUiIntent.RequestOverlayPick(
@@ -730,9 +820,9 @@ fun SwipeDragActionEditor(
             }
           val label =
             when (mode) {
-              SwipeTrajectoryMode.LINEAR -> "Linear"
-              SwipeTrajectoryMode.BEZIER_CURVE -> "Bezier"
-              SwipeTrajectoryMode.MULTI_POINT_PATH -> "Path"
+              SwipeTrajectoryMode.LINEAR -> "Straight Line"
+              SwipeTrajectoryMode.BEZIER_CURVE -> "Curved"
+              SwipeTrajectoryMode.MULTI_POINT_PATH -> "Custom Path"
             }
           SegmentedButton(
             selected = action.trajectoryMode == mode,
@@ -756,9 +846,16 @@ fun SwipeDragActionEditor(
           }
         }
       }
+      if (action.trajectoryMode == SwipeTrajectoryMode.BEZIER_CURVE) {
+        Text(
+          text = "Swipes along a smooth arc so movement looks natural.",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
     }
 
-    EditorSectionCard(title = "Start & End Coordinates") {
+    EditorSectionCard(title = "Start & End Spots") {
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         NumericInputField(
           label = "Start X",
@@ -767,6 +864,8 @@ fun SwipeDragActionEditor(
           isPro = isPro,
           onValueChange = { onChange(action.copy(startX = it)) },
           onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          errorText = validationErrors["start_x"],
+          placeholder = "e.g. 540",
           modifier = Modifier.weight(1f),
         )
         NumericInputField(
@@ -776,6 +875,8 @@ fun SwipeDragActionEditor(
           isPro = isPro,
           onValueChange = { onChange(action.copy(startY = it)) },
           onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          errorText = validationErrors["start_y"],
+          placeholder = "e.g. 1400",
           modifier = Modifier.weight(1f),
         )
       }
@@ -788,6 +889,8 @@ fun SwipeDragActionEditor(
           isPro = isPro,
           onValueChange = { onChange(action.copy(endX = it)) },
           onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          errorText = validationErrors["end_x"],
+          placeholder = "e.g. 540",
           modifier = Modifier.weight(1f),
         )
         NumericInputField(
@@ -797,63 +900,71 @@ fun SwipeDragActionEditor(
           isPro = isPro,
           onValueChange = { onChange(action.copy(endY = it)) },
           onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          errorText = validationErrors["end_y"],
+          placeholder = "e.g. 600",
           modifier = Modifier.weight(1f),
         )
       }
 
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ProIntField(
-          label = "Start Jitter (px)",
+          label = "Start Random Offset (px)",
           value = action.startJitterPx,
           isPro = isPro,
           proGate = ProFeatureGate.ANTI_BAN_JITTER,
           onValueChange = { onChange(action.copy(startJitterPx = it.coerceIn(0, 200))) },
           onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          supportingHint = "0 = exact spot",
           modifier = Modifier.weight(1f),
         )
         ProIntField(
-          label = "End Jitter (px)",
+          label = "End Random Offset (px)",
           value = action.endJitterPx,
           isPro = isPro,
           proGate = ProFeatureGate.ANTI_BAN_JITTER,
           onValueChange = { onChange(action.copy(endJitterPx = it.coerceIn(0, 200))) },
           onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          supportingHint = "0 = exact spot",
           modifier = Modifier.weight(1f),
         )
       }
     }
 
-    EditorSectionCard(title = "Timing & Path Details") {
+    EditorSectionCard(title = "Speed & Pauses") {
+      LongTextField(
+        label = "Swipe Time (ms)",
+        value = action.durationMs,
+        min = 50L,
+        onChange = { onChange(action.copy(durationMs = it)) },
+        supportingHint = "Suggested: 300 ms (smaller = faster flick)",
+        modifier = Modifier.fillMaxWidth(),
+      )
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         LongTextField(
-          label = "Traversal (ms)",
-          value = action.durationMs,
-          min = 50L,
-          onChange = { onChange(action.copy(durationMs = it)) },
-          modifier = Modifier.weight(1f),
-        )
-        LongTextField(
-          label = "Hold Before (ms)",
+          label = "Pause Before Dragging (ms)",
           value = action.holdBeforeDragMs,
           min = 0L,
           onChange = { onChange(action.copy(holdBeforeDragMs = it)) },
+          supportingHint = "Suggested: 0 ms",
           modifier = Modifier.weight(1f),
         )
         LongTextField(
-          label = "Hold After (ms)",
+          label = "Pause Before Releasing (ms)",
           value = action.holdAfterDragMs,
           min = 0L,
           onChange = { onChange(action.copy(holdAfterDragMs = it)) },
+          supportingHint = "Suggested: 0 ms",
           modifier = Modifier.weight(1f),
         )
       }
 
       if (action.trajectoryMode == SwipeTrajectoryMode.BEZIER_CURVE) {
         IntTextField(
-          label = "Bezier Curvature Offset (px)",
+          label = "Curve Amount (px)",
           value = action.bezierCurvatureOffsetPx,
           min = -500,
           onChange = { onChange(action.copy(bezierCurvatureOffsetPx = it)) },
+          supportingHint = "How much the swipe bends (Suggested: 60 px)",
           modifier = Modifier.fillMaxWidth(),
         )
       }
@@ -865,12 +976,16 @@ fun SwipeDragActionEditor(
           verticalAlignment = Alignment.CenterVertically,
         ) {
           Text(
-            text = "Path Waypoints (${action.multiPointPath.size})",
+            text = "Middle Turns / Waypoints (${action.multiPointPath.size})",
             style = MaterialTheme.typography.titleSmall,
           )
           OutlinedButton(
             onClick = {
-              onChange(action.copy(multiPointPath = action.multiPointPath + Point2D(540, 960)))
+              onChange(
+                action.copy(
+                  multiPointPath = action.multiPointPath + Point2D(UNSET_COORD, UNSET_COORD),
+                ),
+              )
             },
           ) {
             Icon(Icons.Rounded.Add, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -896,6 +1011,9 @@ fun SwipeDragActionEditor(
                   ),
                 )
               },
+              errorText = validationErrors["path_${idx}_x"],
+              unsetValue = UNSET_COORD,
+              placeholder = "X",
               modifier = Modifier.weight(1f),
             )
             IntTextField(
@@ -910,6 +1028,9 @@ fun SwipeDragActionEditor(
                   ),
                 )
               },
+              errorText = validationErrors["path_${idx}_y"],
+              unsetValue = UNSET_COORD,
+              placeholder = "Y",
               modifier = Modifier.weight(1f),
             )
             IconButton(
@@ -923,7 +1044,7 @@ fun SwipeDragActionEditor(
             ) {
               Icon(
                 imageVector = Icons.Rounded.DeleteOutline,
-                contentDescription = "Delete waypoint",
+                contentDescription = "Delete point",
                 tint = MaterialTheme.colorScheme.error,
               )
             }
@@ -942,39 +1063,28 @@ fun InputTextActionEditor(
   isPro: Boolean,
   onChange: (ScriptAction.InputText) -> Unit,
   onIntent: (ScriptEditorUiIntent) -> Unit,
+  validationErrors: Map<String, String> = emptyMap(),
 ) {
+  var showAdvancedTags by remember(action.id) { mutableStateOf(false) }
+
   Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-    EditorSectionCard(title = "Target Focus") {
-      Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-      ) {
-        Column(modifier = Modifier.weight(1f)) {
-          Text("Tap to Focus Target First", fontWeight = FontWeight.Medium)
-          Text(
-            text = "Tap specified (X, Y) before injecting text",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
+    EditorSectionCard(title = "Where to Type") {
+      SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        listOf("Current Text Box", "Tap Position First").forEachIndexed { index, label ->
+          val selected = (index == 0 && !action.tapToFocus) || (index == 1 && action.tapToFocus)
+          SegmentedButton(
+            selected = selected,
+            onClick = { onChange(action.copy(tapToFocus = index == 1)) },
+            shape = SegmentedButtonDefaults.itemShape(index = index, count = 2),
+          ) {
+            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+          }
         }
-        Switch(
-          checked = action.tapToFocus,
-          onCheckedChange = { enabled ->
-            onChange(
-              action.copy(
-                tapToFocus = enabled,
-                focusX = if (enabled) (action.focusX ?: 540) else action.focusX,
-                focusY = if (enabled) (action.focusY ?: 960) else action.focusY,
-              ),
-            )
-          },
-        )
       }
 
       if (action.tapToFocus) {
         OverlayPickButton(
-          label = "Pick Text Field Coordinates via Overlay",
+          label = "Pick Text Box on Screen",
           onClick = {
             onIntent(
               ScriptEditorUiIntent.RequestOverlayPick(
@@ -986,85 +1096,193 @@ fun InputTextActionEditor(
           testTag = "pick_input_focus_overlay_button",
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-          IntTextField(
-            label = "Focus X",
-            value = action.focusX ?: 540,
+          NullableIntTextField(
+            label = "X",
+            value = action.focusX,
             min = 0,
             onChange = { onChange(action.copy(focusX = it)) },
+            errorText = validationErrors["focus_x"],
+            placeholder = "e.g. 540",
             modifier = Modifier.weight(1f),
           )
-          IntTextField(
-            label = "Focus Y",
-            value = action.focusY ?: 960,
+          NullableIntTextField(
+            label = "Y",
+            value = action.focusY,
             min = 0,
             onChange = { onChange(action.copy(focusY = it)) },
+            errorText = validationErrors["focus_y"],
+            placeholder = "e.g. 960",
             modifier = Modifier.weight(1f),
           )
         }
       }
     }
 
-    EditorSectionCard(title = "Text Content & Placeholders") {
+    EditorSectionCard(title = "Text to Type") {
+      val textErr = validationErrors["text_template"]
       OutlinedTextField(
         value = action.textTemplate,
         onValueChange = { onChange(action.copy(textTemplate = it)) },
-        label = { Text("Text Template (supports {var} & System Tags)") },
+        label = { Text("Text to Type") },
+        placeholder = { Text("Enter the text you want typed...") },
+        isError = textErr != null,
+        supportingText = textErr?.let { err -> { Text(err) } },
         minLines = 2,
         maxLines = 4,
         modifier = Modifier.fillMaxWidth().testTag("input_text_template"),
       )
 
+      Text(
+        text = "Quick Insert:",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
       FlowRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
       ) {
-        listOf("{TIMESTAMP}", "{DATE}", "{TIME}", "{RANDOM_NUM_4}", "{CLIPBOARD}").forEach { tag ->
+        listOf(
+          "+ Date" to "{DATE}",
+          "+ Time" to "{TIME}",
+          "+ 4-Digit Random" to "{RANDOM_NUM_4}",
+          "+ Clipboard" to "{CLIPBOARD}",
+        ).forEach { (chipLabel, tag) ->
           AssistChip(
             onClick = { onChange(action.copy(textTemplate = action.textTemplate + tag)) },
-            label = { Text(tag) },
+            label = { Text(chipLabel) },
           )
         }
-        variables.forEach { v ->
+      }
+
+      TextButton(
+        onClick = { showAdvancedTags = !showAdvancedTags },
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Text(
+          text = "Advanced Tags",
+          modifier = Modifier.weight(1f),
+        )
+        Icon(
+          imageVector = if (showAdvancedTags) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+          contentDescription = null,
+        )
+      }
+      AnimatedVisibility(visible = showAdvancedTags) {
+        FlowRow(
+          horizontalArrangement = Arrangement.spacedBy(6.dp),
+          verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
           AssistChip(
-            onClick = { onChange(action.copy(textTemplate = action.textTemplate + "{${v.key}}")) },
-            label = { Text("{${v.key}}") },
+            onClick = { onChange(action.copy(textTemplate = action.textTemplate + "{TIMESTAMP}")) },
+            label = { Text("+ Epoch Seconds") },
           )
+        }
+      }
+
+      if (variables.isNotEmpty()) {
+        Text(
+          text = "Insert Saved Variable:",
+          style = MaterialTheme.typography.labelMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(
+          horizontalArrangement = Arrangement.spacedBy(6.dp),
+          verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+          variables.forEach { v ->
+            AssistChip(
+              onClick = { onChange(action.copy(textTemplate = action.textTemplate + "{${v.key}}")) },
+              label = { Text(v.key) },
+            )
+          }
         }
       }
     }
 
-    EditorSectionCard(title = "Injection Engine & Keyboard") {
-      val engines = TextInjectionEngine.entries
-      SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        engines.forEachIndexed { index, engine ->
+    EditorSectionCard(title = "How to Type") {
+      Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        TextInjectionEngine.entries.forEach { engine ->
           val requiresPro = engine == TextInjectionEngine.HUMAN_TYPING
-          val label =
+          val selected = action.engine == engine
+          val (title, desc) =
             when (engine) {
-              TextInjectionEngine.ACCESSIBILITY_SET_TEXT -> "SetText"
-              TextInjectionEngine.CLIPBOARD_PASTE -> "Paste"
-              TextInjectionEngine.HUMAN_TYPING -> "Human"
+              TextInjectionEngine.ACCESSIBILITY_SET_TEXT ->
+                "Instant Fill" to "Fastest, for normal input boxes"
+              TextInjectionEngine.CLIPBOARD_PASTE ->
+                "Paste Text" to "Best for Chinese, Emoji & games"
+              TextInjectionEngine.HUMAN_TYPING ->
+                "Type Slowly" to "Looks like human typing"
             }
-          SegmentedButton(
-            selected = action.engine == engine,
-            onClick = {
-              if (requiresPro && !isPro) {
-                onIntent(
-                  ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.HUMAN_TYPING.displayName),
-                )
+          Surface(
+            shape = RoundedCornerShape(12.dp),
+            color =
+              if (selected) {
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
               } else {
-                onChange(action.copy(engine = engine))
-              }
-            },
-            shape = SegmentedButtonDefaults.itemShape(index = index, count = engines.size),
-            icon = {
-              if (requiresPro && !isPro) {
-                Icon(Icons.Rounded.Lock, contentDescription = "Pro feature", modifier = Modifier.size(14.dp))
-              } else {
-                SegmentedButtonDefaults.Icon(active = action.engine == engine)
-              }
-            },
+                MaterialTheme.colorScheme.surfaceContainer
+              },
+            border =
+              BorderStroke(
+                width = if (selected) 1.25.dp else 0.75.dp,
+                color =
+                  if (selected) {
+                    MaterialTheme.colorScheme.primary
+                  } else {
+                    MaterialTheme.colorScheme.outlineVariant
+                  },
+              ),
+            modifier =
+              Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .clickable {
+                  if (requiresPro && !isPro) {
+                    onIntent(
+                      ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.HUMAN_TYPING.displayName),
+                    )
+                  } else {
+                    onChange(action.copy(engine = engine))
+                  }
+                },
           ) {
-            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(
+              modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              RadioButton(
+                selected = selected,
+                onClick = {
+                  if (requiresPro && !isPro) {
+                    onIntent(
+                      ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.HUMAN_TYPING.displayName),
+                    )
+                  } else {
+                    onChange(action.copy(engine = engine))
+                  }
+                },
+              )
+              Column(modifier = Modifier.weight(1f)) {
+                Text(
+                  text = title,
+                  style = MaterialTheme.typography.titleSmall,
+                  fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                  text = desc,
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+              }
+              if (requiresPro && !isPro) {
+                Icon(
+                  imageVector = Icons.Rounded.Lock,
+                  contentDescription = "Pro feature",
+                  tint = MaterialTheme.colorScheme.tertiary,
+                  modifier = Modifier.size(16.dp),
+                )
+              }
+            }
           }
         }
       }
@@ -1074,7 +1292,7 @@ fun InputTextActionEditor(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
       ) {
-        Text("Clear Existing Text Before Input")
+        Text("Erase Existing Text First", modifier = Modifier.weight(1f))
         Switch(
           checked = action.clearExistingText,
           onCheckedChange = { onChange(action.copy(clearExistingText = it)) },
@@ -1086,7 +1304,7 @@ fun InputTextActionEditor(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
       ) {
-        Text("Auto Hide Keyboard After Input")
+        Text("Hide Keyboard Afterward", modifier = Modifier.weight(1f))
         Switch(
           checked = action.autoHideKeyboard,
           onCheckedChange = { onChange(action.copy(autoHideKeyboard = it)) },
@@ -1094,16 +1312,24 @@ fun InputTextActionEditor(
       }
 
       Text(
-        text = "Post-Text IME Action Key",
+        text = "Keyboard Key After Typing",
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
       FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         PostTextActionKey.entries.forEach { key ->
+          val keyLabel =
+            when (key) {
+              PostTextActionKey.NONE -> "None"
+              PostTextActionKey.ENTER -> "Enter"
+              PostTextActionKey.SEARCH -> "Search"
+              PostTextActionKey.SEND -> "Send"
+              PostTextActionKey.DONE -> "Done"
+            }
           FilterChip(
             selected = action.postActionKey == key,
             onClick = { onChange(action.copy(postActionKey = key)) },
-            label = { Text(key.name) },
+            label = { Text(keyLabel) },
           )
         }
       }
@@ -1137,6 +1363,7 @@ internal fun ProIntField(
   onValueChange: (Int) -> Unit,
   onProRequested: (String) -> Unit,
   modifier: Modifier = Modifier,
+  supportingHint: String? = null,
 ) {
   var text by remember(value) { mutableStateOf(value.toString()) }
   OutlinedTextField(
@@ -1148,7 +1375,11 @@ internal fun ProIntField(
       }
       val clean = raw.filter { it.isDigit() }
       text = clean
-      clean.toIntOrNull()?.let(onValueChange)
+      if (clean.isEmpty()) {
+        onValueChange(0)
+      } else {
+        clean.toIntOrNull()?.let(onValueChange)
+      }
     },
     label = {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -1158,6 +1389,7 @@ internal fun ProIntField(
         Text(label)
       }
     },
+    supportingText = supportingHint?.let { hint -> { Text(hint) } },
     singleLine = true,
     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     modifier = modifier.fillMaxWidth(),
@@ -1171,16 +1403,67 @@ internal fun IntTextField(
   min: Int,
   onChange: (Int) -> Unit,
   modifier: Modifier = Modifier,
+  errorText: String? = null,
+  isError: Boolean = errorText != null,
+  supportingHint: String? = null,
+  unsetValue: Int? = null,
+  placeholder: String = "",
 ) {
-  var text by remember(value) { mutableStateOf(value.toString()) }
+  var text by remember(value, unsetValue) {
+    mutableStateOf(if (unsetValue != null && value == unsetValue) "" else value.toString())
+  }
+  val activeSupport = errorText ?: supportingHint
   OutlinedTextField(
     value = text,
     onValueChange = { raw ->
       val clean = raw.filterIndexed { idx, c -> c.isDigit() || (idx == 0 && c == '-' && min < 0) }
       text = clean
-      clean.toIntOrNull()?.let { onChange(it.coerceAtLeast(min)) }
+      if (clean.isEmpty() && unsetValue != null) {
+        onChange(unsetValue)
+      } else {
+        clean.toIntOrNull()?.let { onChange(it.coerceAtLeast(min)) }
+      }
     },
     label = { Text(label) },
+    placeholder = if (placeholder.isNotBlank()) ({ Text(placeholder) }) else null,
+    isError = isError,
+    supportingText = activeSupport?.let { msg -> { Text(msg) } },
+    singleLine = true,
+    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+    modifier = modifier,
+  )
+}
+
+@Composable
+internal fun NullableIntTextField(
+  label: String,
+  value: Int?,
+  min: Int,
+  onChange: (Int?) -> Unit,
+  modifier: Modifier = Modifier,
+  errorText: String? = null,
+  supportingHint: String? = null,
+  placeholder: String = "",
+) {
+  var text by remember(value) {
+    mutableStateOf(if (value == null || value < min) "" else value.toString())
+  }
+  val activeSupport = errorText ?: supportingHint
+  OutlinedTextField(
+    value = text,
+    onValueChange = { raw ->
+      val clean = raw.filter { it.isDigit() }
+      text = clean
+      if (clean.isEmpty()) {
+        onChange(null)
+      } else {
+        clean.toIntOrNull()?.let { onChange(it.coerceAtLeast(min)) }
+      }
+    },
+    label = { Text(label) },
+    placeholder = if (placeholder.isNotBlank()) ({ Text(placeholder) }) else null,
+    isError = errorText != null,
+    supportingText = activeSupport?.let { msg -> { Text(msg) } },
     singleLine = true,
     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     modifier = modifier,
@@ -1194,8 +1477,11 @@ internal fun LongTextField(
   min: Long,
   onChange: (Long) -> Unit,
   modifier: Modifier = Modifier,
+  supportingHint: String? = null,
+  errorText: String? = null,
 ) {
   var text by remember(value) { mutableStateOf(value.toString()) }
+  val activeSupport = errorText ?: supportingHint
   OutlinedTextField(
     value = text,
     onValueChange = { raw ->
@@ -1204,6 +1490,8 @@ internal fun LongTextField(
       clean.toLongOrNull()?.let { onChange(it.coerceAtLeast(min)) }
     },
     label = { Text(label) },
+    isError = errorText != null,
+    supportingText = activeSupport?.let { msg -> { Text(msg) } },
     singleLine = true,
     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
     modifier = modifier,
