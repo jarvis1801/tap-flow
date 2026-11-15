@@ -15,6 +15,7 @@ import com.tapflow.core.database.repository.ScriptRepository
 import com.tapflow.core.datastore.AppPreferences
 import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
+import com.tapflow.core.datastore.ThemePaletteOption
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.entitlement.ProFeatureGate
