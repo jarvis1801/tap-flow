@@ -128,12 +128,12 @@ class DomainModelValidationTest {
         ProFeatureGate.FULL_EXECUTION_LOGS,
         ProFeatureGate.UNLIMITED_SCRIPTS,
         ProFeatureGate.UNLIMITED_PIPELINES,
+        ProFeatureGate.AMOLED_THEME,
       )
     val lifetimeOnlyGates =
       listOf(
         ProFeatureGate.DESKTOP_CONSOLE,
         ProFeatureGate.DATA_BACKUP,
-        ProFeatureGate.AMOLED_THEME,
       )
 
     trialUnlockedGates.forEach { gate ->

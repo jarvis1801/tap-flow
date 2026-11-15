@@ -28,7 +28,7 @@ data class InspectPixel(
 data class InspectCrop(
   val id: String,
   val label: String,
-  val cropPngPath: String,
+  val cropPngPath: String? = null,
   val x: Int,
   val y: Int,
   val width: Int,

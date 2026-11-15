@@ -64,6 +64,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.TrialStatus
+import kotlinx.coroutines.launch
 
 private val PAYWALL_COMPARISON_ROWS =
   listOf(
@@ -93,8 +94,8 @@ private val PAYWALL_COMPARISON_ROWS =
       id = "amoled",
       feature = "AMOLED Pure Black Theme",
       freeTier = "System / Light / Dark",
-      proTier = "True #000000 Black [Lifetime Only]",
-      lifetimeOnly = true,
+      proTier = "True #000000 Black [7-Day Trial + Lifetime]",
+      lifetimeOnly = false,
     ),
   )
 
@@ -122,13 +123,22 @@ fun PaywallScreen(
           if (activity != null) {
             entitlementRepository.launchLifetimePurchase(activity)
           } else {
-            snackbarHostState.showSnackbar("Unable to launch Google Play Billing from this context.")
+            launch {
+              snackbarHostState.currentSnackbarData?.dismiss()
+              snackbarHostState.showSnackbar("Unable to launch Google Play Billing from this context.")
+            }
           }
         }
         is PaywallUiEffect.ShowSnackbar -> {
-          snackbarHostState.showSnackbar(effect.message)
+          launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(effect.message)
+          }
         }
-        PaywallUiEffect.NavigateBack -> onNavigateBack()
+        PaywallUiEffect.NavigateBack -> {
+          snackbarHostState.currentSnackbarData?.dismiss()
+          onNavigateBack()
+        }
       }
     }
   }
@@ -384,7 +394,7 @@ private fun PaywallHeroCard(state: PaywallUiState) {
             modifier = Modifier.fillMaxWidth().testTag("paywall_trial_lifetime_callout"),
           ) {
             Text(
-              text = "Upgrade to Lifetime Pro to unlock Desktop Console, Data Backup & AMOLED Theme",
+              text = "Upgrade to Lifetime Pro to unlock Desktop Console & Data Backup",
               style = MaterialTheme.typography.bodyMedium,
               fontWeight = FontWeight.SemiBold,
               color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -475,7 +485,7 @@ private fun PaywallHeroCard(state: PaywallUiState) {
             text =
               when (entitlement.trialStatus) {
                 TrialStatus.NOT_STARTED ->
-                  "Unlock unlimited scripts, template matching, nested logic, Bezier humanization, and Shizuku for 7 days with no credit card required. Desktop Console, Data Backup & AMOLED Theme unlock with Lifetime Pro."
+                  "Unlock unlimited scripts, template matching, nested logic, Bezier humanization, Shizuku, and AMOLED black theme for 7 days with no credit card required. Desktop Console & Data Backup unlock with Lifetime Pro."
                 TrialStatus.EXPIRED ->
                   "Basic scripts remain free forever. Unlock Lifetime Pro with a single one-time purchase to continue using Pro automation tools."
                 TrialStatus.EXPIRED_TAMPERED ->

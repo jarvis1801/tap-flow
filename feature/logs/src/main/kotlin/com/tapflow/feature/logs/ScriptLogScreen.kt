@@ -113,13 +113,21 @@ fun ScriptLogScreen(
   LaunchedEffect(viewModel) {
     viewModel.effects.collect { effect ->
       when (effect) {
-        ScriptLogUiEffect.NavigateBack -> onNavigateBack()
+        ScriptLogUiEffect.NavigateBack -> {
+          snackbarHostState.currentSnackbarData?.dismiss()
+          onNavigateBack()
+        }
         is ScriptLogUiEffect.NavigateToPaywall -> onNavigateToPaywall(effect.sourceFeature)
         is ScriptLogUiEffect.LaunchExportDocument -> {
           pendingExportContent = effect.content
           createDocLauncher.launch(effect.suggestedFileName)
         }
-        is ScriptLogUiEffect.ShowSnackbar -> snackbarHostState.showSnackbar(effect.message)
+        is ScriptLogUiEffect.ShowSnackbar -> {
+          launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(effect.message)
+          }
+        }
       }
     }
   }

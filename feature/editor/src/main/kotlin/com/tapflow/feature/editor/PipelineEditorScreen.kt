@@ -103,6 +103,7 @@ import com.tapflow.core.model.pipeline.PipelineErrorStrategy
 import com.tapflow.core.model.pipeline.PipelineRepeatMode
 import com.tapflow.core.model.pipeline.PipelineStep
 import com.tapflow.core.model.script.Script
+import kotlinx.coroutines.launch
 
 @Composable
 fun PipelineEditorScreen(
@@ -120,9 +121,17 @@ fun PipelineEditorScreen(
   LaunchedEffect(viewModel) {
     viewModel.effects.collect { effect ->
       when (effect) {
-        PipelineEditorUiEffect.NavigateBack -> onNavigateBack()
+        PipelineEditorUiEffect.NavigateBack -> {
+          snackbarHostState.currentSnackbarData?.dismiss()
+          onNavigateBack()
+        }
         is PipelineEditorUiEffect.NavigateToPaywall -> onNavigateToPaywall(effect.sourceFeature)
-        is PipelineEditorUiEffect.ShowSnackbar -> snackbarHostState.showSnackbar(effect.message)
+        is PipelineEditorUiEffect.ShowSnackbar -> {
+          launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(effect.message)
+          }
+        }
       }
     }
   }

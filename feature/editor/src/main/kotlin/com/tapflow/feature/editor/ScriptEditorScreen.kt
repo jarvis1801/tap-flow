@@ -102,6 +102,7 @@ import com.tapflow.core.model.common.PostActionDelay
 import com.tapflow.core.model.condition.ConditionGroup
 import com.tapflow.core.model.condition.ConditionValidator
 import com.tapflow.core.service.overlay.OverlayLaunchIntents
+import kotlinx.coroutines.launch
 
 private sealed interface EditorTreeRow {
   val key: String
@@ -151,7 +152,10 @@ fun ScriptEditorScreen(
   LaunchedEffect(viewModel) {
     viewModel.effects.collect { effect ->
       when (effect) {
-        ScriptEditorUiEffect.NavigateBack -> onNavigateBack()
+        ScriptEditorUiEffect.NavigateBack -> {
+          snackbarHostState.currentSnackbarData?.dismiss()
+          onNavigateBack()
+        }
         is ScriptEditorUiEffect.NavigateToPaywall -> onNavigateToPaywall(effect.sourceFeature)
         is ScriptEditorUiEffect.LaunchOverlayGesturePicker -> {
           val intent =
@@ -164,18 +168,24 @@ fun ScriptEditorScreen(
           (context as? Activity)?.moveTaskToBack(true)
         }
         is ScriptEditorUiEffect.ShowUndoSnackbar -> {
-          val result =
-            snackbarHostState.showSnackbar(
-              message = effect.message,
-              actionLabel = "Undo",
-              duration = SnackbarDuration.Short,
-            )
-          if (result == SnackbarResult.ActionPerformed) {
-            viewModel.onIntent(ScriptEditorUiIntent.UndoDeleteAction)
+          launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val result =
+              snackbarHostState.showSnackbar(
+                message = effect.message,
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short,
+              )
+            if (result == SnackbarResult.ActionPerformed) {
+              viewModel.onIntent(ScriptEditorUiIntent.UndoDeleteAction)
+            }
           }
         }
         is ScriptEditorUiEffect.ShowSnackbar -> {
-          snackbarHostState.showSnackbar(effect.message)
+          launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(effect.message)
+          }
         }
       }
     }
@@ -463,7 +473,7 @@ fun ScriptEditorContent(
       onSelectPixel = { item, pixel ->
         onIntent(ScriptEditorUiIntent.ImportInspectPixel(item, pixel))
       },
-      onSelectCrop = { crop -> onIntent(ScriptEditorUiIntent.ImportInspectCrop(crop)) },
+      onSelectCrop = { item, crop -> onIntent(ScriptEditorUiIntent.ImportInspectCrop(item, crop)) },
       onDismiss = { onIntent(ScriptEditorUiIntent.DismissInspectPicker) },
     )
   }

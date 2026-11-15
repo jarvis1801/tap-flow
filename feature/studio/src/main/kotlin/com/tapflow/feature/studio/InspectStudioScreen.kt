@@ -93,7 +93,9 @@ import com.tapflow.core.model.inspect.InspectPixel
 import com.tapflow.core.model.inspect.ScreenOrientation
 import java.io.File
 import java.util.Locale
+import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 @Composable
 fun InspectStudioScreen(
@@ -111,9 +113,17 @@ fun InspectStudioScreen(
   LaunchedEffect(viewModel) {
     viewModel.effects.collect { effect ->
       when (effect) {
-        InspectStudioUiEffect.NavigateBack -> onNavigateBack()
+        InspectStudioUiEffect.NavigateBack -> {
+          snackbarHostState.currentSnackbarData?.dismiss()
+          onNavigateBack()
+        }
         is InspectStudioUiEffect.NavigateToPaywall -> onNavigateToPaywall(effect.sourceFeature)
-        is InspectStudioUiEffect.ShowSnackbar -> snackbarHostState.showSnackbar(effect.message)
+        is InspectStudioUiEffect.ShowSnackbar -> {
+          launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(effect.message)
+          }
+        }
       }
     }
   }
@@ -253,7 +263,7 @@ fun InspectStudioContent(
       text = {
         Text(
           if (marker.isCrop) {
-            "Deletes \"${marker.label}\" and its lossless template PNG file from Inspect storage."
+            "Removes saved crop region \"${marker.label}\" from this screenshot."
           } else {
             "Removes saved pixel target \"${marker.label}\"."
           },
@@ -568,12 +578,17 @@ private fun StudioBottomControlBar(
               val sy = state.cropY.coerceIn(0, (img.height - 1).coerceAtLeast(0))
               val sw = state.cropWidth.coerceIn(1, (img.width - sx).coerceAtLeast(1))
               val sh = state.cropHeight.coerceIn(1, (img.height - sy).coerceAtLeast(1))
+              val scale = min(size.width / sw.toFloat(), size.height / sh.toFloat())
+              val dstW = (sw * scale).roundToInt().coerceAtLeast(1)
+              val dstH = (sh * scale).roundToInt().coerceAtLeast(1)
+              val dstX = ((size.width - dstW) / 2f).roundToInt()
+              val dstY = ((size.height - dstH) / 2f).roundToInt()
               drawImage(
                 image = img,
                 srcOffset = IntOffset(sx, sy),
                 srcSize = IntSize(sw, sh),
-                dstOffset = IntOffset.Zero,
-                dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                dstOffset = IntOffset(dstX, dstY),
+                dstSize = IntSize(dstW, dstH),
                 filterQuality = FilterQuality.None,
               )
             }
@@ -660,7 +675,7 @@ private fun StudioBottomControlBar(
         ) {
           Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.size(18.dp))
           Spacer(modifier = Modifier.width(8.dp))
-          Text("Save Image Crop (Lossless PNG)")
+          Text("Save Crop Region")
         }
       }
     }
@@ -743,7 +758,7 @@ private fun StudioSaveConfirmationSheet(
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       Text(
-        text = if (isCrop) "Save Lossless Image Crop" else "Save Pixel Target",
+        text = if (isCrop) "Save Crop Region" else "Save Pixel Target",
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
       )
@@ -898,8 +913,8 @@ private fun MarkerInfoPopupDialog(
 
         is StudioMarkerInfoPopup.Crop -> {
           val crop = popup.crop
-          val cropFile = remember(crop.cropPngPath) {
-            crop.cropPngPath.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.exists() }
+          val legacyCropFile = remember(crop.cropPngPath) {
+            crop.cropPngPath?.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.exists() }
           }
           Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(
@@ -912,28 +927,33 @@ private fun MarkerInfoPopupDialog(
                   .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp)),
               contentAlignment = Alignment.Center,
             ) {
-              if (cropFile != null) {
-                AsyncImage(
-                  model = cropFile,
-                  contentDescription = crop.label.ifBlank { "Saved crop thumbnail" },
-                  modifier = Modifier.fillMaxSize().padding(6.dp),
-                )
-              } else if (loadedImage != null) {
+              if (loadedImage != null) {
                 Canvas(modifier = Modifier.fillMaxSize().padding(6.dp)) {
                   val img = loadedImage.imageBitmap
                   val sx = crop.x.coerceIn(0, (img.width - 1).coerceAtLeast(0))
                   val sy = crop.y.coerceIn(0, (img.height - 1).coerceAtLeast(0))
                   val sw = crop.width.coerceIn(1, (img.width - sx).coerceAtLeast(1))
                   val sh = crop.height.coerceIn(1, (img.height - sy).coerceAtLeast(1))
+                  val scale = min(size.width / sw.toFloat(), size.height / sh.toFloat())
+                  val dstW = (sw * scale).roundToInt().coerceAtLeast(1)
+                  val dstH = (sh * scale).roundToInt().coerceAtLeast(1)
+                  val dstX = ((size.width - dstW) / 2f).roundToInt()
+                  val dstY = ((size.height - dstH) / 2f).roundToInt()
                   drawImage(
                     image = img,
                     srcOffset = IntOffset(sx, sy),
                     srcSize = IntSize(sw, sh),
-                    dstOffset = IntOffset.Zero,
-                    dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                    dstOffset = IntOffset(dstX, dstY),
+                    dstSize = IntSize(dstW, dstH),
                     filterQuality = FilterQuality.None,
                   )
                 }
+              } else if (legacyCropFile != null) {
+                AsyncImage(
+                  model = legacyCropFile,
+                  contentDescription = crop.label.ifBlank { "Saved crop thumbnail" },
+                  modifier = Modifier.fillMaxSize().padding(6.dp),
+                )
               } else {
                 Text(
                   text = "${crop.width} × ${crop.height} px",

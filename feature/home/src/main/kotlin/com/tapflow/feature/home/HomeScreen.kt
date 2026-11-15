@@ -73,6 +73,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.service.overlay.OverlayLaunchIntents
 import com.tapflow.core.service.projection.MediaProjectionBridge
+import kotlinx.coroutines.launch
 
 @Composable
 fun HomeScreen(
@@ -233,7 +234,10 @@ fun HomeScreen(
             }
         }
         is HomeUiEffect.ShowSnackbar -> {
-          snackbarHostState.showSnackbar(effect.message)
+          launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(effect.message)
+          }
         }
       }
     }

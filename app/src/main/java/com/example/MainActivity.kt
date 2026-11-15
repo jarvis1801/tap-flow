@@ -41,7 +41,6 @@ import com.jarvis.tapflow.ui.theme.TapFlowTheme
 import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.datastore.AppPreferences
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
-import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.service.accessibility.TapFlowAccessibilityService
 import com.tapflow.core.service.overlay.GesturePickerBridge
 import com.tapflow.core.service.overlay.OverlayLaunchIntents
@@ -102,10 +101,10 @@ class MainActivity : AppCompatActivity() {
         preferencesRepository.preferencesFlow.collectAsStateWithLifecycle(initialValue = null)
       val entitlementState by
         entitlementRepository.entitlementState.collectAsStateWithLifecycle()
-      val isLifetimePro = entitlementState is EntitlementState.ProLifetime
+      val isPro = entitlementState.hasTrialOrLifetimeAccess
       val prefs = prefsOrNull
       val darkMode = prefs?.darkMode ?: AppPreferences().darkMode
-      val isDark = resolveIsDarkTheme(darkMode, isLifetimePro = isLifetimePro)
+      val isDark = resolveIsDarkTheme(darkMode, isPro = isPro)
 
       DisposableEffect(isDark) {
         enableEdgeToEdge(
@@ -128,7 +127,7 @@ class MainActivity : AppCompatActivity() {
       TapFlowTheme(
         darkMode = darkMode,
         themePalette = prefs?.themePalette ?: AppPreferences().themePalette,
-        isLifetimePro = isLifetimePro,
+        isPro = isPro,
         darkTheme = isDark,
       ) {
         if (prefs == null) {

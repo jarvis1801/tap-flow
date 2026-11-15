@@ -5,19 +5,14 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CenterFocusStrong
-import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -92,16 +87,6 @@ internal fun OverlayCaptureFeedbackLayer(state: OverlayUiState) {
         accentColor = accentColor,
       )
 
-      CaptureTopStatusPill(
-        state = state,
-        accentColor = accentColor,
-        modifier =
-          Modifier
-            .align(Alignment.TopCenter)
-            .statusBarsPadding()
-            .padding(top = 12.dp, start = 16.dp, end = 16.dp),
-      )
-
       state.touchPreview?.let { preview ->
         if (preview.isTouching) {
           TouchCoordinateReadoutBadge(
@@ -142,79 +127,6 @@ internal fun OverlayCaptureFeedbackLayer(state: OverlayUiState) {
             text = alertMsg,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onTertiaryContainer,
-          )
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun CaptureTopStatusPill(
-  state: OverlayUiState,
-  accentColor: Color,
-  modifier: Modifier = Modifier,
-) {
-  val modeLabel =
-    when (state.mode) {
-      OverlayMode.GESTURE_PICKER ->
-        when (state.pickerTargetType) {
-          GesturePickerTargetType.POINT -> "PICK POINT"
-          GesturePickerTargetType.LONG_PRESS -> "PICK LONG PRESS"
-          GesturePickerTargetType.SWIPE_PATH -> "DRAW SWIPE PATH"
-          GesturePickerTargetType.MULTI_TOUCH_ANCHOR -> "PICK MULTI-TOUCH"
-          GesturePickerTargetType.REGION_BOUNDS -> "DRAG REGION BOUNDS"
-          null -> "GESTURE PICKER"
-        }
-
-      OverlayMode.LIVE_RECORDER -> "REC • ${state.recordedActionCount} STEPS"
-      OverlayMode.LIVE_INSPECTOR -> "LIVE INSPECT • ${state.inspectedItemCount} CAPTURES"
-      else -> "ACTIVE"
-    }
-
-  val icon =
-    when (state.mode) {
-      OverlayMode.LIVE_RECORDER -> Icons.Filled.FiberManualRecord
-      OverlayMode.LIVE_INSPECTOR -> Icons.Filled.CenterFocusStrong
-      else -> Icons.Filled.TouchApp
-    }
-
-  Surface(
-    modifier = modifier.testTag("overlay_capture_top_pill"),
-    shape = RoundedCornerShape(20.dp),
-    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.75f)),
-    shadowElevation = 6.dp,
-  ) {
-    Row(
-      modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-      Box(
-        modifier =
-          Modifier
-            .size(8.dp)
-            .background(accentColor, CircleShape),
-      )
-      Icon(
-        imageVector = icon,
-        contentDescription = null,
-        tint = accentColor,
-        modifier = Modifier.size(15.dp),
-      )
-      Column {
-        Text(
-          text = modeLabel,
-          style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurface,
-        )
-        state.statusHint?.let { hint ->
-          Text(
-            text = hint,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         }
       }

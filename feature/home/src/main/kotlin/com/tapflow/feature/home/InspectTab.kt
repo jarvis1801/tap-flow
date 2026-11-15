@@ -2,6 +2,9 @@ package com.tapflow.feature.home
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.BitmapRegionDecoder
+import android.graphics.Rect as AndroidRect
 import android.util.LruCache
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
@@ -28,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -348,6 +352,7 @@ private fun InspectItemNestedCard(
           } else {
             item.crops.forEach { crop ->
               CropEntryRow(
+                fullScreenPngPath = item.fullScreenPngPath,
                 crop = crop,
                 onDelete = { onIntent(HomeUiIntent.DeleteInspectCrop(item.id, crop.id)) },
               )
@@ -429,9 +434,58 @@ private fun PixelEntryRow(
 
 @Composable
 private fun CropEntryRow(
+  fullScreenPngPath: String,
   crop: InspectCrop,
   onDelete: () -> Unit,
 ) {
+  val isPreview = LocalInspectionMode.current
+  val thumb by
+    produceState<ImageBitmap?>(
+      initialValue = null,
+      fullScreenPngPath,
+      crop.x,
+      crop.y,
+      crop.width,
+      crop.height,
+      crop.cropPngPath,
+      isPreview,
+    ) {
+      if (isPreview) return@produceState
+      value =
+        withContext(Dispatchers.IO) {
+          runCatching {
+            val legacyPath = crop.cropPngPath?.takeIf { it.isNotBlank() }
+            if (legacyPath != null) {
+              val legacyFile = File(legacyPath)
+              if (legacyFile.exists() && legacyFile.isFile) {
+                return@runCatching BitmapFactory.decodeFile(legacyFile.absolutePath)?.asImageBitmap()
+              }
+            }
+            val screenFile = File(fullScreenPngPath)
+            if (!screenFile.exists() || !screenFile.isFile) return@runCatching null
+            val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(screenFile.absolutePath, boundsOpts)
+            val imgW = boundsOpts.outWidth
+            val imgH = boundsOpts.outHeight
+            if (imgW <= 0 || imgH <= 0) return@runCatching null
+            val safeX = crop.x.coerceIn(0, imgW - 1)
+            val safeY = crop.y.coerceIn(0, imgH - 1)
+            val safeW = crop.width.coerceIn(1, imgW - safeX)
+            val safeH = crop.height.coerceIn(1, imgH - safeY)
+            @Suppress("DEPRECATION")
+            val decoder = BitmapRegionDecoder.newInstance(screenFile.absolutePath, false)
+            try {
+              decoder.decodeRegion(
+                AndroidRect(safeX, safeY, safeX + safeW, safeY + safeH),
+                BitmapFactory.Options(),
+              )?.asImageBitmap()
+            } finally {
+              decoder.recycle()
+            }
+          }.getOrNull()
+        }
+    }
+
   Row(
     modifier = Modifier.fillMaxWidth(),
     verticalAlignment = Alignment.CenterVertically,
@@ -442,12 +496,24 @@ private fun CropEntryRow(
       color = MaterialTheme.colorScheme.surface,
       modifier = Modifier.size(40.dp),
     ) {
-      AsyncImage(
-        model = File(crop.cropPngPath),
-        contentDescription = crop.label,
-        contentScale = ContentScale.Fit,
-        modifier = Modifier.fillMaxSize(),
-      )
+      Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val bmp = thumb
+        if (bmp != null) {
+          Image(
+            bitmap = bmp,
+            contentDescription = crop.label,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize(),
+          )
+        } else {
+          Icon(
+            imageVector = Icons.Filled.Crop,
+            contentDescription = crop.label,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+          )
+        }
+      }
     }
     Column(modifier = Modifier.weight(1f)) {
       Text(

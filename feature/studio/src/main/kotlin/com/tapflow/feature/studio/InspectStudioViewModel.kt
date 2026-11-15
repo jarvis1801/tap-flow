@@ -388,19 +388,11 @@ class InspectStudioViewModel @Inject constructor(
               )
             item.copy(pixels = item.pixels + newPixel)
           } else {
-            val cropPath =
-              studioBitmapProcessor.saveLosslessCropPng(
-                fullScreenPngPath = item.fullScreenPngPath,
-                x = state.cropX,
-                y = state.cropY,
-                width = state.cropWidth,
-                height = state.cropHeight,
-              )
             val newCrop =
               InspectCrop(
                 id = UUID.randomUUID().toString(),
                 label = label.trim().ifBlank { "Crop ${state.cropWidth}×${state.cropHeight}" },
-                cropPngPath = cropPath,
+                cropPngPath = null,
                 x = state.cropX,
                 y = state.cropY,
                 width = state.cropWidth,
@@ -412,7 +404,7 @@ class InspectStudioViewModel @Inject constructor(
         inspectRepository.saveItem(updatedItem)
       }.onSuccess {
         _uiState.update { it.copy(isSaving = false, hasUnsavedChanges = false) }
-        val kind = if (state.mode == StudioMode.PIXEL_INSPECT) "Pixel target" else "Lossless image crop"
+        val kind = if (state.mode == StudioMode.PIXEL_INSPECT) "Pixel target" else "Crop region"
         sendEffect(InspectStudioUiEffect.ShowSnackbar("Saved $kind"))
       }.onFailure { err ->
         _uiState.update { it.copy(isSaving = false) }

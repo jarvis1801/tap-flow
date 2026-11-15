@@ -49,14 +49,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.tapflow.core.service.engine.RunnerExecutionSnapshot
 import com.tapflow.core.service.engine.RunnerPhase
-import com.tapflow.core.service.overlay.GesturePickerTargetType
 import com.tapflow.core.service.overlay.OverlayCallbacks
 import com.tapflow.core.service.overlay.OverlayMode
 import com.tapflow.core.service.overlay.OverlaySessionState
@@ -95,9 +96,9 @@ internal fun OverlayDockView(
   }
 
   Row(
-    modifier = modifier.padding(4.dp),
+    modifier = modifier.padding(2.dp),
     verticalAlignment = Alignment.Top,
-    horizontalArrangement = Arrangement.spacedBy(6.dp),
+    horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {
     if (state.isDockedOnRight && state.captureAlertMessage != null) {
       CaptureAlertSideCard(
@@ -110,26 +111,28 @@ internal fun OverlayDockView(
     Surface(
       modifier =
         dragModifier
-          .width(74.dp)
+          .width(38.dp)
           .testTag("overlay_vertical_strip_dock"),
-      shape = RoundedCornerShape(22.dp),
-      color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+      shape = RoundedCornerShape(18.dp),
+      color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
       contentColor = MaterialTheme.colorScheme.onSurface,
-      border = BorderStroke(1.2.dp, modeAccent.copy(alpha = 0.65f)),
-      shadowElevation = 10.dp,
+      border = BorderStroke(1.dp, modeAccent.copy(alpha = 0.7f)),
+      shadowElevation = 6.dp,
     ) {
       Column(
-        modifier = Modifier.padding(vertical = 6.dp, horizontal = 6.dp),
+        modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
       ) {
-        // Top toggle [▲ / ▼] + magnetic drag handle
         DockHeaderBar(
           accentColor = modeAccent,
           onCollapseClick = callbacks::onToggleBubbleCollapse,
         )
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f))
+        HorizontalDivider(
+          color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+          modifier = Modifier.padding(horizontal = 4.dp),
+        )
 
         when (state.mode) {
           OverlayMode.RUNNER_SCRIPT,
@@ -161,19 +164,14 @@ internal fun OverlayDockView(
             )
           }
 
-          OverlayMode.IDLE -> {
-            Text(
-              text = "IDLE",
-              style = MaterialTheme.typography.labelSmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              modifier = Modifier.padding(vertical = 4.dp),
-            )
-          }
+          OverlayMode.IDLE -> Unit
         }
 
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.7f))
+        HorizontalDivider(
+          color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+          modifier = Modifier.padding(horizontal = 4.dp),
+        )
 
-        // Close (✕) button
         DockActionIconButton(
           icon = Icons.Filled.Close,
           contentDescription =
@@ -204,51 +202,29 @@ private fun CollapsedEdgeBubble(
   onExpand: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  val bubbleLabel =
-    when (state.mode) {
-      OverlayMode.RUNNER_SCRIPT,
-      OverlayMode.RUNNER_PIPELINE -> {
-        val snap = state.runnerSnapshot
-        if (snap.totalTopLevelActions > 0) "${snap.currentTopLevelAction}/${snap.totalTopLevelActions}"
-        else "TF"
-      }
-      OverlayMode.LIVE_RECORDER -> "R${state.recordedActionCount}"
-      OverlayMode.LIVE_INSPECTOR -> "I${state.inspectedItemCount}"
-      OverlayMode.GESTURE_PICKER -> "PICK"
-      OverlayMode.IDLE -> "TF"
-    }
-
   Surface(
     onClick = onExpand,
-    modifier = modifier.size(54.dp).testTag("overlay_collapsed_bubble"),
+    modifier = modifier.size(34.dp).testTag("overlay_collapsed_bubble"),
     shape = CircleShape,
-    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
-    contentColor = MaterialTheme.colorScheme.onSurface,
-    border = BorderStroke(2.dp, accentColor),
-    shadowElevation = 10.dp,
+    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.80f),
+    contentColor = accentColor,
+    border = BorderStroke(1.2.dp, accentColor.copy(alpha = 0.8f)),
+    shadowElevation = 6.dp,
   ) {
     Box(contentAlignment = Alignment.Center) {
-      Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(
-          imageVector = Icons.Filled.KeyboardArrowDown,
-          contentDescription = "Expand floating dock",
-          tint = accentColor,
-          modifier = Modifier.size(16.dp),
-        )
-        Text(
-          text = bubbleLabel,
-          style = MaterialTheme.typography.labelMedium,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onSurface,
-        )
-      }
+      Icon(
+        imageVector = Icons.Filled.TouchApp,
+        contentDescription = "Expand floating dock",
+        tint = accentColor,
+        modifier = Modifier.size(18.dp),
+      )
       if (state.captureAlertMessage != null) {
         Box(
           modifier =
             Modifier
               .align(Alignment.TopEnd)
-              .padding(6.dp)
-              .size(10.dp)
+              .padding(3.dp)
+              .size(7.dp)
               .clip(CircleShape)
               .background(MaterialTheme.colorScheme.tertiary),
         )
@@ -265,37 +241,38 @@ private fun DockHeaderBar(
   Column(
     modifier = Modifier.fillMaxWidth(),
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(2.dp),
+    verticalArrangement = Arrangement.spacedBy(1.dp),
   ) {
     Row(
-      modifier = Modifier.fillMaxWidth(),
+      modifier = Modifier.fillMaxWidth().padding(top = 1.dp),
       horizontalArrangement = Arrangement.Center,
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Box(
         modifier =
           Modifier
-            .size(7.dp)
+            .size(5.dp)
             .clip(CircleShape)
             .background(accentColor),
       )
-      Spacer(modifier = Modifier.width(3.dp))
+      Spacer(modifier = Modifier.width(2.dp))
       Icon(
         imageVector = Icons.Filled.DragIndicator,
         contentDescription = "Drag floating dock",
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.size(16.dp),
+        modifier = Modifier.size(13.dp),
       )
     }
 
     IconButton(
       onClick = onCollapseClick,
-      modifier = Modifier.size(48.dp).testTag("overlay_collapse_toggle_button"),
+      modifier = Modifier.size(30.dp).testTag("overlay_collapse_toggle_button"),
     ) {
       Icon(
         imageVector = Icons.Filled.KeyboardArrowUp,
         contentDescription = "Collapse floating dock to bubble",
         tint = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.size(18.dp),
       )
     }
   }
@@ -309,81 +286,33 @@ private fun RunnerModeControls(
   val snap = state.runnerSnapshot
   val isRunning = snap.phase == RunnerPhase.RUNNING
 
-  val phaseBadge =
-    when (snap.phase) {
-      RunnerPhase.RUNNING -> "RUN"
-      RunnerPhase.PAUSED -> "PAUSE"
-      RunnerPhase.COMPLETED -> "DONE"
-      RunnerPhase.FAILED -> "FAIL"
-      RunnerPhase.STOPPED -> "STOP"
-      RunnerPhase.PAYWALL_BLOCKED -> "PRO"
-      RunnerPhase.IDLE -> "READY"
-    }
-  val badgeBg =
-    when (snap.phase) {
-      RunnerPhase.RUNNING -> MaterialTheme.colorScheme.primaryContainer
-      RunnerPhase.PAUSED -> MaterialTheme.colorScheme.tertiaryContainer
-      RunnerPhase.FAILED,
-      RunnerPhase.PAYWALL_BLOCKED -> MaterialTheme.colorScheme.errorContainer
-      else -> MaterialTheme.colorScheme.surfaceContainerHigh
-    }
-  val badgeFg =
-    when (snap.phase) {
-      RunnerPhase.RUNNING -> MaterialTheme.colorScheme.onPrimaryContainer
-      RunnerPhase.PAUSED -> MaterialTheme.colorScheme.onTertiaryContainer
-      RunnerPhase.FAILED,
-      RunnerPhase.PAYWALL_BLOCKED -> MaterialTheme.colorScheme.onErrorContainer
-      else -> MaterialTheme.colorScheme.onSurface
-    }
-
-  Surface(
-    shape = RoundedCornerShape(8.dp),
-    color = badgeBg,
-    modifier = Modifier.fillMaxWidth().testTag("overlay_runner_phase_badge"),
+  Column(
+    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).testTag("overlay_runner_action_counter"),
+    horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     Text(
-      text = phaseBadge,
-      style = MaterialTheme.typography.labelSmall,
+      text = "${snap.currentTopLevelAction}/${snap.totalTopLevelActions}",
+      fontSize = 9.sp,
+      lineHeight = 11.sp,
+      fontFamily = FontFamily.Monospace,
       fontWeight = FontWeight.Bold,
-      color = badgeFg,
+      color = MaterialTheme.colorScheme.primary,
+      maxLines = 1,
       textAlign = TextAlign.Center,
-      modifier = Modifier.padding(vertical = 3.dp, horizontal = 4.dp),
     )
-  }
-
-  // Action progress [Current / Total]
-  val actionCounter = "${snap.currentTopLevelAction}/${snap.totalTopLevelActions}"
-  Surface(
-    shape = RoundedCornerShape(8.dp),
-    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-    modifier = Modifier.fillMaxWidth().testTag("overlay_runner_action_counter"),
-  ) {
-    Column(
-      modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    if (state.mode == OverlayMode.RUNNER_PIPELINE || snap.isPipeline) {
       Text(
-        text = actionCounter,
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
+        text = "${snap.currentPipelineStep}.${snap.currentStepIteration}",
+        fontSize = 8.sp,
+        lineHeight = 10.sp,
+        fontFamily = FontFamily.Monospace,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        textAlign = TextAlign.Center,
       )
-      if (state.mode == OverlayMode.RUNNER_PIPELINE || snap.isPipeline) {
-        Text(
-          text = "S ${snap.currentPipelineStep}/${snap.totalPipelineSteps}",
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-          text = "R ${snap.currentStepIteration}/${snap.totalStepIterations}",
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
     }
   }
 
-  // Play / Pause
   DockActionIconButton(
     icon = if (isRunning) Icons.Filled.Pause else Icons.Filled.PlayArrow,
     contentDescription = if (isRunning) "Pause script" else "Play or resume script",
@@ -393,7 +322,6 @@ private fun RunnerModeControls(
     onClick = callbacks::onPlayPause,
   )
 
-  // Previous Top-Level Step (⏮)
   DockActionIconButton(
     icon = Icons.Filled.SkipPrevious,
     contentDescription = "Previous top-level action",
@@ -403,7 +331,6 @@ private fun RunnerModeControls(
     onClick = callbacks::onPreviousStep,
   )
 
-  // Next Atomic Top-Level Step (⏭)
   DockActionIconButton(
     icon = Icons.Filled.SkipNext,
     contentDescription = "Step next top-level action",
@@ -413,7 +340,6 @@ private fun RunnerModeControls(
     onClick = callbacks::onNextStep,
   )
 
-  // Stop (⏹)
   DockActionIconButton(
     icon = Icons.Filled.Stop,
     contentDescription = "Stop execution",
@@ -429,32 +355,6 @@ private fun GesturePickerModeControls(
   state: OverlayUiState,
   callbacks: OverlayCallbacks,
 ) {
-  val modeShort =
-    when (state.pickerTargetType) {
-      GesturePickerTargetType.POINT -> "POINT"
-      GesturePickerTargetType.LONG_PRESS -> "HOLD"
-      GesturePickerTargetType.SWIPE_PATH -> "SWIPE"
-      GesturePickerTargetType.MULTI_TOUCH_ANCHOR -> "MULTI"
-      GesturePickerTargetType.REGION_BOUNDS -> "ROI"
-      null -> "PICK"
-    }
-
-  Surface(
-    shape = RoundedCornerShape(8.dp),
-    color = MaterialTheme.colorScheme.primaryContainer,
-    modifier = Modifier.fillMaxWidth(),
-  ) {
-    Text(
-      text = modeShort,
-      style = MaterialTheme.typography.labelSmall,
-      fontWeight = FontWeight.Bold,
-      color = MaterialTheme.colorScheme.onPrimaryContainer,
-      textAlign = TextAlign.Center,
-      modifier = Modifier.padding(vertical = 4.dp),
-    )
-  }
-
-  // Inspect / Stop toggle so user can pause interception to scroll target app or arm pick
   DockActionIconButton(
     icon = if (state.isCaptureActive) Icons.Filled.Stop else Icons.Filled.TouchApp,
     contentDescription =
@@ -468,11 +368,6 @@ private fun GesturePickerModeControls(
     testTag = "overlay_picker_toggle_button",
     onClick = callbacks::onToggleCaptureListening,
   )
-  Text(
-    text = if (state.isCaptureActive) "Armed" else "Inspect",
-    style = MaterialTheme.typography.labelSmall,
-    color = MaterialTheme.colorScheme.onSurfaceVariant,
-  )
 }
 
 @Composable
@@ -480,54 +375,17 @@ private fun LiveRecorderModeControls(
   state: OverlayUiState,
   callbacks: OverlayCallbacks,
 ) {
-  val badgeContainer =
-    when (state.sessionState) {
-      OverlaySessionState.ACTIVE -> MaterialTheme.colorScheme.errorContainer
-      OverlaySessionState.PAUSED -> MaterialTheme.colorScheme.tertiaryContainer
-      OverlaySessionState.STANDBY -> MaterialTheme.colorScheme.surfaceContainerHigh
-    }
-  val badgeTitleColor =
-    when (state.sessionState) {
-      OverlaySessionState.ACTIVE -> MaterialTheme.colorScheme.onErrorContainer
-      OverlaySessionState.PAUSED -> MaterialTheme.colorScheme.onTertiaryContainer
-      OverlaySessionState.STANDBY -> MaterialTheme.colorScheme.primary
-    }
-  val badgeCountColor =
-    when (state.sessionState) {
-      OverlaySessionState.ACTIVE -> MaterialTheme.colorScheme.onErrorContainer
-      OverlaySessionState.PAUSED -> MaterialTheme.colorScheme.onTertiaryContainer
-      OverlaySessionState.STANDBY -> MaterialTheme.colorScheme.onSurface
-    }
-  val badgeTitle =
-    when (state.sessionState) {
-      OverlaySessionState.STANDBY -> "READY"
-      OverlaySessionState.ACTIVE -> "REC"
-      OverlaySessionState.PAUSED -> "PAUSE"
-    }
-
-  Surface(
-    shape = RoundedCornerShape(8.dp),
-    color = badgeContainer,
-    contentColor = badgeCountColor,
-    modifier = Modifier.fillMaxWidth().testTag("overlay_recorder_count_badge"),
-  ) {
-    Column(
-      modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-      Text(
-        text = badgeTitle,
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.Bold,
-        color = badgeTitleColor,
-      )
-      Text(
-        text = "${state.recordedActionCount}",
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.Bold,
-        color = badgeCountColor,
-      )
-    }
+  if (state.recordedActionCount > 0) {
+    Text(
+      text = "${state.recordedActionCount}",
+      fontSize = 10.sp,
+      lineHeight = 12.sp,
+      fontFamily = FontFamily.Monospace,
+      fontWeight = FontWeight.Bold,
+      color = MaterialTheme.colorScheme.error,
+      textAlign = TextAlign.Center,
+      modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp).testTag("overlay_recorder_count_badge"),
+    )
   }
 
   when (state.sessionState) {
@@ -540,11 +398,6 @@ private fun LiveRecorderModeControls(
         testTag = "overlay_recorder_start_button",
         onClick = callbacks::onStartOrResumeCapture,
       )
-      Text(
-        text = "Record",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
     }
 
     OverlaySessionState.ACTIVE -> {
@@ -556,11 +409,6 @@ private fun LiveRecorderModeControls(
         testTag = "overlay_recorder_pause_button",
         onClick = callbacks::onPauseCapture,
       )
-      Text(
-        text = "Pause",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
 
       DockActionIconButton(
         icon = Icons.Filled.Stop,
@@ -569,11 +417,6 @@ private fun LiveRecorderModeControls(
         containerColor = MaterialTheme.colorScheme.error,
         testTag = "overlay_recorder_stop_button",
         onClick = callbacks::onStopCapture,
-      )
-      Text(
-        text = "Stop",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     }
 
@@ -586,11 +429,6 @@ private fun LiveRecorderModeControls(
         testTag = "overlay_recorder_resume_button",
         onClick = callbacks::onStartOrResumeCapture,
       )
-      Text(
-        text = "Resume",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
 
       DockActionIconButton(
         icon = Icons.Filled.Stop,
@@ -599,11 +437,6 @@ private fun LiveRecorderModeControls(
         containerColor = MaterialTheme.colorScheme.errorContainer,
         testTag = "overlay_recorder_stop_button",
         onClick = callbacks::onStopCapture,
-      )
-      Text(
-        text = "Stop",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     }
   }
@@ -614,54 +447,17 @@ private fun LiveInspectorModeControls(
   state: OverlayUiState,
   callbacks: OverlayCallbacks,
 ) {
-  val badgeContainer =
-    when (state.sessionState) {
-      OverlaySessionState.ACTIVE -> MaterialTheme.colorScheme.secondaryContainer
-      OverlaySessionState.PAUSED -> MaterialTheme.colorScheme.tertiaryContainer
-      OverlaySessionState.STANDBY -> MaterialTheme.colorScheme.surfaceContainerHigh
-    }
-  val badgeTitleColor =
-    when (state.sessionState) {
-      OverlaySessionState.ACTIVE -> MaterialTheme.colorScheme.onSecondaryContainer
-      OverlaySessionState.PAUSED -> MaterialTheme.colorScheme.onTertiaryContainer
-      OverlaySessionState.STANDBY -> MaterialTheme.colorScheme.secondary
-    }
-  val badgeCountColor =
-    when (state.sessionState) {
-      OverlaySessionState.ACTIVE -> MaterialTheme.colorScheme.onSecondaryContainer
-      OverlaySessionState.PAUSED -> MaterialTheme.colorScheme.onTertiaryContainer
-      OverlaySessionState.STANDBY -> MaterialTheme.colorScheme.onSurface
-    }
-  val badgeTitle =
-    when (state.sessionState) {
-      OverlaySessionState.STANDBY -> "READY"
-      OverlaySessionState.ACTIVE -> "INSP"
-      OverlaySessionState.PAUSED -> "PAUSE"
-    }
-
-  Surface(
-    shape = RoundedCornerShape(8.dp),
-    color = badgeContainer,
-    contentColor = badgeCountColor,
-    modifier = Modifier.fillMaxWidth().testTag("overlay_inspector_count_badge"),
-  ) {
-    Column(
-      modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-      Text(
-        text = badgeTitle,
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = FontWeight.Bold,
-        color = badgeTitleColor,
-      )
-      Text(
-        text = "${state.inspectedItemCount}",
-        style = MaterialTheme.typography.labelLarge,
-        fontWeight = FontWeight.Bold,
-        color = badgeCountColor,
-      )
-    }
+  if (state.inspectedItemCount > 0) {
+    Text(
+      text = "${state.inspectedItemCount}",
+      fontSize = 10.sp,
+      lineHeight = 12.sp,
+      fontFamily = FontFamily.Monospace,
+      fontWeight = FontWeight.Bold,
+      color = MaterialTheme.colorScheme.secondary,
+      textAlign = TextAlign.Center,
+      modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp).testTag("overlay_inspector_count_badge"),
+    )
   }
 
   when (state.sessionState) {
@@ -674,11 +470,6 @@ private fun LiveInspectorModeControls(
         testTag = "overlay_inspector_start_button",
         onClick = callbacks::onStartOrResumeCapture,
       )
-      Text(
-        text = "Inspect",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
     }
 
     OverlaySessionState.ACTIVE -> {
@@ -690,11 +481,6 @@ private fun LiveInspectorModeControls(
         testTag = "overlay_inspector_pause_button",
         onClick = callbacks::onPauseCapture,
       )
-      Text(
-        text = "Pause",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
 
       DockActionIconButton(
         icon = Icons.Filled.Stop,
@@ -703,11 +489,6 @@ private fun LiveInspectorModeControls(
         containerColor = MaterialTheme.colorScheme.secondary,
         testTag = "overlay_inspector_stop_button",
         onClick = callbacks::onStopCapture,
-      )
-      Text(
-        text = "Stop",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     }
 
@@ -720,11 +501,6 @@ private fun LiveInspectorModeControls(
         testTag = "overlay_inspector_resume_button",
         onClick = callbacks::onStartOrResumeCapture,
       )
-      Text(
-        text = "Resume",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
 
       DockActionIconButton(
         icon = Icons.Filled.Stop,
@@ -733,11 +509,6 @@ private fun LiveInspectorModeControls(
         containerColor = MaterialTheme.colorScheme.errorContainer,
         testTag = "overlay_inspector_stop_button",
         onClick = callbacks::onStopCapture,
-      )
-      Text(
-        text = "Stop",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     }
   }
@@ -829,12 +600,12 @@ private fun DockActionIconButton(
         containerColor = containerColor,
         contentColor = tint,
       ),
-    modifier = Modifier.size(48.dp).testTag(testTag),
+    modifier = Modifier.size(32.dp).testTag(testTag),
   ) {
     Icon(
       imageVector = icon,
       contentDescription = contentDescription,
-      modifier = Modifier.size(22.dp),
+      modifier = Modifier.size(18.dp),
     )
   }
 }

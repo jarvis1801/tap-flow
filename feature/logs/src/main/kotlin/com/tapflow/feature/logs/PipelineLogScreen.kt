@@ -116,13 +116,21 @@ fun PipelineLogScreen(
   LaunchedEffect(viewModel) {
     viewModel.effects.collect { effect ->
       when (effect) {
-        PipelineLogUiEffect.NavigateBack -> onNavigateBack()
+        PipelineLogUiEffect.NavigateBack -> {
+          snackbarHostState.currentSnackbarData?.dismiss()
+          onNavigateBack()
+        }
         is PipelineLogUiEffect.NavigateToPaywall -> onNavigateToPaywall(effect.sourceFeature)
         is PipelineLogUiEffect.LaunchExportDocument -> {
           pendingExportContent = effect.content
           createDocLauncher.launch(effect.suggestedFileName)
         }
-        is PipelineLogUiEffect.ShowSnackbar -> snackbarHostState.showSnackbar(effect.message)
+        is PipelineLogUiEffect.ShowSnackbar -> {
+          launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(effect.message)
+          }
+        }
       }
     }
   }

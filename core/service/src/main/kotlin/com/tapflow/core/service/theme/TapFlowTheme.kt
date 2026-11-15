@@ -159,26 +159,26 @@ private val AmberLightColorScheme =
 @Composable
 fun resolveIsDarkTheme(
   darkMode: DarkModeOption,
-  isLifetimePro: Boolean = false,
+  isPro: Boolean = false,
 ): Boolean =
   when (darkMode) {
     DarkModeOption.SYSTEM -> isSystemInDarkTheme()
     DarkModeOption.LIGHT -> false
     DarkModeOption.DARK -> true
-    DarkModeOption.AMOLED -> if (isLifetimePro) true else true
+    DarkModeOption.AMOLED -> isPro || true
   }
 
 @Composable
 fun TapFlowTheme(
   darkMode: DarkModeOption = DarkModeOption.SYSTEM,
   themePalette: ThemePaletteOption = ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
-  isLifetimePro: Boolean = false,
-  darkTheme: Boolean = resolveIsDarkTheme(darkMode, isLifetimePro),
+  isPro: Boolean = false,
+  darkTheme: Boolean = resolveIsDarkTheme(darkMode, isPro),
   dynamicColor: Boolean = themePalette == ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
   typography: Typography = MaterialTheme.typography,
   content: @Composable () -> Unit,
 ) {
-  val isAmoledActive = darkMode == DarkModeOption.AMOLED && isLifetimePro
+  val isAmoledActive = darkMode == DarkModeOption.AMOLED && isPro
   val effectiveDarkTheme = if (isAmoledActive) true else darkTheme
 
   val baseColorScheme =

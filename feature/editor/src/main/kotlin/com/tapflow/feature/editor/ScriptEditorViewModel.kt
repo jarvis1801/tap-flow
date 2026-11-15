@@ -545,8 +545,9 @@ class ScriptEditorViewModel @Inject constructor(
         val activeScriptId = _uiState.value.scriptId.ifBlank { UUID.randomUUID().toString() }
         viewModelScope.launch {
           runCatching {
-            scriptAssetManager.copyCropToScriptAssets(
-              sourceCropPngPath = intent.crop.cropPngPath,
+            scriptAssetManager.exportCropRegionToScriptAssets(
+              fullScreenPngPath = intent.item.fullScreenPngPath,
+              crop = intent.crop,
               scriptId = activeScriptId,
             )
           }.onSuccess { copiedPath ->

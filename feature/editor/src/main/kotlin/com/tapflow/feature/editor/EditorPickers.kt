@@ -2,6 +2,9 @@ package com.tapflow.feature.editor
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.BitmapRegionDecoder
+import android.graphics.Rect as AndroidRect
 import android.util.LruCache
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -30,6 +33,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Crop
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.StayCurrentLandscape
@@ -442,7 +446,7 @@ fun InspectTargetPickerBottomSheet(
   inspectGroups: List<InspectGroupWithItems>,
   isCropMode: Boolean,
   onSelectPixel: (InspectItem, InspectPixel) -> Unit,
-  onSelectCrop: (InspectCrop) -> Unit,
+  onSelectCrop: (InspectItem, InspectCrop) -> Unit,
   onDismiss: () -> Unit,
 ) {
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -462,14 +466,14 @@ fun InspectTargetPickerBottomSheet(
       verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       Text(
-        text = if (isCropMode) "Import Inspect Crop (Lossless PNG)" else "Import Inspect Color Pixel",
+        text = if (isCropMode) "Import Inspect Crop" else "Import Inspect Color Pixel",
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
       )
       Text(
         text =
           if (isCropMode) {
-            "Copies the template PNG into this Script's dedicated asset storage."
+            "Exports a lossless template PNG into this Script's dedicated asset storage."
           } else {
             "Auto-fills exact screen coordinates and HEX color."
           },
@@ -570,15 +574,14 @@ fun InspectTargetPickerBottomSheet(
                       Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .clickable { onSelectCrop(crop) }
+                        .clickable { onSelectCrop(item, crop) }
                         .padding(vertical = 6.dp, horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                   ) {
-                    AsyncImage(
-                      model = File(crop.cropPngPath),
-                      contentDescription = crop.label,
-                      contentScale = ContentScale.Fit,
+                    PickerCropRegionThumbnail(
+                      fullScreenPngPath = item.fullScreenPngPath,
+                      crop = crop,
                       modifier = Modifier.size(44.dp),
                     )
                     Column(modifier = Modifier.weight(1f)) {
@@ -759,6 +762,87 @@ private fun PickerOrientationBadge(
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
+    }
+  }
+}
+
+@Composable
+private fun PickerCropRegionThumbnail(
+  fullScreenPngPath: String,
+  crop: InspectCrop,
+  modifier: Modifier = Modifier,
+) {
+  val isPreview = LocalInspectionMode.current
+  val thumb by
+    produceState<ImageBitmap?>(
+      initialValue = null,
+      fullScreenPngPath,
+      crop.x,
+      crop.y,
+      crop.width,
+      crop.height,
+      crop.cropPngPath,
+      isPreview,
+    ) {
+      if (isPreview) return@produceState
+      value =
+        withContext(Dispatchers.IO) {
+          runCatching {
+            val legacyPath = crop.cropPngPath?.takeIf { it.isNotBlank() }
+            if (legacyPath != null) {
+              val legacyFile = File(legacyPath)
+              if (legacyFile.exists() && legacyFile.isFile) {
+                return@runCatching BitmapFactory.decodeFile(legacyFile.absolutePath)?.asImageBitmap()
+              }
+            }
+            val screenFile = File(fullScreenPngPath)
+            if (!screenFile.exists() || !screenFile.isFile) return@runCatching null
+            val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(screenFile.absolutePath, boundsOpts)
+            val imgW = boundsOpts.outWidth
+            val imgH = boundsOpts.outHeight
+            if (imgW <= 0 || imgH <= 0) return@runCatching null
+            val safeX = crop.x.coerceIn(0, imgW - 1)
+            val safeY = crop.y.coerceIn(0, imgH - 1)
+            val safeW = crop.width.coerceIn(1, imgW - safeX)
+            val safeH = crop.height.coerceIn(1, imgH - safeY)
+            @Suppress("DEPRECATION")
+            val decoder = BitmapRegionDecoder.newInstance(screenFile.absolutePath, false)
+            try {
+              decoder.decodeRegion(
+                AndroidRect(safeX, safeY, safeX + safeW, safeY + safeH),
+                BitmapFactory.Options(),
+              )?.asImageBitmap()
+            } finally {
+              decoder.recycle()
+            }
+          }.getOrNull()
+        }
+    }
+
+  Surface(
+    shape = RoundedCornerShape(8.dp),
+    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+    modifier = modifier,
+  ) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+      val bmp = thumb
+      if (bmp != null) {
+        Image(
+          bitmap = bmp,
+          contentDescription = crop.label.ifBlank { "Crop region" },
+          contentScale = ContentScale.Fit,
+          modifier = Modifier.fillMaxSize().padding(2.dp),
+        )
+      } else {
+        Icon(
+          imageVector = Icons.Rounded.Crop,
+          contentDescription = crop.label.ifBlank { "Crop region" },
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.size(18.dp),
+        )
+      }
     }
   }
 }

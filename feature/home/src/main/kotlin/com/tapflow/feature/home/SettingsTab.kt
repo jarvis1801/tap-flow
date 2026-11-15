@@ -116,7 +116,7 @@ fun SettingsTabContent(
                 val isAmoled = option == DarkModeOption.AMOLED
                 val isSelected =
                   if (isAmoled) {
-                    state.preferences.darkMode == option && state.isLifetimePro
+                    state.preferences.darkMode == option && state.isPro
                   } else {
                     state.preferences.darkMode == option
                   }
@@ -124,11 +124,11 @@ fun SettingsTabContent(
                   selected = isSelected,
                   onClick = { onIntent(HomeUiIntent.SetDarkMode(option)) },
                   leadingIcon =
-                    if (isAmoled && !state.isLifetimePro) {
+                    if (isAmoled && !state.isPro) {
                       {
                         Icon(
                           imageVector = Icons.Filled.Lock,
-                          contentDescription = "Lifetime Pro required",
+                          contentDescription = "TapFlow Pro required",
                           modifier = Modifier.size(16.dp),
                         )
                       }
@@ -141,7 +141,7 @@ fun SettingsTabContent(
                         DarkModeOption.SYSTEM -> "System Default"
                         DarkModeOption.LIGHT -> "Force Light"
                         DarkModeOption.DARK -> "Force Dark"
-                        DarkModeOption.AMOLED -> "AMOLED Black [Lifetime]"
+                        DarkModeOption.AMOLED -> "AMOLED Black [Pro]"
                       },
                     )
                   },

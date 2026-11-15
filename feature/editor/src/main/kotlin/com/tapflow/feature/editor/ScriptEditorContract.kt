@@ -158,7 +158,7 @@ sealed interface ScriptEditorUiIntent {
   data class ImportInspectPixel(val item: InspectItem, val pixel: InspectPixel) :
     ScriptEditorUiIntent
 
-  data class ImportInspectCrop(val crop: InspectCrop) : ScriptEditorUiIntent
+  data class ImportInspectCrop(val item: InspectItem, val crop: InspectCrop) : ScriptEditorUiIntent
 
   data object DismissInspectPicker : ScriptEditorUiIntent
 

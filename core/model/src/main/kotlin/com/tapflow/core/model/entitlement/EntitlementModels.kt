@@ -99,7 +99,7 @@ enum class ProFeatureGate(val displayName: String) {
   ;
 
   val requiresLifetimePro: Boolean
-    get() = this == DESKTOP_CONSOLE || this == DATA_BACKUP || this == AMOLED_THEME
+    get() = this == DESKTOP_CONSOLE || this == DATA_BACKUP
 }
 
 object EntitlementValidator {

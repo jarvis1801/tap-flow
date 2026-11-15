@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -51,6 +52,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -63,8 +65,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -92,7 +96,6 @@ import com.tapflow.core.model.action.SwipeTrajectoryMode
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.DurationInput
 import com.tapflow.core.model.common.NumericInput
-import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.inspect.InspectGroup
 import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.InspectPixel
@@ -520,7 +523,7 @@ class OverlayService :
           TapFlowTheme(
             darkMode = prefs.darkMode,
             themePalette = prefs.themePalette,
-            isLifetimePro = entitlementState is EntitlementState.ProLifetime,
+            isPro = entitlementState.hasTrialOrLifetimeAccess,
           ) {
             if (provider != null) {
               provider.CaptureLayerFeedbackContent(state)
@@ -581,7 +584,7 @@ class OverlayService :
           TapFlowTheme(
             darkMode = prefs.darkMode,
             themePalette = prefs.themePalette,
-            isLifetimePro = entitlementState is EntitlementState.ProLifetime,
+            isPro = entitlementState.hasTrialOrLifetimeAccess,
           ) {
             if (provider != null) {
               provider.FloatingDockContent(state, callbacks)
@@ -1531,8 +1534,8 @@ class OverlayService :
     val view = dockComposeView ?: return
     val params = dockLayoutParams ?: return
     val (screenW, screenH) = readScreenDimensions()
-    val maxY = (screenH - 160).coerceAtLeast(0)
-    params.x = savedX.coerceIn(0, (screenW - 80).coerceAtLeast(0))
+    val maxY = (screenH - 120).coerceAtLeast(0)
+    params.x = savedX.coerceIn(0, (screenW - 44).coerceAtLeast(0))
     params.y = savedY.coerceIn(0, maxY)
     val onRight = params.x > (screenW / 2)
     uiState.update { it.copy(isDockedOnRight = onRight) }
@@ -1544,8 +1547,8 @@ class OverlayService :
     val view = dockComposeView ?: return
     val params = dockLayoutParams ?: return
     val (screenW, screenH) = readScreenDimensions()
-    val maxX = (screenW - view.width.coerceAtLeast(64)).coerceAtLeast(0)
-    val maxY = (screenH - view.height.coerceAtLeast(64)).coerceAtLeast(0)
+    val maxX = (screenW - view.width.coerceAtLeast(36)).coerceAtLeast(0)
+    val maxY = (screenH - view.height.coerceAtLeast(36)).coerceAtLeast(0)
     params.x = (params.x + dx).coerceIn(0, maxX)
     params.y = (params.y + dy).coerceIn(0, maxY)
     runCatching { windowManager.updateViewLayout(view, params) }
@@ -1555,7 +1558,7 @@ class OverlayService :
     val view = dockComposeView ?: return
     val params = dockLayoutParams ?: return
     val (screenW, _) = readScreenDimensions()
-    val viewWidth = view.width.coerceAtLeast(64)
+    val viewWidth = view.width.coerceAtLeast(36)
     val centerX = params.x + (viewWidth / 2)
     val snapRight = centerX >= (screenW / 2)
     val targetX = if (snapRight) (screenW - viewWidth).coerceAtLeast(0) else 0
@@ -1613,8 +1616,8 @@ class OverlayService :
     val (newScreenW, newScreenH) = readScreenDimensions()
     if (newScreenW <= 0 || newScreenH <= 0) return
 
-    val dockWidth = view.width.takeIf { it > 0 } ?: 64
-    val dockHeight = view.height.takeIf { it > 0 } ?: 160
+    val dockWidth = view.width.takeIf { it > 0 } ?: 40
+    val dockHeight = view.height.takeIf { it > 0 } ?: 120
     val maxX = (newScreenW - dockWidth).coerceAtLeast(0)
     val maxY = (newScreenH - dockHeight).coerceAtLeast(0)
 
@@ -1710,19 +1713,18 @@ private fun FallbackFloatingDock(
 
   if (state.isBubbleCollapsed) {
     Surface(
-      modifier = dragModifier.size(48.dp),
+      modifier = dragModifier.size(34.dp),
       shape = CircleShape,
-      color = MaterialTheme.colorScheme.primaryContainer,
-      contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+      color = MaterialTheme.colorScheme.surface.copy(alpha = 0.80f),
+      contentColor = MaterialTheme.colorScheme.primary,
       shadowElevation = 6.dp,
       onClick = { callbacks.onToggleBubbleCollapse() },
     ) {
       Box(contentAlignment = Alignment.Center) {
-        Text(
-          text = "TF",
-          style = MaterialTheme.typography.labelLarge,
-          fontWeight = FontWeight.Bold,
-          color = MaterialTheme.colorScheme.onPrimaryContainer,
+        Icon(
+          imageVector = Icons.Default.TouchApp,
+          contentDescription = "Expand floating dock",
+          modifier = Modifier.size(18.dp),
         )
       }
     }
@@ -1730,153 +1732,152 @@ private fun FallbackFloatingDock(
   }
 
   Surface(
-    modifier = dragModifier,
-    shape = RoundedCornerShape(24.dp),
-    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+    modifier = dragModifier.width(38.dp),
+    shape = RoundedCornerShape(18.dp),
+    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.88f),
     contentColor = MaterialTheme.colorScheme.onSurface,
-    shadowElevation = 8.dp,
+    shadowElevation = 6.dp,
   ) {
     Column(
-      modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp),
+      modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(4.dp),
+      verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
       if (state.mode == OverlayMode.RUNNER_SCRIPT || state.mode == OverlayMode.RUNNER_PIPELINE) {
         val snap = state.runnerSnapshot
         Text(
           text = "${snap.currentTopLevelAction}/${snap.totalTopLevelActions}",
-          style = MaterialTheme.typography.labelSmall,
+          fontSize = 9.sp,
+          fontFamily = FontFamily.Monospace,
+          fontWeight = FontWeight.Bold,
         )
-        IconButton(onClick = { callbacks.onPlayPause() }, modifier = Modifier.size(48.dp)) {
+        IconButton(onClick = { callbacks.onPlayPause() }, modifier = Modifier.size(32.dp)) {
           Icon(
             imageVector =
               if (snap.phase == RunnerPhase.RUNNING) Icons.Default.Pause
               else Icons.Default.PlayArrow,
             contentDescription = "Play or Pause",
+            modifier = Modifier.size(18.dp),
           )
         }
-        IconButton(onClick = { callbacks.onPreviousStep() }, modifier = Modifier.size(48.dp)) {
-          Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Step")
+        IconButton(onClick = { callbacks.onPreviousStep() }, modifier = Modifier.size(32.dp)) {
+          Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Step", modifier = Modifier.size(18.dp))
         }
-        IconButton(onClick = { callbacks.onNextStep() }, modifier = Modifier.size(48.dp)) {
-          Icon(Icons.Default.SkipNext, contentDescription = "Next Step")
+        IconButton(onClick = { callbacks.onNextStep() }, modifier = Modifier.size(32.dp)) {
+          Icon(Icons.Default.SkipNext, contentDescription = "Next Step", modifier = Modifier.size(18.dp))
         }
-        IconButton(onClick = { callbacks.onStopExecution() }, modifier = Modifier.size(48.dp)) {
-          Icon(Icons.Default.Stop, contentDescription = "Stop")
+        IconButton(onClick = { callbacks.onStopExecution() }, modifier = Modifier.size(32.dp)) {
+          Icon(Icons.Default.Stop, contentDescription = "Stop", modifier = Modifier.size(18.dp))
         }
       } else if (state.mode == OverlayMode.LIVE_RECORDER) {
-        val label =
-          when (state.sessionState) {
-            OverlaySessionState.STANDBY -> "Ready"
-            OverlaySessionState.ACTIVE -> "Rec ${state.recordedActionCount}"
-            OverlaySessionState.PAUSED -> "Pause ${state.recordedActionCount}"
-          }
-        Text(text = label, style = MaterialTheme.typography.labelSmall)
+        if (state.recordedActionCount > 0) {
+          Text(
+            text = "${state.recordedActionCount}",
+            fontSize = 10.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+          )
+        }
         when (state.sessionState) {
           OverlaySessionState.STANDBY -> {
             IconButton(
               onClick = { callbacks.onStartOrResumeCapture() },
-              modifier = Modifier.size(48.dp),
+              modifier = Modifier.size(32.dp),
             ) {
-              Icon(Icons.Default.FiberManualRecord, contentDescription = "Start Recording")
+              Icon(Icons.Default.FiberManualRecord, contentDescription = "Start Recording", modifier = Modifier.size(18.dp))
             }
           }
 
           OverlaySessionState.ACTIVE -> {
             IconButton(
               onClick = { callbacks.onPauseCapture() },
-              modifier = Modifier.size(48.dp),
+              modifier = Modifier.size(32.dp),
             ) {
-              Icon(Icons.Default.Pause, contentDescription = "Pause Recording")
+              Icon(Icons.Default.Pause, contentDescription = "Pause Recording", modifier = Modifier.size(18.dp))
             }
             IconButton(
               onClick = { callbacks.onStopCapture() },
-              modifier = Modifier.size(48.dp),
+              modifier = Modifier.size(32.dp),
             ) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop and Save Recording")
+              Icon(Icons.Default.Stop, contentDescription = "Stop and Save Recording", modifier = Modifier.size(18.dp))
             }
           }
 
           OverlaySessionState.PAUSED -> {
             IconButton(
               onClick = { callbacks.onStartOrResumeCapture() },
-              modifier = Modifier.size(48.dp),
+              modifier = Modifier.size(32.dp),
             ) {
-              Icon(Icons.Default.PlayArrow, contentDescription = "Resume Recording")
+              Icon(Icons.Default.PlayArrow, contentDescription = "Resume Recording", modifier = Modifier.size(18.dp))
             }
             IconButton(
               onClick = { callbacks.onStopCapture() },
-              modifier = Modifier.size(48.dp),
+              modifier = Modifier.size(32.dp),
             ) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop and Save Recording")
+              Icon(Icons.Default.Stop, contentDescription = "Stop and Save Recording", modifier = Modifier.size(18.dp))
             }
           }
         }
       } else if (state.mode == OverlayMode.LIVE_INSPECTOR) {
-        val label =
-          when (state.sessionState) {
-            OverlaySessionState.STANDBY -> "Ready"
-            OverlaySessionState.ACTIVE -> "Ins ${state.inspectedItemCount}"
-            OverlaySessionState.PAUSED -> "Pause ${state.inspectedItemCount}"
-          }
-        Text(text = label, style = MaterialTheme.typography.labelSmall)
+        if (state.inspectedItemCount > 0) {
+          Text(
+            text = "${state.inspectedItemCount}",
+            fontSize = 10.sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+          )
+        }
         when (state.sessionState) {
           OverlaySessionState.STANDBY -> {
             IconButton(
               onClick = { callbacks.onStartOrResumeCapture() },
-              modifier = Modifier.size(48.dp),
+              modifier = Modifier.size(32.dp),
             ) {
-              Icon(Icons.Default.CenterFocusStrong, contentDescription = "Start Inspecting")
+              Icon(Icons.Default.CenterFocusStrong, contentDescription = "Start Inspecting", modifier = Modifier.size(18.dp))
             }
           }
 
           OverlaySessionState.ACTIVE -> {
             IconButton(
               onClick = { callbacks.onPauseCapture() },
-              modifier = Modifier.size(48.dp),
+              modifier = Modifier.size(32.dp),
             ) {
-              Icon(Icons.Default.Pause, contentDescription = "Pause Inspecting")
+              Icon(Icons.Default.Pause, contentDescription = "Pause Inspecting", modifier = Modifier.size(18.dp))
             }
             IconButton(
               onClick = { callbacks.onStopCapture() },
-              modifier = Modifier.size(48.dp),
+              modifier = Modifier.size(32.dp),
             ) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop InspectGroup")
+              Icon(Icons.Default.Stop, contentDescription = "Stop InspectGroup", modifier = Modifier.size(18.dp))
             }
           }
 
           OverlaySessionState.PAUSED -> {
             IconButton(
               onClick = { callbacks.onStartOrResumeCapture() },
-              modifier = Modifier.size(48.dp),
+              modifier = Modifier.size(32.dp),
             ) {
-              Icon(Icons.Default.PlayArrow, contentDescription = "Resume Inspecting")
+              Icon(Icons.Default.PlayArrow, contentDescription = "Resume Inspecting", modifier = Modifier.size(18.dp))
             }
             IconButton(
               onClick = { callbacks.onStopCapture() },
-              modifier = Modifier.size(48.dp),
+              modifier = Modifier.size(32.dp),
             ) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop InspectGroup")
+              Icon(Icons.Default.Stop, contentDescription = "Stop InspectGroup", modifier = Modifier.size(18.dp))
             }
           }
         }
       } else {
-        Text(
-          text =
-            when (state.mode) {
-              OverlayMode.GESTURE_PICKER -> "Pick"
-              else -> "Idle"
-            },
-          style = MaterialTheme.typography.labelSmall,
-        )
-        Row {
-          IconButton(onClick = { callbacks.onStopExecution() }, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.Default.Stop, contentDescription = "Finish")
-          }
+        IconButton(onClick = { callbacks.onToggleCaptureListening() }, modifier = Modifier.size(32.dp)) {
+          Icon(
+            imageVector = if (state.isCaptureActive) Icons.Default.Stop else Icons.Default.TouchApp,
+            contentDescription = "Toggle capture",
+            modifier = Modifier.size(18.dp),
+          )
         }
       }
-      IconButton(onClick = { callbacks.onCloseOverlay() }, modifier = Modifier.size(48.dp)) {
-        Icon(Icons.Default.Close, contentDescription = "Close Overlay")
+      IconButton(onClick = { callbacks.onCloseOverlay() }, modifier = Modifier.size(32.dp)) {
+        Icon(Icons.Default.Close, contentDescription = "Close Overlay", modifier = Modifier.size(18.dp))
       }
     }
   }
@@ -1896,21 +1897,5 @@ private fun FallbackCaptureFeedback(state: OverlayUiState) {
       Modifier
         .fillMaxSize()
         .background(Color.Black.copy(alpha = 0.08f)),
-    contentAlignment = Alignment.TopCenter,
-  ) {
-    state.statusHint?.let { hint ->
-      Surface(
-        modifier = Modifier.padding(top = 48.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.85f),
-      ) {
-        Text(
-          text = hint,
-          color = MaterialTheme.colorScheme.inverseOnSurface,
-          style = MaterialTheme.typography.labelMedium,
-          modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-        )
-      }
-    }
-  }
+  )
 }

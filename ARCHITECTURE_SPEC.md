@@ -28,17 +28,17 @@ Entitlement Matrix (Free vs. TapFlow Pro):
       - Anti-Ban Humanization Suite: `Jitter` dispersion radius, `Micro-movement Jitter`, `Bezier Curve` trajectories, `RandomRange` & `Deviation` delays.
       - Seamless (Shizuku) Integration: Shell input injection, rootless `am force-stop` crash recovery, enhanced key events, silent screenshots.
       - Pipeline Watchdog & Logs: Pipeline `Skip & Continue` crash recovery, full Execution History & Crash Screenshots.
+      - AMOLED Pure Black Theme (`Settings Tab`, `ProFeatureGate.AMOLED_THEME`).
   - TapFlow Lifetime Pro Exclusive (`EntitlementState.ProLifetime` ONLY — Excluded from 7-Day Trial):
       - Desktop Studio Bridge: Ktor WebSocket Server (`Console Tab`, `ProFeatureGate.DESKTOP_CONSOLE`).
       - Data Backup & Transfer: `.tapflow` Export/Import (`Settings Tab`, `ProFeatureGate.DATA_BACKUP`).
-      - AMOLED Pure Black Theme (`Settings Tab`, `ProFeatureGate.AMOLED_THEME`).
 
 Paywall & Guard Behavior:
   - Paywall Screen / Sheet (`Route.Paywall`):
       - Displays remaining Trial countdown (`"7-Day Trial Active (Xd Xh left)"`) OR expired banner, feature comparison checklist distinguishing `[7-Day Trial + Lifetime]` vs `[Lifetime Only]`, localized One-Time Price fetched from `ProductDetails` (handling both `oneTimePurchaseOfferDetailsList` and legacy fallback), `[Activate 7-Day Free Trial]` (hidden once trial is active/used), `[Unlock Lifetime Pro]` CTA, and `[Restore Purchase]`.
-      - When an active `ProTrial` user opens `Route.Paywall`, highlights `"Upgrade to Lifetime Pro to unlock Desktop Console, Data Backup & AMOLED Theme"`.
+      - When an active `ProTrial` user opens `Route.Paywall`, highlights `"Upgrade to Lifetime Pro to unlock Desktop Console & Data Backup"`.
   - Soft Feature Guard:
-      - Tapping any Pro-locked feature (or tapping Desktop Console, Data Backup, or AMOLED Theme without `ProLifetime`) opens `Route.Paywall`.
+      - Tapping any Pro-locked feature (or tapping Desktop Console or Data Backup without `ProLifetime`) opens `Route.Paywall`.
       - Attempting to Run (`▶`) an imported/existing Script or Pipeline that contains Pro actions after trial expiration blocks execution and prompts `Route.Paywall` (identifying which Pro features are used).
 
 ---
@@ -233,7 +233,7 @@ Tabs:
             - Shows current tier: `[Pro Lifetime Active ✓]` / `[7-Day Trial: Xd Xh Left]` / `[Free Plan]`.
             - Actions: `[Upgrade to Lifetime Pro]`, `[Start 7-Day Free Trial]` (if unused), `[Restore Google Play Purchase]`.
         - Appearance:
-            - Dark Mode: System Default / Force Light / Force Dark / AMOLED Black (`#000000` surfaces, strictly gated to `EntitlementState.ProLifetime` ONLY via `ProFeatureGate.AMOLED_THEME`; falls back cleanly if not Lifetime Pro and routes Trial/Free taps to `Route.Paywall`).
+            - Dark Mode: System Default / Force Light / Force Dark / AMOLED Black (`#000000` surfaces, unlocked for both 7-Day Free Trial and Lifetime Pro via `ProFeatureGate.AMOLED_THEME`; falls back cleanly on Free tier and routes Free taps to `Route.Paywall`).
             - Theme Palette: Dynamic Material You (Android 12+) / Custom Color Accent Schemes.
         - Localization:
             - Language Picker: English / Traditional Chinese (繁體中文) / Simplified Chinese (简体中文).
@@ -467,11 +467,11 @@ Script Log Page:
 Pipeline Log Page:
   - Outer Pipeline Card + Inner Nested Script Log Cards with run badges (`Run #1`, `Run #2`).
 Inspect Studio Page:
-  - Fullscreen Interactive Canvas loading the full-screen 100% Lossless PNG via Coil; 100%–1000% Pinch-to-Zoom with Pixel Grid at high zoom, two-finger Pan, single-finger Inspect Drag.
+  - Fullscreen Interactive Canvas loading the full-screen 100% Lossless PNG via Coil (`Size.ORIGINAL`); 100%–1000% Pinch-to-Zoom with Pixel Grid at high zoom, two-finger Pan, single-finger Inspect Drag.
   - Top Bar: Back (unsaved check), Title (`Group / Item`), Saved Markers On/Off toggle (`Icons.Rounded.Visibility` / `VisibilityOff`, default ON), Mode Switcher (`Pixel Inspect` / `Image Crop [Pro]`).
-  - Saved Marker Overlays & Info Popup: When markers are visible, draws all saved `InspectPixel` dots (color-filled + high-contrast ring) and `InspectCrop` rectangles (translucent fill + corners + compact label badge). Single-tapping a saved marker opens a Material 3 Info Popup (Pixel swatch/HEX/RGB/(X,Y)/tolerance or Crop PNG thumbnail/(X,Y)/W×H/threshold + `[Delete]` / `[Close]`) WITHOUT overwriting the user's active unsaved picker reticle or crop box.
+  - Saved Marker Overlays & Info Popup: When markers are visible, draws all saved `InspectPixel` hollow high-contrast rings (100% transparent center) and `InspectCrop` perimeter borders (100% transparent interior + outer label badge). Single-tapping a saved marker opens a Material 3 Info Popup (Pixel swatch/HEX/RGB/(X,Y)/tolerance or aspect-fitted Crop region preview/(X,Y)/W×H/threshold + `[Delete]` / `[Close]`) WITHOUT overwriting the user's active unsaved picker reticle or crop box.
   - Dynamic Touch Loupe: Smart-flips above/below finger; 10x lens + HEX + (X, Y) in Pixel Mode; live rectangle + (W × H) in Crop Mode.
-  - Bottom Control Bar: Color Swatch + HEX + ±1px Nudge D-Pad + Save in Pixel Mode; Thumbnail + Crop Box Nudge/Resize + Save (lossless PNG) in Crop Mode.
+  - Bottom Control Bar & Coordinate-Only Crop Regions: Color Swatch + HEX + ±1px Nudge D-Pad + Save in Pixel Mode; aspect-fitted Thumbnail + Crop Box Nudge/Resize + `"Save Crop Region"` in Crop Mode (persists `(x, y, width, height)` referencing `fullScreenPngPath` without duplicating crop PNGs on disk; standalone lossless PNGs are exported ONLY when imported into a Script's `ImageMatch`).
 
 ---
 
@@ -484,7 +484,7 @@ Service Architecture & Window Rules:
   - Z-Order & Fullscreen Coordinate Alignment:
       - The full-screen transparent capture layer MUST use `FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_NO_LIMITS` and `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES`, reading **`event.rawX` / `event.rawY`** so captured coordinates align 1:1 with `MediaProjection` screenshots and `dispatchGesture()` (preventing Status Bar offset).
       - Window Z-Order MUST keep the Floating Control Dock strictly **above** the full-screen capture layer at all times (so `[Stop]` and `[Close]` remain clickable).
-  - Drag & Drop / Collapse / Idle Passthrough: Magnetic left/right edge snap, DataStore `(X, Y)` persistence, vertical strip dock collapsible to bubble, `FLAG_NOT_TOUCH_MODAL | FLAG_NOT_FOCUSABLE | FLAG_NOT_TOUCHABLE` on capture layer when idle.
+  - Drag & Drop / Ultra-Compact Icon-First Dock / Idle Passthrough: Magnetic left/right edge snap, DataStore `(X, Y)` persistence, `~38.dp` vertical icon-first strip dock (`32.dp` compact icon buttons, zero verbose labels or permanent capture hint banners over the game, ultra-compact numeric counters only) collapsible to a `34.dp` semi-translucent icon-only bubble, `FLAG_NOT_TOUCH_MODAL | FLAG_NOT_FOCUSABLE | FLAG_NOT_TOUCHABLE` on capture layer when idle.
 
 Touch Intercept & Passthrough Execution State Machine (Modes 2, 3, 4):
   1. Intercept Phase: Full-screen transparent capture overlay intercepts `ACTION_DOWN -> ACTION_MOVE -> ACTION_UP`, recording `rawX / rawY`, trajectory, and duration.

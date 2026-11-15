@@ -1,15 +1,19 @@
 package com.tapflow.core.database.asset
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import com.tapflow.core.model.action.LoopMode
 import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.condition.ConditionGroup
 import com.tapflow.core.model.condition.ConditionLeaf
 import com.tapflow.core.model.condition.ConditionNode
 import com.tapflow.core.model.condition.ConditionPredicate
+import com.tapflow.core.model.inspect.InspectCrop
 import com.tapflow.core.model.script.Script
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.io.FileOutputStream
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -47,6 +51,58 @@ class ScriptAssetManager @Inject constructor(
           "${safeScriptPrefix}_${UUID.randomUUID()}.png",
         )
       sourceFile.copyTo(destFile, overwrite = true)
+      destFile.absolutePath
+    }
+
+  suspend fun exportCropRegionToScriptAssets(
+    fullScreenPngPath: String,
+    crop: InspectCrop,
+    scriptId: String,
+  ): String =
+    withContext(Dispatchers.IO) {
+      val safeScriptPrefix = scriptId.replace(Regex("[^A-Za-z0-9_-]"), "_")
+      val destFile =
+        File(
+          getScriptTemplatesDir(),
+          "${safeScriptPrefix}_${UUID.randomUUID()}.png",
+        )
+      val legacyCropFile =
+        crop.cropPngPath?.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf {
+          it.exists() && it.isFile
+        }
+      if (legacyCropFile != null) {
+        legacyCropFile.copyTo(destFile, overwrite = true)
+        return@withContext destFile.absolutePath
+      }
+
+      val screenFile = File(fullScreenPngPath)
+      require(screenFile.exists() && screenFile.isFile) {
+        "Inspect screenshot PNG not found at $fullScreenPngPath"
+      }
+      val sourceBitmap =
+        BitmapFactory.decodeFile(screenFile.absolutePath)
+          ?: error("Failed to decode lossless PNG screenshot")
+      try {
+        val safeX = crop.x.coerceIn(0, (sourceBitmap.width - 1).coerceAtLeast(0))
+        val safeY = crop.y.coerceIn(0, (sourceBitmap.height - 1).coerceAtLeast(0))
+        val safeWidth = crop.width.coerceIn(1, (sourceBitmap.width - safeX).coerceAtLeast(1))
+        val safeHeight = crop.height.coerceIn(1, (sourceBitmap.height - safeY).coerceAtLeast(1))
+        val cropped = Bitmap.createBitmap(sourceBitmap, safeX, safeY, safeWidth, safeHeight)
+        try {
+          FileOutputStream(destFile).use { fos ->
+            cropped.compress(Bitmap.CompressFormat.PNG, 100, fos)
+            fos.flush()
+          }
+        } finally {
+          if (!cropped.isRecycled) {
+            cropped.recycle()
+          }
+        }
+      } finally {
+        if (!sourceBitmap.isRecycled) {
+          sourceBitmap.recycle()
+        }
+      }
       destFile.absolutePath
     }
 

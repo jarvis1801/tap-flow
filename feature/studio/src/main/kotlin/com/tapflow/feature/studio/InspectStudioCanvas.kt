@@ -59,6 +59,7 @@ import androidx.core.graphics.drawable.toBitmap
 import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import coil.size.Size as CoilSize
 import com.tapflow.core.model.inspect.InspectCrop
 import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.InspectPixel
@@ -96,6 +97,7 @@ fun rememberCoilSoftwareImage(fullScreenPngPath: String): StudioLoadedImage? {
         val request =
           ImageRequest.Builder(context)
             .data(file)
+            .size(CoilSize.ORIGINAL)
             .allowHardware(false)
             .build()
         val res = context.imageLoader.execute(request)
@@ -423,14 +425,9 @@ fun InteractiveInspectCanvas(
               (popupTarget is StudioMarkerInfoPopup.Crop && popupTarget.crop.id == crop.id)
           val strokeColor = if (isHighlighted) tertiaryColor else Color(0xFFFFC107)
 
-          // Subtle translucent fill + outer dark halo + crisp stroke
+          // 100% transparent interior perimeter border (outer dark halo + crisp stroke)
           drawRect(
-            color = strokeColor.copy(alpha = 0.14f),
-            topLeft = tl,
-            size = Size(wPx, hPx),
-          )
-          drawRect(
-            color = Color.Black.copy(alpha = 0.55f),
+            color = Color.Black.copy(alpha = 0.65f),
             topLeft = tl,
             size = Size(wPx, hPx),
             style = Stroke(width = (if (isHighlighted) 5.dp else 3.5.dp).toPx()),
@@ -442,8 +439,8 @@ fun InteractiveInspectCanvas(
             style = Stroke(width = (if (isHighlighted) 3.dp else 2.dp).toPx()),
           )
 
-          // Corner markers
-          val cornerR = if (isHighlighted) 4.dp.toPx() else 3.dp.toPx()
+          // Small corner anchor dots on perimeter
+          val cornerR = if (isHighlighted) 3.5.dp.toPx() else 2.5.dp.toPx()
           listOf(
             tl,
             Offset(tl.x + wPx, tl.y),
@@ -454,7 +451,7 @@ fun InteractiveInspectCanvas(
             drawCircle(color = strokeColor, radius = cornerR, center = corner)
           }
 
-          // Compact label badge
+          // Compact label badge positioned outside the rectangle so interior remains 100% clear
           val badgeLabel = crop.label.ifBlank { "${crop.width}×${crop.height}" }
           val textLayout =
             textMeasurer.measure(
@@ -470,7 +467,13 @@ fun InteractiveInspectCanvas(
           val padV = 2.dp.toPx()
           val pillW = textLayout.size.width + padH * 2f
           val pillH = textLayout.size.height + padV * 2f
-          val badgeTop = if (tl.y - pillH - 3.dp.toPx() >= 0f) tl.y - pillH - 3.dp.toPx() else tl.y + 3.dp.toPx()
+          val gap = 4.dp.toPx()
+          val badgeTop =
+            when {
+              tl.y - pillH - gap >= 0f -> tl.y - pillH - gap
+              tl.y + hPx + gap + pillH <= size.height -> tl.y + hPx + gap
+              else -> 4.dp.toPx()
+            }
           val badgeLeft = tl.x.coerceIn(2.dp.toPx(), (size.width - pillW - 2.dp.toPx()).coerceAtLeast(2.dp.toPx()))
           drawRoundRect(
             color = Color(0xCC0D1117),
@@ -490,22 +493,46 @@ fun InteractiveInspectCanvas(
             px.id == state.selectedPixelId ||
               (popupTarget is StudioMarkerInfoPopup.Pixel && popupTarget.pixel.id == px.id)
           val radius = if (isHighlighted) 11.dp.toPx() else 8.5.dp.toPx()
+          val ringColor = if (isHighlighted) primaryColor else Color.White
+          // Hollow dual-stroke ring (100% transparent interior so underlying pixel color stays visible)
           drawCircle(
-            color = Color.Black.copy(alpha = 0.65f),
-            radius = radius + 2.dp.toPx(),
+            color = Color.Black.copy(alpha = 0.78f),
+            radius = radius + 1.dp.toPx(),
             center = center,
-            style = Stroke(width = 2.dp.toPx()),
+            style = Stroke(width = if (isHighlighted) 4.dp.toPx() else 3.2.dp.toPx()),
           )
           drawCircle(
-            color = parseStudioHexColor(px.hexColor),
+            color = ringColor,
             radius = radius,
             center = center,
+            style = Stroke(width = if (isHighlighted) 2.5.dp.toPx() else 2.dp.toPx()),
           )
-          drawCircle(
-            color = if (isHighlighted) primaryColor else Color.White,
-            radius = radius,
-            center = center,
-            style = Stroke(width = if (isHighlighted) 3.dp.toPx() else 2.dp.toPx()),
+          // Subtle outer reticle ticks leaving center completely open
+          val innerTick = radius + 2.dp.toPx()
+          val outerTick = radius + 6.dp.toPx()
+          drawLine(
+            color = ringColor,
+            start = Offset(center.x - outerTick, center.y),
+            end = Offset(center.x - innerTick, center.y),
+            strokeWidth = 1.5.dp.toPx(),
+          )
+          drawLine(
+            color = ringColor,
+            start = Offset(center.x + innerTick, center.y),
+            end = Offset(center.x + outerTick, center.y),
+            strokeWidth = 1.5.dp.toPx(),
+          )
+          drawLine(
+            color = ringColor,
+            start = Offset(center.x, center.y - outerTick),
+            end = Offset(center.x, center.y - innerTick),
+            strokeWidth = 1.5.dp.toPx(),
+          )
+          drawLine(
+            color = ringColor,
+            start = Offset(center.x, center.y + innerTick),
+            end = Offset(center.x, center.y + outerTick),
+            strokeWidth = 1.5.dp.toPx(),
           )
         }
       }
@@ -554,11 +581,12 @@ fun InteractiveInspectCanvas(
         val tl = tf.imageToScreen(state.cropX.toFloat(), state.cropY.toFloat())
         val wPx = state.cropWidth * tf.totalScale
         val hPx = state.cropHeight * tf.totalScale
-        // Darken border outside selection slightly inside image
+        // 100% transparent border-only crop selector so pixel colors underneath remain unobstructed
         drawRect(
-          color = primaryColor.copy(alpha = 0.14f),
+          color = Color.Black.copy(alpha = 0.55f),
           topLeft = tl,
           size = Size(wPx, hPx),
+          style = Stroke(width = 4.dp.toPx()),
         )
         drawRect(
           color = primaryColor,
