@@ -1,8 +1,10 @@
 package com.tapflow.feature.home
 
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,6 +18,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Backup
@@ -29,6 +33,7 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -39,6 +44,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -49,6 +55,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.ThemePaletteOption
+import com.tapflow.core.model.common.OverlaySizeOption
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.TrialStatus
 
@@ -179,6 +186,87 @@ fun SettingsTabContent(
                   },
                   modifier = Modifier.testTag("palette_${palette.name.lowercase()}"),
                 )
+              }
+            }
+
+            HorizontalDivider()
+
+            Text(
+              text = "Overlay Size",
+              style = MaterialTheme.typography.labelLarge,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+              OverlaySizeOption.entries.forEach { sizeOption ->
+                FilterChip(
+                  selected = state.preferences.overlaySize == sizeOption,
+                  onClick = { onIntent(HomeUiIntent.SetOverlaySize(sizeOption)) },
+                  label = { Text(sizeOption.displayName) },
+                  modifier = Modifier.testTag("overlay_size_${sizeOption.name.lowercase()}"),
+                )
+              }
+            }
+
+            val selectedSize = state.preferences.overlaySize
+            Surface(
+              color = MaterialTheme.colorScheme.surfaceContainerLow,
+              contentColor = MaterialTheme.colorScheme.onSurface,
+              shape = RoundedCornerShape(12.dp),
+              border =
+                BorderStroke(
+                  0.75.dp,
+                  MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                ),
+              modifier = Modifier.fillMaxWidth().testTag("overlay_size_preview"),
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+              ) {
+                Box(
+                  modifier = Modifier.size(52.dp),
+                  contentAlignment = Alignment.Center,
+                ) {
+                  Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                    contentColor = MaterialTheme.colorScheme.primary,
+                    border =
+                      BorderStroke(
+                        0.75.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                      ),
+                    shadowElevation = 0.dp,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier.size(selectedSize.bubbleSizeDp.dp),
+                  ) {
+                    Box(contentAlignment = Alignment.Center) {
+                      Icon(
+                        imageVector = Icons.Filled.TouchApp,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(selectedSize.iconSizeDp.dp),
+                      )
+                    }
+                  }
+                }
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                  Text(
+                    text = "${selectedSize.displayName} Floating Dock",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                  )
+                  Text(
+                    text =
+                      "Button ${selectedSize.buttonSizeDp}dp • Icon ${selectedSize.iconSizeDp}dp • Padding ${selectedSize.paddingDp}dp",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                }
               }
             }
           }

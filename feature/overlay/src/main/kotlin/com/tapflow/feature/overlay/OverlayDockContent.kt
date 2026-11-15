@@ -20,9 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Pause
@@ -33,7 +31,6 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -54,6 +51,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tapflow.core.service.engine.RunnerExecutionSnapshot
@@ -71,6 +70,15 @@ internal fun OverlayDockView(
   callbacks: OverlayCallbacks,
   modifier: Modifier = Modifier,
 ) {
+  val sizeOption = state.overlaySize
+  val buttonSize = sizeOption.buttonSizeDp.dp
+  val iconSize = sizeOption.iconSizeDp.dp
+  val bubbleSize = sizeOption.bubbleSizeDp.dp
+  val counterSp = sizeOption.counterTextSp.sp
+  val dockPadding = sizeOption.paddingDp.dp
+  val dockBorder =
+    BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
   val dragModifier =
     Modifier.pointerInput(Unit) {
       detectDragGestures(
@@ -89,6 +97,9 @@ internal fun OverlayDockView(
     CollapsedEdgeBubble(
       state = state,
       accentColor = modeAccent,
+      bubbleSize = bubbleSize,
+      iconSize = iconSize,
+      border = dockBorder,
       onExpand = callbacks::onToggleBubbleCollapse,
       modifier = modifier.then(dragModifier),
     )
@@ -96,7 +107,7 @@ internal fun OverlayDockView(
   }
 
   Row(
-    modifier = modifier.padding(2.dp),
+    modifier = modifier,
     verticalAlignment = Alignment.Top,
     horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {
@@ -111,34 +122,40 @@ internal fun OverlayDockView(
     Surface(
       modifier =
         dragModifier
-          .width(38.dp)
+          .width(buttonSize + (dockPadding * 2))
           .testTag("overlay_vertical_strip_dock"),
-      shape = RoundedCornerShape(18.dp),
-      color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+      shape = RoundedCornerShape(buttonSize / 2),
+      color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
       contentColor = MaterialTheme.colorScheme.onSurface,
-      border = BorderStroke(1.dp, modeAccent.copy(alpha = 0.7f)),
-      shadowElevation = 6.dp,
+      border = dockBorder,
+      shadowElevation = 0.dp,
+      tonalElevation = 0.dp,
     ) {
       Column(
-        modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp),
+        modifier = Modifier.padding(dockPadding),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(dockPadding),
       ) {
-        DockHeaderBar(
-          accentColor = modeAccent,
-          onCollapseClick = callbacks::onToggleBubbleCollapse,
-        )
-
-        HorizontalDivider(
-          color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-          modifier = Modifier.padding(horizontal = 4.dp),
-        )
+        IconButton(
+          onClick = callbacks::onToggleBubbleCollapse,
+          modifier = Modifier.size(buttonSize).testTag("overlay_collapse_toggle_button"),
+        ) {
+          Icon(
+            imageVector = Icons.Filled.KeyboardArrowUp,
+            contentDescription = "Collapse floating dock to bubble",
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(iconSize),
+          )
+        }
 
         when (state.mode) {
           OverlayMode.RUNNER_SCRIPT,
           OverlayMode.RUNNER_PIPELINE -> {
             RunnerModeControls(
               state = state,
+              buttonSize = buttonSize,
+              iconSize = iconSize,
+              counterSp = counterSp,
               callbacks = callbacks,
             )
           }
@@ -146,6 +163,8 @@ internal fun OverlayDockView(
           OverlayMode.GESTURE_PICKER -> {
             GesturePickerModeControls(
               state = state,
+              buttonSize = buttonSize,
+              iconSize = iconSize,
               callbacks = callbacks,
             )
           }
@@ -153,6 +172,9 @@ internal fun OverlayDockView(
           OverlayMode.LIVE_RECORDER -> {
             LiveRecorderModeControls(
               state = state,
+              buttonSize = buttonSize,
+              iconSize = iconSize,
+              counterSp = counterSp,
               callbacks = callbacks,
             )
           }
@@ -160,6 +182,9 @@ internal fun OverlayDockView(
           OverlayMode.LIVE_INSPECTOR -> {
             LiveInspectorModeControls(
               state = state,
+              buttonSize = buttonSize,
+              iconSize = iconSize,
+              counterSp = counterSp,
               callbacks = callbacks,
             )
           }
@@ -167,18 +192,15 @@ internal fun OverlayDockView(
           OverlayMode.IDLE -> Unit
         }
 
-        HorizontalDivider(
-          color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
-          modifier = Modifier.padding(horizontal = 4.dp),
-        )
-
         DockActionIconButton(
           icon = Icons.Filled.Close,
           contentDescription =
             if (state.mode == OverlayMode.GESTURE_PICKER) "Cancel and return to TapFlow"
-            else "Close overlay and return to TapFlow",
+            else "Close overlay",
           tint = MaterialTheme.colorScheme.onSurfaceVariant,
           containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+          buttonSize = buttonSize,
+          iconSize = iconSize,
           testTag = "overlay_close_button",
           onClick = callbacks::onCloseOverlay,
         )
@@ -199,24 +221,28 @@ internal fun OverlayDockView(
 private fun CollapsedEdgeBubble(
   state: OverlayUiState,
   accentColor: Color,
+  bubbleSize: Dp,
+  iconSize: Dp,
+  border: BorderStroke,
   onExpand: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   Surface(
     onClick = onExpand,
-    modifier = modifier.size(34.dp).testTag("overlay_collapsed_bubble"),
+    modifier = modifier.size(bubbleSize).testTag("overlay_collapsed_bubble"),
     shape = CircleShape,
-    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.80f),
+    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
     contentColor = accentColor,
-    border = BorderStroke(1.2.dp, accentColor.copy(alpha = 0.8f)),
-    shadowElevation = 6.dp,
+    border = border,
+    shadowElevation = 0.dp,
+    tonalElevation = 0.dp,
   ) {
     Box(contentAlignment = Alignment.Center) {
       Icon(
         imageVector = Icons.Filled.TouchApp,
         contentDescription = "Expand floating dock",
         tint = accentColor,
-        modifier = Modifier.size(18.dp),
+        modifier = Modifier.size(iconSize),
       )
       if (state.captureAlertMessage != null) {
         Box(
@@ -224,7 +250,7 @@ private fun CollapsedEdgeBubble(
             Modifier
               .align(Alignment.TopEnd)
               .padding(3.dp)
-              .size(7.dp)
+              .size(6.dp)
               .clip(CircleShape)
               .background(MaterialTheme.colorScheme.tertiary),
         )
@@ -234,66 +260,23 @@ private fun CollapsedEdgeBubble(
 }
 
 @Composable
-private fun DockHeaderBar(
-  accentColor: Color,
-  onCollapseClick: () -> Unit,
-) {
-  Column(
-    modifier = Modifier.fillMaxWidth(),
-    horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(1.dp),
-  ) {
-    Row(
-      modifier = Modifier.fillMaxWidth().padding(top = 1.dp),
-      horizontalArrangement = Arrangement.Center,
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Box(
-        modifier =
-          Modifier
-            .size(5.dp)
-            .clip(CircleShape)
-            .background(accentColor),
-      )
-      Spacer(modifier = Modifier.width(2.dp))
-      Icon(
-        imageVector = Icons.Filled.DragIndicator,
-        contentDescription = "Drag floating dock",
-        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.size(13.dp),
-      )
-    }
-
-    IconButton(
-      onClick = onCollapseClick,
-      modifier = Modifier.size(30.dp).testTag("overlay_collapse_toggle_button"),
-    ) {
-      Icon(
-        imageVector = Icons.Filled.KeyboardArrowUp,
-        contentDescription = "Collapse floating dock to bubble",
-        tint = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.size(18.dp),
-      )
-    }
-  }
-}
-
-@Composable
 private fun RunnerModeControls(
   state: OverlayUiState,
+  buttonSize: Dp,
+  iconSize: Dp,
+  counterSp: TextUnit,
   callbacks: OverlayCallbacks,
 ) {
   val snap = state.runnerSnapshot
-  val isRunning = snap.phase == RunnerPhase.RUNNING
 
   Column(
-    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).testTag("overlay_runner_action_counter"),
+    modifier = Modifier.fillMaxWidth().testTag("overlay_runner_action_counter"),
     horizontalAlignment = Alignment.CenterHorizontally,
   ) {
     Text(
       text = "${snap.currentTopLevelAction}/${snap.totalTopLevelActions}",
-      fontSize = 9.sp,
-      lineHeight = 11.sp,
+      fontSize = counterSp,
+      lineHeight = (counterSp.value + 2f).sp,
       fontFamily = FontFamily.Monospace,
       fontWeight = FontWeight.Bold,
       color = MaterialTheme.colorScheme.primary,
@@ -303,8 +286,8 @@ private fun RunnerModeControls(
     if (state.mode == OverlayMode.RUNNER_PIPELINE || snap.isPipeline) {
       Text(
         text = "${snap.currentPipelineStep}.${snap.currentStepIteration}",
-        fontSize = 8.sp,
-        lineHeight = 10.sp,
+        fontSize = (counterSp.value - 1f).coerceAtLeast(7f).sp,
+        lineHeight = (counterSp.value + 1f).sp,
         fontFamily = FontFamily.Monospace,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
@@ -313,50 +296,127 @@ private fun RunnerModeControls(
     }
   }
 
-  DockActionIconButton(
-    icon = if (isRunning) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-    contentDescription = if (isRunning) "Pause script" else "Play or resume script",
-    tint = MaterialTheme.colorScheme.onPrimary,
-    containerColor = MaterialTheme.colorScheme.primary,
-    testTag = "overlay_runner_play_pause_button",
-    onClick = callbacks::onPlayPause,
-  )
+  when (snap.phase) {
+    RunnerPhase.RUNNING -> {
+      DockActionIconButton(
+        icon = Icons.Filled.Pause,
+        contentDescription = "Pause script",
+        tint = MaterialTheme.colorScheme.onPrimary,
+        containerColor = MaterialTheme.colorScheme.primary,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
+        testTag = "overlay_runner_play_pause_button",
+        onClick = callbacks::onPlayPause,
+      )
 
-  DockActionIconButton(
-    icon = Icons.Filled.SkipPrevious,
-    contentDescription = "Previous top-level action",
-    tint = MaterialTheme.colorScheme.onSurface,
-    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-    testTag = "overlay_runner_prev_button",
-    onClick = callbacks::onPreviousStep,
-  )
+      DockActionIconButton(
+        icon = Icons.Filled.Stop,
+        contentDescription = "Stop execution",
+        tint = MaterialTheme.colorScheme.onErrorContainer,
+        containerColor = MaterialTheme.colorScheme.errorContainer,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
+        testTag = "overlay_runner_stop_button",
+        onClick = callbacks::onStopExecution,
+      )
+    }
 
-  DockActionIconButton(
-    icon = Icons.Filled.SkipNext,
-    contentDescription = "Step next top-level action",
-    tint = MaterialTheme.colorScheme.onSurface,
-    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-    testTag = "overlay_runner_next_button",
-    onClick = callbacks::onNextStep,
-  )
+    RunnerPhase.PAUSED -> {
+      DockActionIconButton(
+        icon = Icons.Filled.PlayArrow,
+        contentDescription = "Resume script",
+        tint = MaterialTheme.colorScheme.onPrimary,
+        containerColor = MaterialTheme.colorScheme.primary,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
+        testTag = "overlay_runner_play_pause_button",
+        onClick = callbacks::onPlayPause,
+      )
 
-  DockActionIconButton(
-    icon = Icons.Filled.Stop,
-    contentDescription = "Stop execution",
-    tint = MaterialTheme.colorScheme.onErrorContainer,
-    containerColor = MaterialTheme.colorScheme.errorContainer,
-    testTag = "overlay_runner_stop_button",
-    onClick = callbacks::onStopExecution,
-  )
+      DockActionIconButton(
+        icon = Icons.Filled.SkipPrevious,
+        contentDescription = "Previous top-level action",
+        tint = MaterialTheme.colorScheme.onSurface,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
+        testTag = "overlay_runner_prev_button",
+        onClick = callbacks::onPreviousStep,
+      )
+
+      DockActionIconButton(
+        icon = Icons.Filled.SkipNext,
+        contentDescription = "Step next top-level action",
+        tint = MaterialTheme.colorScheme.onSurface,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
+        testTag = "overlay_runner_next_button",
+        onClick = callbacks::onNextStep,
+      )
+
+      DockActionIconButton(
+        icon = Icons.Filled.Stop,
+        contentDescription = "Stop execution",
+        tint = MaterialTheme.colorScheme.onErrorContainer,
+        containerColor = MaterialTheme.colorScheme.errorContainer,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
+        testTag = "overlay_runner_stop_button",
+        onClick = callbacks::onStopExecution,
+      )
+    }
+
+    RunnerPhase.IDLE,
+    RunnerPhase.STOPPED,
+    RunnerPhase.COMPLETED,
+    RunnerPhase.FAILED,
+    RunnerPhase.PAYWALL_BLOCKED -> {
+      DockActionIconButton(
+        icon = Icons.Filled.PlayArrow,
+        contentDescription = "Play script",
+        tint = MaterialTheme.colorScheme.onPrimary,
+        containerColor = MaterialTheme.colorScheme.primary,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
+        testTag = "overlay_runner_play_pause_button",
+        onClick = callbacks::onPlayPause,
+      )
+
+      DockActionIconButton(
+        icon = Icons.Filled.SkipPrevious,
+        contentDescription = "Previous top-level action",
+        tint = MaterialTheme.colorScheme.onSurface,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
+        testTag = "overlay_runner_prev_button",
+        onClick = callbacks::onPreviousStep,
+      )
+
+      DockActionIconButton(
+        icon = Icons.Filled.SkipNext,
+        contentDescription = "Step next top-level action",
+        tint = MaterialTheme.colorScheme.onSurface,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
+        testTag = "overlay_runner_next_button",
+        onClick = callbacks::onNextStep,
+      )
+    }
+  }
 }
 
 @Composable
 private fun GesturePickerModeControls(
   state: OverlayUiState,
+  buttonSize: Dp,
+  iconSize: Dp,
   callbacks: OverlayCallbacks,
 ) {
   DockActionIconButton(
-    icon = if (state.isCaptureActive) Icons.Filled.Stop else Icons.Filled.TouchApp,
+    icon = if (state.isCaptureActive) Icons.Filled.Pause else Icons.Filled.CenterFocusStrong,
     contentDescription =
       if (state.isCaptureActive) "Pause pick interception" else "Resume gesture picking",
     tint =
@@ -365,6 +425,8 @@ private fun GesturePickerModeControls(
     containerColor =
       if (state.isCaptureActive) MaterialTheme.colorScheme.primary
       else MaterialTheme.colorScheme.primaryContainer,
+    buttonSize = buttonSize,
+    iconSize = iconSize,
     testTag = "overlay_picker_toggle_button",
     onClick = callbacks::onToggleCaptureListening,
   )
@@ -373,18 +435,22 @@ private fun GesturePickerModeControls(
 @Composable
 private fun LiveRecorderModeControls(
   state: OverlayUiState,
+  buttonSize: Dp,
+  iconSize: Dp,
+  counterSp: TextUnit,
   callbacks: OverlayCallbacks,
 ) {
-  if (state.recordedActionCount > 0) {
+  if (state.sessionState != OverlaySessionState.STANDBY && state.recordedActionCount > 0) {
     Text(
       text = "${state.recordedActionCount}",
-      fontSize = 10.sp,
-      lineHeight = 12.sp,
+      fontSize = counterSp,
+      lineHeight = (counterSp.value + 2f).sp,
       fontFamily = FontFamily.Monospace,
       fontWeight = FontWeight.Bold,
       color = MaterialTheme.colorScheme.error,
+      maxLines = 1,
       textAlign = TextAlign.Center,
-      modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp).testTag("overlay_recorder_count_badge"),
+      modifier = Modifier.fillMaxWidth().testTag("overlay_recorder_count_badge"),
     )
   }
 
@@ -395,6 +461,8 @@ private fun LiveRecorderModeControls(
         contentDescription = "Start recording live gestures",
         tint = MaterialTheme.colorScheme.onError,
         containerColor = MaterialTheme.colorScheme.error,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
         testTag = "overlay_recorder_start_button",
         onClick = callbacks::onStartOrResumeCapture,
       )
@@ -406,6 +474,8 @@ private fun LiveRecorderModeControls(
         contentDescription = "Pause recording",
         tint = MaterialTheme.colorScheme.onTertiaryContainer,
         containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
         testTag = "overlay_recorder_pause_button",
         onClick = callbacks::onPauseCapture,
       )
@@ -415,6 +485,8 @@ private fun LiveRecorderModeControls(
         contentDescription = "Stop recording and save script",
         tint = MaterialTheme.colorScheme.onError,
         containerColor = MaterialTheme.colorScheme.error,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
         testTag = "overlay_recorder_stop_button",
         onClick = callbacks::onStopCapture,
       )
@@ -426,6 +498,8 @@ private fun LiveRecorderModeControls(
         contentDescription = "Resume recording",
         tint = MaterialTheme.colorScheme.onPrimary,
         containerColor = MaterialTheme.colorScheme.primary,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
         testTag = "overlay_recorder_resume_button",
         onClick = callbacks::onStartOrResumeCapture,
       )
@@ -435,6 +509,8 @@ private fun LiveRecorderModeControls(
         contentDescription = "Stop recording and save script",
         tint = MaterialTheme.colorScheme.onErrorContainer,
         containerColor = MaterialTheme.colorScheme.errorContainer,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
         testTag = "overlay_recorder_stop_button",
         onClick = callbacks::onStopCapture,
       )
@@ -445,18 +521,22 @@ private fun LiveRecorderModeControls(
 @Composable
 private fun LiveInspectorModeControls(
   state: OverlayUiState,
+  buttonSize: Dp,
+  iconSize: Dp,
+  counterSp: TextUnit,
   callbacks: OverlayCallbacks,
 ) {
-  if (state.inspectedItemCount > 0) {
+  if (state.sessionState != OverlaySessionState.STANDBY && state.inspectedItemCount > 0) {
     Text(
       text = "${state.inspectedItemCount}",
-      fontSize = 10.sp,
-      lineHeight = 12.sp,
+      fontSize = counterSp,
+      lineHeight = (counterSp.value + 2f).sp,
       fontFamily = FontFamily.Monospace,
       fontWeight = FontWeight.Bold,
       color = MaterialTheme.colorScheme.secondary,
+      maxLines = 1,
       textAlign = TextAlign.Center,
-      modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp).testTag("overlay_inspector_count_badge"),
+      modifier = Modifier.fillMaxWidth().testTag("overlay_inspector_count_badge"),
     )
   }
 
@@ -467,6 +547,8 @@ private fun LiveInspectorModeControls(
         contentDescription = "Start screen inspection",
         tint = MaterialTheme.colorScheme.onSecondary,
         containerColor = MaterialTheme.colorScheme.secondary,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
         testTag = "overlay_inspector_start_button",
         onClick = callbacks::onStartOrResumeCapture,
       )
@@ -478,6 +560,8 @@ private fun LiveInspectorModeControls(
         contentDescription = "Pause screen inspection",
         tint = MaterialTheme.colorScheme.onTertiaryContainer,
         containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
         testTag = "overlay_inspector_pause_button",
         onClick = callbacks::onPauseCapture,
       )
@@ -487,6 +571,8 @@ private fun LiveInspectorModeControls(
         contentDescription = "Stop and finalize inspect group",
         tint = MaterialTheme.colorScheme.onSecondary,
         containerColor = MaterialTheme.colorScheme.secondary,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
         testTag = "overlay_inspector_stop_button",
         onClick = callbacks::onStopCapture,
       )
@@ -498,6 +584,8 @@ private fun LiveInspectorModeControls(
         contentDescription = "Resume screen inspection",
         tint = MaterialTheme.colorScheme.onSecondary,
         containerColor = MaterialTheme.colorScheme.secondary,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
         testTag = "overlay_inspector_resume_button",
         onClick = callbacks::onStartOrResumeCapture,
       )
@@ -507,6 +595,8 @@ private fun LiveInspectorModeControls(
         contentDescription = "Stop and finalize inspect group",
         tint = MaterialTheme.colorScheme.onErrorContainer,
         containerColor = MaterialTheme.colorScheme.errorContainer,
+        buttonSize = buttonSize,
+        iconSize = iconSize,
         testTag = "overlay_inspector_stop_button",
         onClick = callbacks::onStopCapture,
       )
@@ -525,8 +615,9 @@ private fun CaptureAlertSideCard(
       shape = RoundedCornerShape(16.dp),
       color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
       contentColor = MaterialTheme.colorScheme.onSurface,
-      border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary),
-      shadowElevation = 8.dp,
+      border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+      shadowElevation = 0.dp,
+      tonalElevation = 0.dp,
       modifier = Modifier.widthIn(max = 220.dp).testTag("overlay_stopped_by_system_card"),
     ) {
       Column(
@@ -590,6 +681,8 @@ private fun DockActionIconButton(
   contentDescription: String,
   tint: Color,
   containerColor: Color,
+  buttonSize: Dp,
+  iconSize: Dp,
   testTag: String,
   onClick: () -> Unit,
 ) {
@@ -600,12 +693,12 @@ private fun DockActionIconButton(
         containerColor = containerColor,
         contentColor = tint,
       ),
-    modifier = Modifier.size(32.dp).testTag(testTag),
+    modifier = Modifier.size(buttonSize).testTag(testTag),
   ) {
     Icon(
       imageVector = icon,
       contentDescription = contentDescription,
-      modifier = Modifier.size(18.dp),
+      modifier = Modifier.size(iconSize),
     )
   }
 }

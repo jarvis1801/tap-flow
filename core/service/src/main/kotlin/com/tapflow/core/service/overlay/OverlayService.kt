@@ -31,12 +31,12 @@ import android.view.View
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -47,6 +47,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -129,6 +130,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -195,6 +198,7 @@ class OverlayService :
 
   private var dockComposeView: ComposeView? = null
   private var dockLayoutParams: WindowManager.LayoutParams? = null
+  private var dockLayoutChangeListener: View.OnLayoutChangeListener? = null
   private var edgeSnapAnimator: ValueAnimator? = null
   private var displayListener: DisplayManager.DisplayListener? = null
   private val mainHandler = Handler(Looper.getMainLooper())
@@ -352,13 +356,11 @@ class OverlayService :
             activeInspectGroupTitle = null
             inspectGroupPersisted = false
             setCaptureLayerInterceptable(visible = false, interceptable = false)
-            bringMainActivityToFrontPreservingState()
             closeOverlayService()
           }
           OverlayMode.GESTURE_PICKER -> cancelPickerAndReturnToApp()
           else -> {
             runnerControlHub.stopExecution()
-            bringMainActivityToFrontPreservingState()
             closeOverlayService()
           }
         }
@@ -402,7 +404,18 @@ class OverlayService :
 
     serviceScope.launch {
       val prefs = preferencesRepository.getPreferencesOnce()
+      uiState.update { it.copy(overlaySize = prefs.overlaySize) }
       applySavedDockPosition(prefs.dockPosition.x, prefs.dockPosition.y)
+    }
+
+    serviceScope.launch {
+      preferencesRepository.preferencesFlow
+        .map { it.overlaySize }
+        .distinctUntilChanged()
+        .collectLatest { sizeOption ->
+          uiState.update { it.copy(overlaySize = sizeOption) }
+          reclampDockForCurrentBounds()
+        }
     }
 
     serviceScope.launch {
@@ -594,6 +607,31 @@ class OverlayService :
           }
         }
       }
+
+    val layoutListener =
+      View.OnLayoutChangeListener { view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+        val newWidth = right - left
+        val newHeight = bottom - top
+        val oldWidth = oldRight - oldLeft
+        val oldHeight = oldBottom - oldTop
+        if ((newWidth != oldWidth || newHeight != oldHeight) && newWidth > 0 && newHeight > 0) {
+          val params = dockLayoutParams ?: return@OnLayoutChangeListener
+          if (edgeSnapAnimator?.isRunning == true) return@OnLayoutChangeListener
+          val (screenW, screenH) = readScreenDimensions()
+          if (screenW <= 0 || screenH <= 0) return@OnLayoutChangeListener
+          val maxX = (screenW - newWidth).coerceAtLeast(0)
+          val maxY = (screenH - newHeight).coerceAtLeast(0)
+          val snappedX = if (uiState.value.isDockedOnRight) maxX else 0
+          val clampedY = params.y.coerceIn(0, maxY)
+          if (params.x != snappedX || params.y != clampedY) {
+            params.x = snappedX
+            params.y = clampedY
+            runCatching { windowManager.updateViewLayout(view, params) }
+          }
+        }
+      }
+    dockView.addOnLayoutChangeListener(layoutListener)
+    dockLayoutChangeListener = layoutListener
 
     windowManager.addView(dockView, dParams)
     dockComposeView = dockView
@@ -1440,7 +1478,6 @@ class OverlayService :
         )
       }
       if (closeAfter) {
-        bringMainActivityToFrontPreservingState()
         closeOverlayService()
       } else {
         uiState.update {
@@ -1491,8 +1528,12 @@ class OverlayService :
       runCatching { windowManager.removeViewImmediate(root) }
     }
     dockComposeView?.let { dock ->
+      dockLayoutChangeListener?.let { listener ->
+        dock.removeOnLayoutChangeListener(listener)
+      }
       runCatching { windowManager.removeViewImmediate(dock) }
     }
+    dockLayoutChangeListener = null
     captureRootView = null
     captureFeedbackComposeView = null
     captureLayoutParams = null
@@ -1616,7 +1657,8 @@ class OverlayService :
     val (newScreenW, newScreenH) = readScreenDimensions()
     if (newScreenW <= 0 || newScreenH <= 0) return
 
-    val dockWidth = view.width.takeIf { it > 0 } ?: 40
+    val fallbackWidth = (uiState.value.overlaySize.bubbleSizeDp + (uiState.value.overlaySize.paddingDp * 2)).coerceAtLeast(28)
+    val dockWidth = view.width.takeIf { it > 0 } ?: fallbackWidth
     val dockHeight = view.height.takeIf { it > 0 } ?: 120
     val maxX = (newScreenW - dockWidth).coerceAtLeast(0)
     val maxY = (newScreenH - dockHeight).coerceAtLeast(0)
@@ -1699,6 +1741,14 @@ private fun FallbackFloatingDock(
   state: OverlayUiState,
   callbacks: OverlayCallbacks,
 ) {
+  val sizeOption = state.overlaySize
+  val buttonSize = sizeOption.buttonSizeDp.dp
+  val iconSize = sizeOption.iconSizeDp.dp
+  val bubbleSize = sizeOption.bubbleSizeDp.dp
+  val counterSp = sizeOption.counterTextSp.sp
+  val dockPadding = sizeOption.paddingDp.dp
+  val dockBorder = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
   val dragModifier =
     Modifier.pointerInput(Unit) {
       detectDragGestures(
@@ -1713,18 +1763,20 @@ private fun FallbackFloatingDock(
 
   if (state.isBubbleCollapsed) {
     Surface(
-      modifier = dragModifier.size(34.dp),
+      modifier = dragModifier.size(bubbleSize),
       shape = CircleShape,
-      color = MaterialTheme.colorScheme.surface.copy(alpha = 0.80f),
+      color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
       contentColor = MaterialTheme.colorScheme.primary,
-      shadowElevation = 6.dp,
+      border = dockBorder,
+      shadowElevation = 0.dp,
+      tonalElevation = 0.dp,
       onClick = { callbacks.onToggleBubbleCollapse() },
     ) {
       Box(contentAlignment = Alignment.Center) {
         Icon(
           imageVector = Icons.Default.TouchApp,
           contentDescription = "Expand floating dock",
-          modifier = Modifier.size(18.dp),
+          modifier = Modifier.size(iconSize),
         )
       }
     }
@@ -1732,152 +1784,210 @@ private fun FallbackFloatingDock(
   }
 
   Surface(
-    modifier = dragModifier.width(38.dp),
-    shape = RoundedCornerShape(18.dp),
-    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.88f),
+    modifier = dragModifier.width(buttonSize + (dockPadding * 2)),
+    shape = RoundedCornerShape(buttonSize / 2),
+    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.90f),
     contentColor = MaterialTheme.colorScheme.onSurface,
-    shadowElevation = 6.dp,
+    border = dockBorder,
+    shadowElevation = 0.dp,
+    tonalElevation = 0.dp,
   ) {
     Column(
-      modifier = Modifier.padding(vertical = 4.dp, horizontal = 2.dp),
+      modifier = Modifier.padding(dockPadding),
       horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(2.dp),
+      verticalArrangement = Arrangement.spacedBy(dockPadding),
     ) {
+      IconButton(
+        onClick = { callbacks.onToggleBubbleCollapse() },
+        modifier = Modifier.size(buttonSize),
+      ) {
+        Icon(
+          imageVector = Icons.Default.KeyboardArrowUp,
+          contentDescription = "Collapse floating dock",
+          modifier = Modifier.size(iconSize),
+        )
+      }
+
       if (state.mode == OverlayMode.RUNNER_SCRIPT || state.mode == OverlayMode.RUNNER_PIPELINE) {
         val snap = state.runnerSnapshot
         Text(
           text = "${snap.currentTopLevelAction}/${snap.totalTopLevelActions}",
-          fontSize = 9.sp,
+          fontSize = counterSp,
+          lineHeight = (sizeOption.counterTextSp + 2).sp,
           fontFamily = FontFamily.Monospace,
           fontWeight = FontWeight.Bold,
+          maxLines = 1,
         )
-        IconButton(onClick = { callbacks.onPlayPause() }, modifier = Modifier.size(32.dp)) {
-          Icon(
-            imageVector =
-              if (snap.phase == RunnerPhase.RUNNING) Icons.Default.Pause
-              else Icons.Default.PlayArrow,
-            contentDescription = "Play or Pause",
-            modifier = Modifier.size(18.dp),
-          )
-        }
-        IconButton(onClick = { callbacks.onPreviousStep() }, modifier = Modifier.size(32.dp)) {
-          Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Step", modifier = Modifier.size(18.dp))
-        }
-        IconButton(onClick = { callbacks.onNextStep() }, modifier = Modifier.size(32.dp)) {
-          Icon(Icons.Default.SkipNext, contentDescription = "Next Step", modifier = Modifier.size(18.dp))
-        }
-        IconButton(onClick = { callbacks.onStopExecution() }, modifier = Modifier.size(32.dp)) {
-          Icon(Icons.Default.Stop, contentDescription = "Stop", modifier = Modifier.size(18.dp))
+        when (snap.phase) {
+          RunnerPhase.RUNNING -> {
+            IconButton(onClick = { callbacks.onPlayPause() }, modifier = Modifier.size(buttonSize)) {
+              Icon(
+                imageVector = Icons.Default.Pause,
+                contentDescription = "Pause script",
+                modifier = Modifier.size(iconSize),
+              )
+            }
+            IconButton(onClick = { callbacks.onStopExecution() }, modifier = Modifier.size(buttonSize)) {
+              Icon(Icons.Default.Stop, contentDescription = "Stop execution", modifier = Modifier.size(iconSize))
+            }
+          }
+
+          RunnerPhase.PAUSED -> {
+            IconButton(onClick = { callbacks.onPlayPause() }, modifier = Modifier.size(buttonSize)) {
+              Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = "Resume script",
+                modifier = Modifier.size(iconSize),
+              )
+            }
+            IconButton(onClick = { callbacks.onPreviousStep() }, modifier = Modifier.size(buttonSize)) {
+              Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Step", modifier = Modifier.size(iconSize))
+            }
+            IconButton(onClick = { callbacks.onNextStep() }, modifier = Modifier.size(buttonSize)) {
+              Icon(Icons.Default.SkipNext, contentDescription = "Next Step", modifier = Modifier.size(iconSize))
+            }
+            IconButton(onClick = { callbacks.onStopExecution() }, modifier = Modifier.size(buttonSize)) {
+              Icon(Icons.Default.Stop, contentDescription = "Stop execution", modifier = Modifier.size(iconSize))
+            }
+          }
+
+          RunnerPhase.IDLE,
+          RunnerPhase.STOPPED,
+          RunnerPhase.COMPLETED,
+          RunnerPhase.FAILED,
+          RunnerPhase.PAYWALL_BLOCKED -> {
+            IconButton(onClick = { callbacks.onPlayPause() }, modifier = Modifier.size(buttonSize)) {
+              Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = "Play script",
+                modifier = Modifier.size(iconSize),
+              )
+            }
+            IconButton(onClick = { callbacks.onPreviousStep() }, modifier = Modifier.size(buttonSize)) {
+              Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Step", modifier = Modifier.size(iconSize))
+            }
+            IconButton(onClick = { callbacks.onNextStep() }, modifier = Modifier.size(buttonSize)) {
+              Icon(Icons.Default.SkipNext, contentDescription = "Next Step", modifier = Modifier.size(iconSize))
+            }
+          }
         }
       } else if (state.mode == OverlayMode.LIVE_RECORDER) {
-        if (state.recordedActionCount > 0) {
+        if (state.sessionState != OverlaySessionState.STANDBY && state.recordedActionCount > 0) {
           Text(
             text = "${state.recordedActionCount}",
-            fontSize = 10.sp,
+            fontSize = counterSp,
+            lineHeight = (sizeOption.counterTextSp + 2).sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
+            maxLines = 1,
           )
         }
         when (state.sessionState) {
           OverlaySessionState.STANDBY -> {
             IconButton(
               onClick = { callbacks.onStartOrResumeCapture() },
-              modifier = Modifier.size(32.dp),
+              modifier = Modifier.size(buttonSize),
             ) {
-              Icon(Icons.Default.FiberManualRecord, contentDescription = "Start Recording", modifier = Modifier.size(18.dp))
+              Icon(Icons.Default.FiberManualRecord, contentDescription = "Start Recording", modifier = Modifier.size(iconSize))
             }
           }
 
           OverlaySessionState.ACTIVE -> {
             IconButton(
               onClick = { callbacks.onPauseCapture() },
-              modifier = Modifier.size(32.dp),
+              modifier = Modifier.size(buttonSize),
             ) {
-              Icon(Icons.Default.Pause, contentDescription = "Pause Recording", modifier = Modifier.size(18.dp))
+              Icon(Icons.Default.Pause, contentDescription = "Pause Recording", modifier = Modifier.size(iconSize))
             }
             IconButton(
               onClick = { callbacks.onStopCapture() },
-              modifier = Modifier.size(32.dp),
+              modifier = Modifier.size(buttonSize),
             ) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop and Save Recording", modifier = Modifier.size(18.dp))
+              Icon(Icons.Default.Stop, contentDescription = "Stop and Save Recording", modifier = Modifier.size(iconSize))
             }
           }
 
           OverlaySessionState.PAUSED -> {
             IconButton(
               onClick = { callbacks.onStartOrResumeCapture() },
-              modifier = Modifier.size(32.dp),
+              modifier = Modifier.size(buttonSize),
             ) {
-              Icon(Icons.Default.PlayArrow, contentDescription = "Resume Recording", modifier = Modifier.size(18.dp))
+              Icon(Icons.Default.PlayArrow, contentDescription = "Resume Recording", modifier = Modifier.size(iconSize))
             }
             IconButton(
               onClick = { callbacks.onStopCapture() },
-              modifier = Modifier.size(32.dp),
+              modifier = Modifier.size(buttonSize),
             ) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop and Save Recording", modifier = Modifier.size(18.dp))
+              Icon(Icons.Default.Stop, contentDescription = "Stop and Save Recording", modifier = Modifier.size(iconSize))
             }
           }
         }
       } else if (state.mode == OverlayMode.LIVE_INSPECTOR) {
-        if (state.inspectedItemCount > 0) {
+        if (state.sessionState != OverlaySessionState.STANDBY && state.inspectedItemCount > 0) {
           Text(
             text = "${state.inspectedItemCount}",
-            fontSize = 10.sp,
+            fontSize = counterSp,
+            lineHeight = (sizeOption.counterTextSp + 2).sp,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
+            maxLines = 1,
           )
         }
         when (state.sessionState) {
           OverlaySessionState.STANDBY -> {
             IconButton(
               onClick = { callbacks.onStartOrResumeCapture() },
-              modifier = Modifier.size(32.dp),
+              modifier = Modifier.size(buttonSize),
             ) {
-              Icon(Icons.Default.CenterFocusStrong, contentDescription = "Start Inspecting", modifier = Modifier.size(18.dp))
+              Icon(Icons.Default.CenterFocusStrong, contentDescription = "Start Inspecting", modifier = Modifier.size(iconSize))
             }
           }
 
           OverlaySessionState.ACTIVE -> {
             IconButton(
               onClick = { callbacks.onPauseCapture() },
-              modifier = Modifier.size(32.dp),
+              modifier = Modifier.size(buttonSize),
             ) {
-              Icon(Icons.Default.Pause, contentDescription = "Pause Inspecting", modifier = Modifier.size(18.dp))
+              Icon(Icons.Default.Pause, contentDescription = "Pause Inspecting", modifier = Modifier.size(iconSize))
             }
             IconButton(
               onClick = { callbacks.onStopCapture() },
-              modifier = Modifier.size(32.dp),
+              modifier = Modifier.size(buttonSize),
             ) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop InspectGroup", modifier = Modifier.size(18.dp))
+              Icon(Icons.Default.Stop, contentDescription = "Stop InspectGroup", modifier = Modifier.size(iconSize))
             }
           }
 
           OverlaySessionState.PAUSED -> {
             IconButton(
               onClick = { callbacks.onStartOrResumeCapture() },
-              modifier = Modifier.size(32.dp),
+              modifier = Modifier.size(buttonSize),
             ) {
-              Icon(Icons.Default.PlayArrow, contentDescription = "Resume Inspecting", modifier = Modifier.size(18.dp))
+              Icon(Icons.Default.PlayArrow, contentDescription = "Resume Inspecting", modifier = Modifier.size(iconSize))
             }
             IconButton(
               onClick = { callbacks.onStopCapture() },
-              modifier = Modifier.size(32.dp),
+              modifier = Modifier.size(buttonSize),
             ) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop InspectGroup", modifier = Modifier.size(18.dp))
+              Icon(Icons.Default.Stop, contentDescription = "Stop InspectGroup", modifier = Modifier.size(iconSize))
             }
           }
         }
-      } else {
-        IconButton(onClick = { callbacks.onToggleCaptureListening() }, modifier = Modifier.size(32.dp)) {
+      } else if (state.mode == OverlayMode.GESTURE_PICKER) {
+        IconButton(onClick = { callbacks.onToggleCaptureListening() }, modifier = Modifier.size(buttonSize)) {
           Icon(
-            imageVector = if (state.isCaptureActive) Icons.Default.Stop else Icons.Default.TouchApp,
-            contentDescription = "Toggle capture",
-            modifier = Modifier.size(18.dp),
+            imageVector =
+              if (state.isCaptureActive) Icons.Default.Pause
+              else Icons.Default.CenterFocusStrong,
+            contentDescription =
+              if (state.isCaptureActive) "Pause pick interception"
+              else "Resume gesture picking",
+            modifier = Modifier.size(iconSize),
           )
         }
       }
-      IconButton(onClick = { callbacks.onCloseOverlay() }, modifier = Modifier.size(32.dp)) {
-        Icon(Icons.Default.Close, contentDescription = "Close Overlay", modifier = Modifier.size(18.dp))
+      IconButton(onClick = { callbacks.onCloseOverlay() }, modifier = Modifier.size(buttonSize)) {
+        Icon(Icons.Default.Close, contentDescription = "Close Overlay", modifier = Modifier.size(iconSize))
       }
     }
   }

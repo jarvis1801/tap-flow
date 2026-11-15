@@ -120,3 +120,46 @@ data class VariableDefinition(
   val type: VariableType,
   val defaultValue: String = "",
 )
+
+@Serializable
+enum class OverlaySizeOption(
+  val displayName: String,
+  val buttonSizeDp: Int,
+  val iconSizeDp: Int,
+  val bubbleSizeDp: Int,
+  val counterTextSp: Int,
+  val paddingDp: Int,
+) {
+  TINY(
+    displayName = "Tiny",
+    buttonSizeDp = 28,
+    iconSizeDp = 16,
+    bubbleSizeDp = 28,
+    counterTextSp = 8,
+    paddingDp = 2,
+  ),
+  COMPACT(
+    displayName = "Compact",
+    buttonSizeDp = 34,
+    iconSizeDp = 19,
+    bubbleSizeDp = 34,
+    counterTextSp = 10,
+    paddingDp = 3,
+  ),
+  MEDIUM(
+    displayName = "Medium",
+    buttonSizeDp = 42,
+    iconSizeDp = 22,
+    bubbleSizeDp = 42,
+    counterTextSp = 11,
+    paddingDp = 4,
+  ),
+  LARGE(
+    displayName = "Large",
+    buttonSizeDp = 50,
+    iconSizeDp = 26,
+    bubbleSizeDp = 50,
+    counterTextSp = 12,
+    paddingDp = 6,
+  ),
+}

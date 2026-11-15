@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.tapflow.core.model.common.OverlaySizeOption
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,6 +25,7 @@ class TapFlowPreferencesRepository @Inject constructor(
     val HAS_COMPLETED_ONBOARDING = booleanPreferencesKey("has_completed_permission_onboarding")
     val DARK_MODE = stringPreferencesKey("dark_mode_option")
     val THEME_PALETTE = stringPreferencesKey("theme_palette_option")
+    val OVERLAY_SIZE = stringPreferencesKey("overlay_size_option")
     val KTOR_PORT = intPreferencesKey("ktor_server_port")
 
     val SHIZUKU_SHELL_INPUT = booleanPreferencesKey("shizuku_shell_input_injection")
@@ -67,10 +69,15 @@ class TapFlowPreferencesRepository @Inject constructor(
           ThemePaletteOption.entries.firstOrNull { it.name == rawPalette }
             ?: ThemePaletteOption.DYNAMIC_MATERIAL_YOU
         }
+      val rawOverlaySize = prefs[Keys.OVERLAY_SIZE]
+      val overlaySize =
+        OverlaySizeOption.entries.firstOrNull { it.name == rawOverlaySize }
+          ?: OverlaySizeOption.COMPACT
       AppPreferences(
         hasCompletedPermissionOnboarding = prefs[Keys.HAS_COMPLETED_ONBOARDING] ?: false,
         darkMode = darkMode,
         themePalette = themePalette,
+        overlaySize = overlaySize,
         ktorPort = (prefs[Keys.KTOR_PORT] ?: AppPreferences.DEFAULT_KTOR_PORT).coerceIn(1024, 65535),
         shizuku =
           ShizukuPreferences(
@@ -121,6 +128,10 @@ class TapFlowPreferencesRepository @Inject constructor(
         prefs[Keys.DARK_MODE] = DarkModeOption.DARK.name
       }
     }
+  }
+
+  suspend fun setOverlaySize(option: OverlaySizeOption) {
+    dataStore.edit { prefs -> prefs[Keys.OVERLAY_SIZE] = option.name }
   }
 
   suspend fun setKtorPort(port: Int) {

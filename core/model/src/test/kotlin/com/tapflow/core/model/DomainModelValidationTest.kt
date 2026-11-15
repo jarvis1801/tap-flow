@@ -3,6 +3,7 @@ package com.tapflow.core.model
 import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
+import com.tapflow.core.model.common.OverlaySizeOption
 import com.tapflow.core.model.condition.ColorTarget
 import com.tapflow.core.model.condition.ConditionGroup
 import com.tapflow.core.model.condition.ConditionLeaf
@@ -201,5 +202,47 @@ class DomainModelValidationTest {
     val exactSquare = makeItem(1800, 1800)
     assertEquals(ScreenOrientation.SQUARE_UNFOLDED, exactSquare.screenOrientation)
     assertEquals("Unfolded (Square)", exactSquare.orientationSubHint)
+  }
+
+  @Test
+  fun overlaySizeOptionMetricsAndSerialization() {
+    assertEquals(
+      listOf(
+        OverlaySizeOption.TINY,
+        OverlaySizeOption.COMPACT,
+        OverlaySizeOption.MEDIUM,
+        OverlaySizeOption.LARGE,
+      ),
+      OverlaySizeOption.entries,
+    )
+    assertEquals(28, OverlaySizeOption.TINY.buttonSizeDp)
+    assertEquals(16, OverlaySizeOption.TINY.iconSizeDp)
+    assertEquals(28, OverlaySizeOption.TINY.bubbleSizeDp)
+    assertEquals(8, OverlaySizeOption.TINY.counterTextSp)
+    assertEquals(2, OverlaySizeOption.TINY.paddingDp)
+
+    assertEquals(34, OverlaySizeOption.COMPACT.buttonSizeDp)
+    assertEquals(19, OverlaySizeOption.COMPACT.iconSizeDp)
+    assertEquals(34, OverlaySizeOption.COMPACT.bubbleSizeDp)
+    assertEquals(10, OverlaySizeOption.COMPACT.counterTextSp)
+    assertEquals(3, OverlaySizeOption.COMPACT.paddingDp)
+
+    assertEquals(42, OverlaySizeOption.MEDIUM.buttonSizeDp)
+    assertEquals(22, OverlaySizeOption.MEDIUM.iconSizeDp)
+    assertEquals(42, OverlaySizeOption.MEDIUM.bubbleSizeDp)
+    assertEquals(11, OverlaySizeOption.MEDIUM.counterTextSp)
+    assertEquals(4, OverlaySizeOption.MEDIUM.paddingDp)
+
+    assertEquals(50, OverlaySizeOption.LARGE.buttonSizeDp)
+    assertEquals(26, OverlaySizeOption.LARGE.iconSizeDp)
+    assertEquals(50, OverlaySizeOption.LARGE.bubbleSizeDp)
+    assertEquals(12, OverlaySizeOption.LARGE.counterTextSp)
+    assertEquals(6, OverlaySizeOption.LARGE.paddingDp)
+
+    OverlaySizeOption.entries.forEach { option ->
+      val encoded = json.encodeToString(OverlaySizeOption.serializer(), option)
+      val decoded = json.decodeFromString(OverlaySizeOption.serializer(), encoded)
+      assertEquals(option, decoded)
+    }
   }
 }

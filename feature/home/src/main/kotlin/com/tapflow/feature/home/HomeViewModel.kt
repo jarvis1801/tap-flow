@@ -722,6 +722,9 @@ class HomeViewModel @Inject constructor(
         }
         viewModelScope.launch { preferencesRepository.setThemePalette(intent.palette) }
       }
+      is HomeUiIntent.SetOverlaySize -> {
+        viewModelScope.launch { preferencesRepository.setOverlaySize(intent.option) }
+      }
       is HomeUiIntent.SelectLocale -> {
         sendEffect(HomeUiEffect.ApplyAppLocale(intent.locale.languageTag))
       }

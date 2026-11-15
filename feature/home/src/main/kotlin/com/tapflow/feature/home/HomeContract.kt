@@ -8,6 +8,7 @@ import com.tapflow.core.database.repository.InspectGroupWithItems
 import com.tapflow.core.datastore.AppPreferences
 import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.ThemePaletteOption
+import com.tapflow.core.model.common.OverlaySizeOption
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.TrialStatus
 import com.tapflow.core.model.pipeline.Pipeline
@@ -234,6 +235,8 @@ sealed interface HomeUiIntent {
   data class SetDarkMode(val option: DarkModeOption) : HomeUiIntent
 
   data class SetThemePalette(val palette: ThemePaletteOption) : HomeUiIntent
+
+  data class SetOverlaySize(val option: OverlaySizeOption) : HomeUiIntent
 
   data class SelectLocale(val locale: AppLocaleOption) : HomeUiIntent
 

@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import com.tapflow.core.model.action.Point2D
+import com.tapflow.core.model.common.OverlaySizeOption
 import com.tapflow.core.service.engine.RunnerExecutionSnapshot
 import com.tapflow.core.service.projection.ScreenCaptureState
 import dagger.BindsOptionalOf
@@ -56,6 +57,7 @@ data class OverlayUiState(
   val sessionState: OverlaySessionState = OverlaySessionState.STANDBY,
   val isBubbleCollapsed: Boolean = false,
   val isDockedOnRight: Boolean = false,
+  val overlaySize: OverlaySizeOption = OverlaySizeOption.COMPACT,
   val isCaptureActive: Boolean = sessionState == OverlaySessionState.ACTIVE,
   val capturePhase: OverlayCapturePhase = OverlayCapturePhase.IDLE,
   val pickerTargetType: GesturePickerTargetType? = null,
