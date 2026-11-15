@@ -6,9 +6,11 @@ import android.content.Context
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.DeadObjectException
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.os.Process
+import android.os.RemoteException
 import androidx.compose.runtime.Immutable
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayOutputStream
@@ -47,6 +49,9 @@ class ShizukuManager @Inject constructor(
     const val REQUEST_CODE_PERMISSION = 4201
     private const val USER_SERVICE_TAG = "TapFlowShizukuShell"
     private const val APP_OP_PROJECT_MEDIA_STR = "android:project_media"
+    private const val EXIT_SENTINEL_PREFIX = "__TAPFLOW_EXIT_CODE__:"
+    private val PNG_MAGIC =
+      byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
     private val RESUMED_ACTIVITY_PKG_REGEX =
       Regex("""ActivityRecord\{[^}]*\s+(?:u\d+\s+)?([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+)/""")
 
@@ -62,6 +67,17 @@ class ShizukuManager @Inject constructor(
           ?: lines.firstOrNull()
           ?: return null
       return RESUMED_ACTIVITY_PKG_REGEX.find(preferredLine)?.groupValues?.getOrNull(1)
+    }
+
+    internal fun isAsciiPrintable(text: String): Boolean =
+      text.all { it.code in 0x20..0x7E }
+
+    internal fun hasValidPngHeader(bytes: ByteArray): Boolean {
+      if (bytes.size < PNG_MAGIC.size) return false
+      for (i in PNG_MAGIC.indices) {
+        if (bytes[i] != PNG_MAGIC[i]) return false
+      }
+      return true
     }
   }
 
@@ -135,6 +151,45 @@ class ShizukuManager @Inject constructor(
     refreshDiagnostics()
   }
 
+  /**
+   * Performs a live synchronous check of Shizuku binder reachability and permission grant,
+   * automatically updating [diagnosticState] if Shizuku stopped or permission was revoked.
+   */
+  fun isReadyNow(): Boolean {
+    val running = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
+    val granted =
+      if (running) {
+        runCatching {
+          Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+        }.getOrDefault(false)
+      } else {
+        false
+      }
+    if (!running || !granted) {
+      if (!running) {
+        shellService = null
+      }
+    }
+    val binderAlive = running && granted && (shellService?.asBinder()?.isBinderAlive == true)
+    val current = _diagnosticState.value
+    val installed = if (running) true else current.isInstalled
+    if (
+      current.isInstalled != installed ||
+      current.isServiceRunning != running ||
+      current.isPermissionGranted != granted ||
+      current.isUserServiceBound != binderAlive
+    ) {
+      _diagnosticState.value =
+        current.copy(
+          isInstalled = installed,
+          isServiceRunning = running,
+          isPermissionGranted = granted,
+          isUserServiceBound = binderAlive,
+        )
+    }
+    return running && granted
+  }
+
   fun refreshDiagnostics(): ShizukuDiagnosticState {
     val installed = isShizukuInstalled()
     val running = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
@@ -146,12 +201,15 @@ class ShizukuManager @Inject constructor(
       } else {
         false
       }
+    if (!running) {
+      shellService = null
+    }
     val updated =
       ShizukuDiagnosticState(
         isInstalled = installed,
         isServiceRunning = running,
         isPermissionGranted = granted,
-        isUserServiceBound = shellService?.asBinder()?.isBinderAlive == true,
+        isUserServiceBound = running && granted && (shellService?.asBinder()?.isBinderAlive == true),
         isProjectMediaAllowed =
           checkProjectMediaViaAppOpsManager() || _diagnosticState.value.isProjectMediaAllowed,
       )
@@ -163,11 +221,7 @@ class ShizukuManager @Inject constructor(
     val state = refreshDiagnostics()
     if (state.isServiceRunning && !state.isPermissionGranted) {
       runCatching {
-        if (!Shizuku.shouldShowRequestPermissionRationale()) {
-          Shizuku.requestPermission(REQUEST_CODE_PERMISSION)
-        } else {
-          Shizuku.requestPermission(REQUEST_CODE_PERMISSION)
-        }
+        Shizuku.requestPermission(REQUEST_CODE_PERMISSION)
       }
     }
   }
@@ -185,38 +239,85 @@ class ShizukuManager @Inject constructor(
     _diagnosticState.update { it.copy(isUserServiceBound = false) }
   }
 
-  suspend fun tap(x: Int, y: Int): Boolean =
-    execShellCode("input tap $x $y") == 0
+  suspend fun tap(x: Int, y: Int): Result<Unit> =
+    execShellCodeResult("input tap $x $y")
 
-  suspend fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long): Boolean =
-    execShellCode("input swipe $x1 $y1 $x2 $y2 ${durationMs.coerceAtLeast(1L)}") == 0
+  suspend fun swipe(x1: Int, y1: Int, x2: Int, y2: Int, durationMs: Long): Result<Unit> =
+    execShellCodeResult("input swipe $x1 $y1 $x2 $y2 ${durationMs.coerceAtLeast(1L)}")
 
-  suspend fun inputText(text: String): Boolean {
+  suspend fun inputText(text: String): Result<Unit> {
+    if (!isAsciiPrintable(text)) {
+      return Result.failure(
+        IllegalArgumentException("Shizuku shell 'input text' supports ASCII printable characters only."),
+      )
+    }
+    if (text.isEmpty()) {
+      return if (isReadyNow()) Result.success(Unit)
+      else Result.failure(IllegalStateException("Shizuku is not ready."))
+    }
     val escaped = shellEscapeForInputText(text)
-    return execShellCode("input text $escaped") == 0
+    return execShellCodeResult("input text $escaped")
   }
 
-  suspend fun sendKeyEvent(androidKeyCode: Int): Boolean =
-    execShellCode("input keyevent $androidKeyCode") == 0
+  suspend fun sendKeyEvent(androidKeyCode: Int): Result<Unit> =
+    execShellCodeResult("input keyevent $androidKeyCode")
 
-  suspend fun forceStopApp(packageName: String): Boolean {
-    if (packageName.isBlank()) return false
+  suspend fun forceStopApp(packageName: String): Result<Unit> {
+    if (packageName.isBlank()) {
+      return Result.failure(IllegalArgumentException("Package name is blank."))
+    }
     val safePkg = packageName.replace(Regex("[^A-Za-z0-9._]"), "")
-    return execShellCode("am force-stop $safePkg") == 0
+    if (safePkg.isBlank()) {
+      return Result.failure(IllegalArgumentException("Package name contains no valid characters."))
+    }
+    return execShellCodeResult("am force-stop $safePkg")
   }
 
-  suspend fun readClipboardText(): String? {
-    val output = execShellOutput("cmd clipboard get-text")
-    return output?.takeIf { !it.startsWith("Error") && !it.contains("Unknown command") }
+  suspend fun readClipboardText(): Result<String> {
+    val rawResult =
+      execShellOutputResult(
+        "(cmd clipboard get-text); printf '\\n$EXIT_SENTINEL_PREFIX%d' \$?",
+      )
+    val raw = rawResult.getOrElse { return Result.failure(it) }
+    val sentinelIdx = raw.lastIndexOf(EXIT_SENTINEL_PREFIX)
+    if (sentinelIdx >= 0) {
+      val code =
+        raw.substring(sentinelIdx + EXIT_SENTINEL_PREFIX.length)
+          .lineSequence()
+          .firstOrNull()
+          ?.trim()
+          ?.toIntOrNull()
+          ?: -1
+      val text = raw.substring(0, sentinelIdx).trimEnd('\r', '\n')
+      if (code != 0) {
+        return Result.failure(IllegalStateException("Shizuku clipboard read failed (exit=$code): $text"))
+      }
+      if (
+        text.startsWith("Error", ignoreCase = true) ||
+        text.contains("Unknown command", ignoreCase = true) ||
+        text.contains("SecurityException", ignoreCase = true)
+      ) {
+        return Result.failure(IllegalStateException("Shizuku clipboard read returned error: $text"))
+      }
+      return Result.success(text)
+    }
+    if (
+      raw.startsWith("Error", ignoreCase = true) ||
+      raw.contains("Unknown command", ignoreCase = true) ||
+      raw.contains("SecurityException", ignoreCase = true)
+    ) {
+      return Result.failure(IllegalStateException("Shizuku clipboard read returned error: $raw"))
+    }
+    return Result.success(raw)
   }
 
   suspend fun queryResumedActivityPackage(): String? {
-    if (!diagnosticState.value.isFullyReady) return null
+    if (!isReadyNow()) return null
     val output =
       withTimeoutOrNull(450L) {
-        execShellOutput(
+        execShellOutputResult(
           "dumpsys activity activities | grep -E 'topResumedActivity|mResumedActivity|ResumedActivity'",
-        )
+        ).getOrNull()
       } ?: return null
     return parseResumedActivityPackage(output)
   }
@@ -224,22 +325,23 @@ class ShizukuManager @Inject constructor(
   suspend fun grantProjectMediaAppOp(): Result<Boolean> =
     withContext(Dispatchers.IO) {
       runCatching {
-        if (!refreshDiagnostics().isFullyReady) {
+        if (!isReadyNow()) {
           error("Shizuku is not ready.")
         }
         val pkg = context.packageName
-        var exitCode = execShellCode("cmd appops set $pkg PROJECT_MEDIA allow")
-        if (exitCode != 0) {
-          exitCode = execShellCode("appops set $pkg PROJECT_MEDIA allow")
+        var cmdResult = execShellCodeResult("cmd appops set $pkg PROJECT_MEDIA allow")
+        if (cmdResult.isFailure) {
+          cmdResult = execShellCodeResult("appops set $pkg PROJECT_MEDIA allow")
         }
-        if (exitCode != 0) {
-          error("Shizuku shell failed to grant PROJECT_MEDIA (exit=$exitCode).")
-        }
+        cmdResult.getOrThrow()
+
         val output =
-          execShellOutput("cmd appops get $pkg PROJECT_MEDIA")
+          execShellOutputResult("cmd appops get $pkg PROJECT_MEDIA")
+            .getOrNull()
             ?.takeIf { it.isNotBlank() }
-            ?: execShellOutput("appops get $pkg PROJECT_MEDIA")
-            .orEmpty()
+            ?: execShellOutputResult("appops get $pkg PROJECT_MEDIA")
+              .getOrNull()
+              .orEmpty()
         val allowed = parseAppOpsGetAllowed(output) || checkProjectMediaViaAppOpsManager()
         _diagnosticState.update { it.copy(isProjectMediaAllowed = allowed) }
         allowed
@@ -249,19 +351,19 @@ class ShizukuManager @Inject constructor(
   suspend fun revokeProjectMediaAppOp(): Result<Unit> =
     withContext(Dispatchers.IO) {
       runCatching {
-        if (!refreshDiagnostics().isFullyReady) {
+        if (!isReadyNow()) {
           error("Shizuku is not ready.")
         }
         val pkg = context.packageName
-        var exitCode = execShellCode("cmd appops set $pkg PROJECT_MEDIA default")
-        if (exitCode != 0) {
-          exitCode = execShellCode("appops set $pkg PROJECT_MEDIA default")
+        var cmdResult = execShellCodeResult("cmd appops set $pkg PROJECT_MEDIA default")
+        if (cmdResult.isFailure) {
+          cmdResult = execShellCodeResult("appops set $pkg PROJECT_MEDIA default")
         }
-        if (exitCode != 0) {
-          error("Shizuku shell failed to revoke PROJECT_MEDIA (exit=$exitCode).")
-        }
+        cmdResult.getOrThrow()
+
         val stillAllowed =
-          execShellOutput("cmd appops get $pkg PROJECT_MEDIA")
+          execShellOutputResult("cmd appops get $pkg PROJECT_MEDIA")
+            .getOrNull()
             ?.takeIf { it.isNotBlank() }
             ?.let { parseAppOpsGetAllowed(it) }
             ?: checkProjectMediaViaAppOpsManager()
@@ -273,11 +375,12 @@ class ShizukuManager @Inject constructor(
     withContext(Dispatchers.IO) {
       val pkg = context.packageName
       val allowed =
-        if (refreshDiagnostics().isFullyReady) {
+        if (isReadyNow()) {
           val output =
-            execShellOutput("cmd appops get $pkg PROJECT_MEDIA")
+            execShellOutputResult("cmd appops get $pkg PROJECT_MEDIA")
+              .getOrNull()
               ?.takeIf { it.isNotBlank() }
-              ?: execShellOutput("appops get $pkg PROJECT_MEDIA")
+              ?: execShellOutputResult("appops get $pkg PROJECT_MEDIA").getOrNull()
           if (!output.isNullOrBlank()) {
             parseAppOpsGetAllowed(output)
           } else {
@@ -304,36 +407,115 @@ class ShizukuManager @Inject constructor(
       mode == AppOpsManager.MODE_ALLOWED
     }.getOrDefault(false)
 
-  suspend fun captureSilentScreenshotPngBytes(): ByteArray? =
+  suspend fun captureSilentScreenshotPngBytes(): Result<ByteArray> =
     withContext(Dispatchers.IO) {
-      val service = ensureService() ?: return@withContext null
-      runCatching {
-        val pfd = service.captureScreencapPipe() ?: return@withContext null
-        ParcelFileDescriptor.AutoCloseInputStream(pfd).use { input ->
-          val buffer = ByteArrayOutputStream(256 * 1024)
-          input.copyTo(buffer)
-          buffer.toByteArray().takeIf { it.isNotEmpty() }
+      if (!isReadyNow()) {
+        return@withContext Result.failure(IllegalStateException("Shizuku is not ready."))
+      }
+      val service =
+        ensureService()
+          ?: return@withContext Result.failure(IllegalStateException("Shizuku user service unavailable."))
+      try {
+        val pfd =
+          service.captureScreencapPipe()
+            ?: return@withContext Result.failure(IllegalStateException("Shizuku screencap pipe returned null."))
+        val bytes =
+          ParcelFileDescriptor.AutoCloseInputStream(pfd).use { input ->
+            val buffer = ByteArrayOutputStream(256 * 1024)
+            input.copyTo(buffer)
+            buffer.toByteArray()
+          }
+        if (!hasValidPngHeader(bytes)) {
+          Result.failure(IllegalStateException("Shizuku screencap did not return a valid PNG stream (size=${bytes.size})."))
+        } else {
+          Result.success(bytes)
         }
-      }.getOrNull()
+      } catch (e: DeadObjectException) {
+        handleBinderDeadException()
+        Result.failure(e)
+      } catch (e: RemoteException) {
+        handleBinderDeadException()
+        Result.failure(e)
+      } catch (e: SecurityException) {
+        refreshDiagnostics()
+        Result.failure(e)
+      } catch (t: Throwable) {
+        Result.failure(t)
+      }
     }
 
-  private suspend fun execShellCode(command: String): Int =
+  private suspend fun execShellCodeResult(command: String): Result<Unit> =
     withContext(Dispatchers.IO) {
-      val service = ensureService() ?: return@withContext -1
-      runCatching { service.execCommand(command) }.getOrDefault(-1)
+      if (!isReadyNow()) {
+        return@withContext Result.failure(IllegalStateException("Shizuku is not ready."))
+      }
+      val service =
+        ensureService()
+          ?: return@withContext Result.failure(IllegalStateException("Shizuku user service unavailable."))
+      try {
+        val exitCode = service.execCommand(command)
+        if (exitCode == 0) {
+          Result.success(Unit)
+        } else {
+          Result.failure(IllegalStateException("Shizuku command exited with code $exitCode: $command"))
+        }
+      } catch (e: DeadObjectException) {
+        handleBinderDeadException()
+        Result.failure(e)
+      } catch (e: RemoteException) {
+        handleBinderDeadException()
+        Result.failure(e)
+      } catch (e: SecurityException) {
+        refreshDiagnostics()
+        Result.failure(e)
+      } catch (t: Throwable) {
+        Result.failure(t)
+      }
     }
 
-  private suspend fun execShellOutput(command: String): String? =
+  private suspend fun execShellOutputResult(command: String): Result<String> =
     withContext(Dispatchers.IO) {
-      val service = ensureService() ?: return@withContext null
-      runCatching { service.execCommandOutput(command) }.getOrNull()
+      if (!isReadyNow()) {
+        return@withContext Result.failure(IllegalStateException("Shizuku is not ready."))
+      }
+      val service =
+        ensureService()
+          ?: return@withContext Result.failure(IllegalStateException("Shizuku user service unavailable."))
+      try {
+        val output = service.execCommandOutput(command)
+        if (output == null) {
+          Result.failure(IllegalStateException("Shizuku command returned null output."))
+        } else {
+          Result.success(output)
+        }
+      } catch (e: DeadObjectException) {
+        handleBinderDeadException()
+        Result.failure(e)
+      } catch (e: RemoteException) {
+        handleBinderDeadException()
+        Result.failure(e)
+      } catch (e: SecurityException) {
+        refreshDiagnostics()
+        Result.failure(e)
+      } catch (t: Throwable) {
+        Result.failure(t)
+      }
     }
+
+  private fun handleBinderDeadException() {
+    shellService = null
+    pendingBindDeferred?.complete(false)
+    pendingBindDeferred = null
+    refreshDiagnostics()
+  }
 
   private suspend fun ensureService(): IShizukuShellService? {
+    if (!isReadyNow()) return null
     val existing = shellService
     if (existing != null && existing.asBinder().isBinderAlive) return existing
 
     return bindMutex.withLock {
+      if (!isReadyNow()) return@withLock null
       val recheck = shellService
       if (recheck != null && recheck.asBinder().isBinderAlive) return@withLock recheck
 

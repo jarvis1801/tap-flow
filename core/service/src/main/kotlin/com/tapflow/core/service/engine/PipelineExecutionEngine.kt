@@ -227,7 +227,7 @@ class PipelineExecutionEngine @Inject constructor(
     useShizukuForceStop: Boolean,
   ) {
     if (recoveryPackageName.isNullOrBlank()) return
-    if (useShizukuForceStop && shizukuManager.diagnosticState.value.isFullyReady) {
+    if (useShizukuForceStop && shizukuManager.isReadyNow()) {
       shizukuManager.forceStopApp(recoveryPackageName)
       delay(400L)
     }

@@ -3,7 +3,9 @@ package com.tapflow.core.service.accessibility
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Path
+import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
@@ -49,6 +51,8 @@ interface AccessibilityExecutorHost {
   fun findAnyEditableNode(): AccessibilityNodeInfo?
 
   fun resolveForegroundPackageNow(): String?
+
+  fun takeScreenshotCompat(onResult: (Bitmap?) -> Unit): Boolean
 }
 
 @Singleton
@@ -140,7 +144,7 @@ class AccessibilityManagerBridge @Inject constructor(
       return fromHost
     }
 
-    if (shizukuManager.diagnosticState.value.isFullyReady) {
+    if (shizukuManager.isReadyNow()) {
       val fromShizuku = shizukuManager.queryResumedActivityPackage()
       if (!isExcludedForegroundPackage(fromShizuku, imePackages)) {
         lastValidForegroundPackage = fromShizuku
@@ -383,7 +387,33 @@ class AccessibilityManagerBridge @Inject constructor(
     return dispatchGestureAsync(builder.build(), timeoutMs = maxDurationMs + 5_000L)
   }
 
+  suspend fun takeScreenshotBitmap(timeoutMs: Long = 3_000L): Bitmap? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+    val activeHost = host ?: return null
+    return withTimeoutOrNull(timeoutMs.coerceAtLeast(500L)) {
+      suspendCancellableCoroutine { continuation ->
+        val initiated =
+          activeHost.takeScreenshotCompat { bitmap ->
+            if (continuation.isActive) {
+              continuation.resume(bitmap)
+            } else {
+              bitmap?.recycle()
+            }
+          }
+        if (!initiated && continuation.isActive) {
+          continuation.resume(null)
+        }
+      }
+    }
+  }
+
   fun performGlobalAction(keyType: SystemKeyType): Boolean {
+    if (keyType == SystemKeyType.VOLUME_UP) {
+      return host?.adjustVolume(raise = true) ?: adjustVolumeDirect(raise = true)
+    }
+    if (keyType == SystemKeyType.VOLUME_DOWN) {
+      return host?.adjustVolume(raise = false) ?: adjustVolumeDirect(raise = false)
+    }
     val activeHost = host ?: return false
     return when (keyType) {
       SystemKeyType.HOME -> activeHost.performGlobalActionCompat(AccessibilityService.GLOBAL_ACTION_HOME)
@@ -394,9 +424,15 @@ class AccessibilityManagerBridge @Inject constructor(
       SystemKeyType.QUICK_SETTINGS -> activeHost.performGlobalActionCompat(AccessibilityService.GLOBAL_ACTION_QUICK_SETTINGS)
       SystemKeyType.TAKE_SCREENSHOT ->
         activeHost.performGlobalActionCompat(AccessibilityService.GLOBAL_ACTION_TAKE_SCREENSHOT)
-      SystemKeyType.VOLUME_UP -> activeHost.adjustVolume(raise = true)
-      SystemKeyType.VOLUME_DOWN -> activeHost.adjustVolume(raise = false)
+      SystemKeyType.VOLUME_UP, SystemKeyType.VOLUME_DOWN -> false
     }
+  }
+
+  private fun adjustVolumeDirect(raise: Boolean): Boolean {
+    val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+    val direction = if (raise) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
+    audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
+    return true
   }
 
   fun setTextOnFocusedNode(text: String, clearExisting: Boolean = false): Boolean {

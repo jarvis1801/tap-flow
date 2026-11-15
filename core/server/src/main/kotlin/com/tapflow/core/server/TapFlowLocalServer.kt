@@ -1,6 +1,7 @@
 package com.tapflow.core.server
 
 import android.graphics.Bitmap
+import android.os.Build
 import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.database.TapFlowJson
 import com.tapflow.core.database.repository.ScriptRepository
@@ -11,6 +12,7 @@ import com.tapflow.core.model.entitlement.ProFeatureGate
 import com.tapflow.core.model.ipc.WsMessage
 import com.tapflow.core.model.ipc.WsMessageType
 import com.tapflow.core.model.script.Script
+import com.tapflow.core.service.accessibility.AccessibilityManagerBridge
 import com.tapflow.core.service.engine.AutomationRunnerEngine
 import com.tapflow.core.service.engine.RunnerControlHub
 import com.tapflow.core.service.projection.MediaProjectionBridge
@@ -67,6 +69,7 @@ class TapFlowLocalServer @Inject constructor(
   private val mediaProjectionBridge: MediaProjectionBridge,
   private val visionEngine: ZeroAllocVisionEngine,
   private val shizukuManager: ShizukuManager,
+  private val accessibilityBridge: AccessibilityManagerBridge,
 ) : WsServerDelegate {
 
   companion object {
@@ -316,7 +319,8 @@ class TapFlowLocalServer @Inject constructor(
   private suspend fun isCapturePermitted(): Boolean {
     val prefs = preferencesRepository.getPreferencesOnce()
     return mediaProjectionBridge.isCaptureActive ||
-      (prefs.shizuku.silentScreenshots && shizukuManager.diagnosticState.value.isFullyReady)
+      (prefs.shizuku.silentScreenshots && shizukuManager.isReadyNow()) ||
+      (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && accessibilityBridge.isAccessibilityConnected.value)
   }
 
   private fun startRunnerBroadcastObserver() {

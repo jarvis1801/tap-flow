@@ -1130,9 +1130,9 @@ class OverlayService :
 
       delay(40L)
 
-      // Step 4: Replay Gesture onto underlying app via Accessibility / Shizuku
+      // Step 4: Replay Gesture onto underlying app via Shizuku -> Accessibility fallback
       uiState.update { it.copy(capturePhase = OverlayCapturePhase.REPLAYING) }
-      val useShizuku = prefs.shizuku.shellInputInjection && shizukuManager.diagnosticState.value.isFullyReady
+      val useShizuku = prefs.shizuku.shellInputInjection && shizukuManager.isReadyNow()
       replayGestureToTargetApp(
         startX = startX,
         startY = startY,
@@ -1216,7 +1216,7 @@ class OverlayService :
     when {
       isDrag -> {
         if (useShizuku && points.size <= 2) {
-          if (!shizukuManager.swipe(startX, startY, endX, endY, durationMs)) {
+          if (shizukuManager.swipe(startX, startY, endX, endY, durationMs).isFailure) {
             val path =
               Path().apply {
                 moveTo(startX.toFloat(), startY.toFloat())
@@ -1233,7 +1233,7 @@ class OverlayService :
               }
             }
           val dispatched = accessibilityBridge.dispatchPathSwipe(path, durationMs.coerceIn(60L, 10_000L))
-          if (!dispatched && useShizuku) {
+          if (!dispatched && useShizuku && shizukuManager.isReadyNow()) {
             shizukuManager.swipe(startX, startY, endX, endY, durationMs)
           }
         }
@@ -1241,28 +1241,22 @@ class OverlayService :
 
       isLongPress -> {
         val holdMs = durationMs.coerceIn(LONG_PRESS_THRESHOLD_MS, 20_000L)
-        val dispatched =
+        val shizukuSucceeded =
+          useShizuku &&
+            shizukuManager.swipe(startX, startY, startX, startY, holdMs).isSuccess
+        if (!shizukuSucceeded) {
           accessibilityBridge.executeLongPress(
             x = startX.toFloat(),
             y = startY.toFloat(),
             durationMs = holdMs,
           )
-        if (!dispatched && useShizuku) {
-          shizukuManager.swipe(startX, startY, startX, startY, holdMs)
         }
       }
 
       else -> {
-        if (useShizuku) {
-          if (!shizukuManager.tap(startX, startY)) {
-            accessibilityBridge.tap(startX.toFloat(), startY.toFloat(), durationMs.coerceIn(40L, 250L))
-          }
-        } else {
-          val dispatched =
-            accessibilityBridge.tap(startX.toFloat(), startY.toFloat(), durationMs.coerceIn(40L, 250L))
-          if (!dispatched && useShizuku) {
-            shizukuManager.tap(startX, startY)
-          }
+        val shizukuSucceeded = useShizuku && shizukuManager.tap(startX, startY).isSuccess
+        if (!shizukuSucceeded) {
+          accessibilityBridge.tap(startX.toFloat(), startY.toFloat(), durationMs.coerceIn(40L, 250L))
         }
       }
     }

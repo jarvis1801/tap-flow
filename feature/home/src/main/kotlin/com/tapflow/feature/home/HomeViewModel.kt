@@ -868,10 +868,7 @@ class HomeViewModel @Inject constructor(
     viewModelScope.launch {
       val prefs = preferencesRepository.getPreferencesOnce()
       val isPro = entitlementRepository.isPro()
-      val shizukuReady =
-        isPro &&
-          (shizukuManager.diagnosticState.value.isFullyReady ||
-            shizukuManager.refreshDiagnostics().isFullyReady)
+      val shizukuReady = isPro && shizukuManager.isReadyNow()
 
       // 1) If Shizuku Silent Screenshots is enabled & ready -> skip MediaProjection completely.
       val shizukuSilentReady = shizukuReady && prefs.shizuku.silentScreenshots
@@ -905,7 +902,7 @@ class HomeViewModel @Inject constructor(
       sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.SHIZUKU_INTEGRATION.displayName))
       return false
     }
-    if (!shizukuManager.diagnosticState.value.isFullyReady) {
+    if (!shizukuManager.isReadyNow()) {
       sendEffect(
         HomeUiEffect.ShowSnackbar("Install, start, and grant Shizuku permission first."),
       )

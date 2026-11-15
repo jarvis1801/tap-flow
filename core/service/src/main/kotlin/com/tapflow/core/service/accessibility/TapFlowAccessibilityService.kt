@@ -5,8 +5,10 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.accessibilityservice.GestureDescription
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.media.AudioManager
 import android.os.Build
+import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
@@ -145,6 +147,46 @@ class TapFlowAccessibilityService : AccessibilityService(), AccessibilityExecuto
     val direction = if (raise) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
     audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
     return true
+  }
+
+  override fun takeScreenshotCompat(onResult: (Bitmap?) -> Unit): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+      return false
+    }
+    return runCatching {
+      takeScreenshot(
+        Display.DEFAULT_DISPLAY,
+        mainExecutor,
+        object : TakeScreenshotCallback {
+          override fun onSuccess(screenshot: ScreenshotResult) {
+            val bitmap =
+              try {
+                val hwBitmap =
+                  Bitmap.wrapHardwareBuffer(screenshot.hardwareBuffer, screenshot.colorSpace)
+                if (hwBitmap != null) {
+                  try {
+                    hwBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                  } finally {
+                    hwBitmap.recycle()
+                  }
+                } else {
+                  null
+                }
+              } catch (_: Throwable) {
+                null
+              } finally {
+                runCatching { screenshot.hardwareBuffer.close() }
+              }
+            onResult(bitmap)
+          }
+
+          override fun onFailure(errorCode: Int) {
+            onResult(null)
+          }
+        },
+      )
+      true
+    }.getOrDefault(false)
   }
 
   override fun findFocusedEditableNode(): AccessibilityNodeInfo? {

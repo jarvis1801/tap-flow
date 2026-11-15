@@ -344,17 +344,18 @@ class AutomationRunnerEngine @Inject constructor(
         val baseX = variables.resolveNumericInput(action.x)
         val baseY = variables.resolveNumericInput(action.y)
         val repeats = variables.resolveNumericInput(action.repeatCount).coerceAtLeast(1)
-        val useShizuku = shizukuPrefs.shellInputInjection && shizukuManager.diagnosticState.value.isFullyReady
 
         repeat(repeats) { index ->
           val (tx, ty) = applyJitter(baseX, baseY, action.jitterPx)
           val pressMs = variables.resolveDurationInput(action.pressDuration, minMs = 1L)
+          val shizukuSucceeded =
+            shizukuPrefs.shellInputInjection &&
+              pressMs <= 120L &&
+              shizukuManager.isReadyNow() &&
+              shizukuManager.tap(tx, ty).isSuccess
           val ok =
-            if (useShizuku && pressMs <= 120L) {
-              shizukuManager.tap(tx, ty)
-            } else {
+            shizukuSucceeded ||
               accessibilityBridge.tap(tx.toFloat(), ty.toFloat(), pressMs)
-            }
           if (!ok) throw ScriptFailureException("Tap failed at ($tx, $ty).")
           if (index < repeats - 1) {
             val interval = variables.resolveDurationInput(action.repeatInterval, minMs = 20L)
@@ -369,12 +370,16 @@ class AutomationRunnerEngine @Inject constructor(
         val baseX = variables.resolveNumericInput(action.x)
         val baseY = variables.resolveNumericInput(action.y)
         val (tx, ty) = applyJitter(baseX, baseY, action.jitterPx)
-        val useShizuku = shizukuPrefs.shellInputInjection && shizukuManager.diagnosticState.value.isFullyReady
+        val shizukuReady = shizukuPrefs.shellInputInjection && shizukuManager.isReadyNow()
         val ok =
-          if (useShizuku) {
-            val first = shizukuManager.tap(tx, ty)
-            DelayResolver.delayPauseAware(action.tapIntervalMs.coerceAtLeast(30L), controlHub.isPaused)
-            first && shizukuManager.tap(tx, ty)
+          if (shizukuReady) {
+            if (shizukuManager.tap(tx, ty).isSuccess) {
+              DelayResolver.delayPauseAware(action.tapIntervalMs.coerceAtLeast(30L), controlHub.isPaused)
+              shizukuManager.tap(tx, ty).isSuccess ||
+                accessibilityBridge.tap(tx.toFloat(), ty.toFloat(), action.pressDurationMs)
+            } else {
+              accessibilityBridge.doubleTap(tx.toFloat(), ty.toFloat(), action.pressDurationMs, action.tapIntervalMs)
+            }
           } else {
             accessibilityBridge.doubleTap(tx.toFloat(), ty.toFloat(), action.pressDurationMs, action.tapIntervalMs)
           }
@@ -389,14 +394,24 @@ class AutomationRunnerEngine @Inject constructor(
         val (tx, ty) = applyJitter(baseX, baseY, action.jitterPx)
         val ok =
           when (action.mode) {
-            LongPressMode.STANDARD ->
-              accessibilityBridge.executeLongPress(
-                x = tx.toFloat(),
-                y = ty.toFloat(),
-                durationMs = action.pressDurationMs,
-                microMovementJitter = action.microMovementJitter,
-                amplitudePx = action.microJitterAmplitudePx,
-              )
+            LongPressMode.STANDARD -> {
+              val canTryShizuku =
+                shizukuPrefs.shellInputInjection &&
+                  !action.microMovementJitter &&
+                  action.pressDurationMs <= AccessibilityManagerBridge.MAX_STROKE_SEGMENT_MS &&
+                  shizukuManager.isReadyNow()
+              val shizukuSucceeded =
+                canTryShizuku &&
+                  shizukuManager.swipe(tx, ty, tx, ty, action.pressDurationMs).isSuccess
+              shizukuSucceeded ||
+                accessibilityBridge.executeLongPress(
+                  x = tx.toFloat(),
+                  y = ty.toFloat(),
+                  durationMs = action.pressDurationMs,
+                  microMovementJitter = action.microMovementJitter,
+                  amplitudePx = action.microJitterAmplitudePx,
+                )
+            }
             LongPressMode.PRESS_DOWN_ONLY ->
               accessibilityBridge.pressDownOnly(
                 x = tx.toFloat(),
@@ -440,19 +455,18 @@ class AutomationRunnerEngine @Inject constructor(
         val eyRaw = variables.resolveNumericInput(action.endY)
         val (sx, sy) = applyJitter(sxRaw, syRaw, action.startJitterPx)
         val (ex, ey) = applyJitter(exRaw, eyRaw, action.endJitterPx)
-        val useShizuku =
+        val canTryShizuku =
           shizukuPrefs.shellInputInjection &&
-            shizukuManager.diagnosticState.value.isFullyReady &&
             action.trajectoryMode == SwipeTrajectoryMode.LINEAR &&
             action.holdBeforeDragMs <= 0L &&
-            action.holdAfterDragMs <= 0L
+            action.holdAfterDragMs <= 0L &&
+            shizukuManager.isReadyNow()
+        val shizukuSucceeded =
+          canTryShizuku && shizukuManager.swipe(sx, sy, ex, ey, action.durationMs).isSuccess
 
         val ok =
-          if (useShizuku) {
-            shizukuManager.swipe(sx, sy, ex, ey, action.durationMs)
-          } else {
+          shizukuSucceeded ||
             executeSwipeViaAccessibility(action, sx.toFloat(), sy.toFloat(), ex.toFloat(), ey.toFloat())
-          }
         if (!ok) throw ScriptFailureException("Swipe failed from ($sx,$sy) to ($ex,$ey).")
         summary = "Swipe ${action.trajectoryMode.name} ($sx,$sy)->($ex,$ey)"
         onCountExecuted()
@@ -461,8 +475,14 @@ class AutomationRunnerEngine @Inject constructor(
       is ScriptAction.InputText -> {
         val text = variables.interpolate(action.textTemplate)
         if (action.tapToFocus && action.focusX != null && action.focusY != null) {
-          accessibilityBridge.tap(action.focusX!!.toFloat(), action.focusY!!.toFloat(), 40L)
-          DelayResolver.delayPauseAware(120L, controlHub.isPaused)
+          val fx = action.focusX!!
+          val fy = action.focusY!!
+          val focusTapOk =
+            (shizukuPrefs.shellInputInjection && shizukuManager.isReadyNow() && shizukuManager.tap(fx, fy).isSuccess) ||
+              accessibilityBridge.tap(fx.toFloat(), fy.toFloat(), 40L)
+          if (focusTapOk) {
+            DelayResolver.delayPauseAware(120L, controlHub.isPaused)
+          }
         }
         val ok =
           when (action.engine) {
@@ -477,20 +497,27 @@ class AutomationRunnerEngine @Inject constructor(
               accessibilityBridge.pasteOnFocusedNode()
             }
             TextInjectionEngine.HUMAN_TYPING -> {
-              if (shizukuPrefs.shellInputInjection && shizukuManager.diagnosticState.value.isFullyReady) {
+              val tryShizuku =
+                shizukuPrefs.shellInputInjection &&
+                  isAsciiPrintable(text) &&
+                  shizukuManager.isReadyNow()
+              if (tryShizuku) {
                 if (action.clearExistingText) {
                   accessibilityBridge.setTextOnFocusedNode("", clearExisting = true)
                 }
-                shizukuManager.inputText(text)
+                shizukuManager.inputText(text).isSuccess ||
+                  accessibilityBridge.typeTextProgressively(text, clearExisting = false) ||
+                  accessibilityBridge.setTextOnFocusedNode(text, clearExisting = false)
               } else {
-                accessibilityBridge.typeTextProgressively(text, action.clearExistingText)
+                accessibilityBridge.typeTextProgressively(text, action.clearExistingText) ||
+                  accessibilityBridge.setTextOnFocusedNode(text, action.clearExistingText)
               }
             }
           }
         if (!ok) throw ScriptFailureException("InputText (${action.engine.name}) failed.")
         if (action.postActionKey != PostTextActionKey.NONE) {
           val imeOk = accessibilityBridge.performPostTextImeAction(action.postActionKey)
-          if (!imeOk && shizukuPrefs.enhancedKeyEvents && shizukuManager.diagnosticState.value.isFullyReady) {
+          if (!imeOk && shizukuPrefs.enhancedKeyEvents && shizukuManager.isReadyNow()) {
             shizukuManager.sendKeyEvent(AndroidKeyEvent.KEYCODE_ENTER)
           }
         }
@@ -574,14 +601,15 @@ class AutomationRunnerEngine @Inject constructor(
       }
 
       is ScriptAction.KeyEvent -> {
-        val useShizuku = shizukuPrefs.enhancedKeyEvents && shizukuManager.diagnosticState.value.isFullyReady
         val keyCode = mapToAndroidKeyCode(action.key)
+        val shizukuSucceeded =
+          shizukuPrefs.enhancedKeyEvents &&
+            keyCode != null &&
+            shizukuManager.isReadyNow() &&
+            shizukuManager.sendKeyEvent(keyCode).isSuccess
         val ok =
-          if (useShizuku && keyCode != null) {
-            shizukuManager.sendKeyEvent(keyCode)
-          } else {
+          shizukuSucceeded ||
             accessibilityBridge.performGlobalAction(action.key)
-          }
         if (!ok) throw ScriptFailureException("KeyEvent ${action.key.name} failed.")
         summary = "KeyEvent ${action.key.name}"
         onCountExecuted()
@@ -598,11 +626,14 @@ class AutomationRunnerEngine @Inject constructor(
       }
 
       is ScriptAction.ForceStopApp -> {
-        if (!shizukuPrefs.rootlessForceStop || !shizukuManager.diagnosticState.value.isFullyReady) {
+        if (!shizukuPrefs.rootlessForceStop || !shizukuManager.isReadyNow()) {
           throw ScriptFailureException("ForceStopApp requires Seamless (Shizuku) enabled and active.")
         }
-        val ok = shizukuManager.forceStopApp(action.packageName)
-        if (!ok) throw ScriptFailureException("Failed to force-stop ${action.packageName}.")
+        val forceStopResult = shizukuManager.forceStopApp(action.packageName)
+        if (forceStopResult.isFailure) {
+          val reason = forceStopResult.exceptionOrNull()?.message?.let { " ($it)" }.orEmpty()
+          throw ScriptFailureException("Failed to force-stop ${action.packageName}$reason.")
+        }
         summary = "ForceStop ${action.appLabel.ifBlank { action.packageName }}"
         onCountExecuted()
       }
@@ -929,6 +960,9 @@ class AutomationRunnerEngine @Inject constructor(
     val dy = Random.nextInt(-jitterPx, jitterPx + 1)
     return (x + dx).coerceAtLeast(0) to (y + dy).coerceAtLeast(0)
   }
+
+  private fun isAsciiPrintable(text: String): Boolean =
+    text.all { it.code in 0x20..0x7E }
 
   private fun mapToAndroidKeyCode(key: SystemKeyType): Int? {
     return when (key) {

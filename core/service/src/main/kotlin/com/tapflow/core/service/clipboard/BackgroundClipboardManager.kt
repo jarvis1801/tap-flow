@@ -48,8 +48,8 @@ class BackgroundClipboardManager @Inject constructor(
    * transparent overlay window to gain temporary clipboard focus.
    */
   suspend fun readClipboardText(): String? {
-    if (shizukuManager.diagnosticState.value.isFullyReady) {
-      val shellText = shizukuManager.readClipboardText()
+    if (shizukuManager.isReadyNow()) {
+      val shellText = shizukuManager.readClipboardText().getOrNull()
       if (shellText != null) return shellText
     }
 
