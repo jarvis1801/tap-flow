@@ -99,6 +99,8 @@ sealed interface ScriptEditorUiIntent {
 
   data object SaveScriptClicked : ScriptEditorUiIntent
 
+  data object OpenFlowDiagramClicked : ScriptEditorUiIntent
+
   // Global Delay Sheet
   data class SetGlobalDelaySheetVisible(val visible: Boolean) : ScriptEditorUiIntent
 
@@ -184,6 +186,8 @@ sealed interface ScriptEditorUiIntent {
 
 sealed interface ScriptEditorUiEffect {
   data object NavigateBack : ScriptEditorUiEffect
+
+  data class NavigateToFlowDiagram(val scriptId: String) : ScriptEditorUiEffect
 
   data class NavigateToPaywall(val sourceFeature: String) : ScriptEditorUiEffect
 

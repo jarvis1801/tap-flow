@@ -20,4 +20,19 @@
     <string name="else_if_branch_nickname_label">Branch Nickname (Optional)</string>
     <string name="else_if_branch_nickname_placeholder">e.g. If Skip Button Appears</string>
     <string name="loop_block_action_list_label">Repeat these steps:</string>
+    <string name="flow_button_label">Flow</string>
+    <string name="flow_preview_subtitle">Flow Preview</string>
+    <string name="flow_read_only_badge">Read-Only</string>
+    <string name="flow_fit_button">Fit</string>
+    <string name="flow_zoom_100_button">100%</string>
+    <string name="flow_start_label">Start</string>
+    <string name="flow_end_label">End</string>
+    <string name="flow_no_steps_yet">No steps yet</string>
+    <string name="flow_branch_yes">Yes</string>
+    <string name="flow_branch_no">No</string>
+    <string name="flow_else_header">If none match</string>
+    <string name="flow_break_loop">Break Loop</string>
+    <string name="flow_next_cycle">Next Cycle</string>
+    <string name="flow_end_script">End Script</string>
+    <string name="flow_navigate_back_cd">Navigate back</string>
 </resources>

@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.rounded.AccountTree
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DataObject
@@ -49,6 +50,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -71,6 +73,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,6 +94,7 @@ import kotlinx.coroutines.launch
 fun ScriptEditorScreen(
   onNavigateBack: () -> Unit,
   onNavigateToPaywall: (String) -> Unit,
+  onNavigateToFlowDiagram: (String) -> Unit = {},
   viewModel: ScriptEditorViewModel = hiltViewModel(),
 ) {
   val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -108,6 +112,7 @@ fun ScriptEditorScreen(
           snackbarHostState.currentSnackbarData?.dismiss()
           onNavigateBack()
         }
+        is ScriptEditorUiEffect.NavigateToFlowDiagram -> onNavigateToFlowDiagram(effect.scriptId)
         is ScriptEditorUiEffect.NavigateToPaywall -> onNavigateToPaywall(effect.sourceFeature)
         is ScriptEditorUiEffect.LaunchOverlayGesturePicker -> {
           val intent =
@@ -496,12 +501,29 @@ private fun ScriptEditorTopHeaderBar(
               Box(
                 modifier =
                   Modifier
-                    .padding(end = 8.dp)
+                    .padding(end = 6.dp)
                     .size(8.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary),
               )
             }
+
+            OutlinedButton(
+              onClick = { onIntent(ScriptEditorUiIntent.OpenFlowDiagramClicked) },
+              enabled = !state.isLoading,
+              contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+              modifier = Modifier.heightIn(min = 40.dp).testTag("open_flow_diagram_button"),
+            ) {
+              Icon(
+                imageVector = Icons.Rounded.AccountTree,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+              )
+              Spacer(modifier = Modifier.width(5.dp))
+              Text(stringResource(R.string.flow_button_label))
+            }
+
+            Spacer(modifier = Modifier.width(6.dp))
 
             FilledTonalButton(
               onClick = { onIntent(ScriptEditorUiIntent.SaveScriptClicked) },

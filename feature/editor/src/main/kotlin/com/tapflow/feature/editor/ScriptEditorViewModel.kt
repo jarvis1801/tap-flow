@@ -52,6 +52,7 @@ class ScriptEditorViewModel @Inject constructor(
   private val accessibilityManagerBridge: AccessibilityManagerBridge,
   private val gesturePickerBridge: GesturePickerBridge,
   private val installedAppsProvider: InstalledAppsProvider,
+  private val flowPreviewBridge: ScriptFlowPreviewBridge,
 ) : ViewModel() {
 
   private val argScriptId: String? = savedStateHandle["scriptId"]
@@ -185,6 +186,21 @@ class ScriptEditorViewModel @Inject constructor(
       }
       ScriptEditorUiIntent.SaveScriptClicked -> {
         persistScript(popOnSuccess = true)
+      }
+      ScriptEditorUiIntent.OpenFlowDiagramClicked -> {
+        val state = _uiState.value
+        val draft =
+          Script(
+            id = state.scriptId,
+            title = state.title.trim().ifBlank { "Untitled Script" },
+            description = state.description.trim(),
+            tags = state.tags,
+            globalDelay = state.globalDelay.clamped(),
+            variables = state.variables,
+            actions = state.actions,
+          )
+        flowPreviewBridge.publishDraft(draft)
+        sendEffect(ScriptEditorUiEffect.NavigateToFlowDiagram(state.scriptId))
       }
 
       // Global Delay

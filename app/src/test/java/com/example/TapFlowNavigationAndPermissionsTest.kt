@@ -33,6 +33,8 @@ class TapFlowNavigationAndPermissionsTest {
         Route.Home(HomeTab.INSPECT),
         Route.Paywall(sourceFeature = "Image Match"),
         Route.ScriptEditor(scriptId = "script-123"),
+        Route.ScriptFlow(scriptId = "script-123"),
+        Route.ScriptFlow(scriptId = null),
         Route.PipelineEditor(pipelineId = null),
         Route.ScriptLog(scriptId = "script-123"),
         Route.PipelineLog(pipelineId = "pipe-456"),

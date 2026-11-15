@@ -20,4 +20,19 @@
     <string name="else_if_branch_nickname_label">分支昵称（选填）</string>
     <string name="else_if_branch_nickname_placeholder">例如：如果出现跳过按钮</string>
     <string name="loop_block_action_list_label">重复执行这些步骤：</string>
+    <string name="flow_button_label">流程图</string>
+    <string name="flow_preview_subtitle">流程预览</string>
+    <string name="flow_read_only_badge">只读</string>
+    <string name="flow_fit_button">适应屏幕</string>
+    <string name="flow_zoom_100_button">100%</string>
+    <string name="flow_start_label">开始</string>
+    <string name="flow_end_label">结束</string>
+    <string name="flow_no_steps_yet">尚未添加步骤</string>
+    <string name="flow_branch_yes">是</string>
+    <string name="flow_branch_no">否</string>
+    <string name="flow_else_header">以上都不符合</string>
+    <string name="flow_break_loop">跳出循环</string>
+    <string name="flow_next_cycle">下次循环</string>
+    <string name="flow_end_script">结束脚本</string>
+    <string name="flow_navigate_back_cd">返回</string>
 </resources>

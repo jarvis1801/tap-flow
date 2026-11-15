@@ -47,6 +47,7 @@ import com.tapflow.core.service.overlay.OverlayLaunchIntents
 import com.tapflow.core.service.projection.MediaProjectionBridge
 import com.tapflow.feature.editor.PipelineEditorScreen
 import com.tapflow.feature.editor.ScriptEditorScreen
+import com.tapflow.feature.editor.ScriptFlowScreen
 import com.tapflow.feature.home.HomeScreen
 import com.tapflow.feature.home.HomeTabType
 import com.tapflow.feature.home.PendingMediaProjectionTarget
@@ -270,6 +271,16 @@ fun TapFlowNavHost(
             launchSingleTop = true
           }
         },
+        onNavigateToFlowDiagram = { scriptId ->
+          navController.navigate(Route.ScriptFlow(scriptId)) {
+            launchSingleTop = true
+          }
+        },
+      )
+    }
+    composable<Route.ScriptFlow> {
+      ScriptFlowScreen(
+        onNavigateBack = { navController.popBackStackSafely() },
       )
     }
     composable<Route.PipelineEditor> {

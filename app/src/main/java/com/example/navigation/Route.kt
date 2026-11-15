@@ -27,6 +27,9 @@ sealed interface Route {
   data class ScriptEditor(val scriptId: String? = null) : Route
 
   @Serializable
+  data class ScriptFlow(val scriptId: String? = null) : Route
+
+  @Serializable
   data class PipelineEditor(val pipelineId: String? = null) : Route
 
   @Serializable
