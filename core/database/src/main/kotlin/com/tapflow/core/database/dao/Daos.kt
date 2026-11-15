@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.tapflow.core.database.entity.ExecutionSessionLogEntity
 import com.tapflow.core.database.entity.InspectGroupEntity
 import com.tapflow.core.database.entity.InspectItemEntity
@@ -95,11 +96,26 @@ interface InspectDao {
   @Query("SELECT COUNT(*) FROM inspect_groups")
   suspend fun countGroups(): Int
 
+  @Query("SELECT COUNT(*) FROM inspect_items")
+  suspend fun countItems(): Int
+
   @Query("DELETE FROM inspect_groups WHERE id = :groupId")
   suspend fun deleteGroupById(groupId: String)
 
   @Query("DELETE FROM inspect_items WHERE id = :itemId")
   suspend fun deleteItemById(itemId: String)
+
+  @Query("DELETE FROM inspect_items")
+  suspend fun deleteAllItems()
+
+  @Query("DELETE FROM inspect_groups")
+  suspend fun deleteAllGroups()
+
+  @Transaction
+  suspend fun clearAllTables() {
+    deleteAllItems()
+    deleteAllGroups()
+  }
 }
 
 @Dao

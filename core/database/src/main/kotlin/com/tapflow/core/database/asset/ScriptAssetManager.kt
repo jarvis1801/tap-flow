@@ -135,6 +135,36 @@ class ScriptAssetManager @Inject constructor(
     return paths
   }
 
+  suspend fun getInspectDiskUsageBytes(): Long =
+    withContext(Dispatchers.IO) {
+      listOf(getInspectScreensDir(), getInspectCropsDir()).sumOf { dir ->
+        dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+      }
+    }
+
+  suspend fun clearInspectDirectories(): Int =
+    withContext(Dispatchers.IO) {
+      var deletedCount = 0
+      listOf(getInspectScreensDir(), getInspectCropsDir()).forEach { dir ->
+        deletedCount += deleteChildrenRecursively(dir)
+      }
+      deletedCount
+    }
+
+  private fun deleteChildrenRecursively(dir: File): Int {
+    val children = dir.listFiles() ?: return 0
+    var deletedCount = 0
+    children.forEach { child ->
+      if (child.isDirectory) {
+        deletedCount += deleteChildrenRecursively(child)
+        child.delete()
+      } else if (child.isFile && child.delete()) {
+        deletedCount++
+      }
+    }
+    return deletedCount
+  }
+
   suspend fun cleanupUnreferencedScriptTemplates(allScripts: List<Script>) {
     withContext(Dispatchers.IO) {
       val activePaths =

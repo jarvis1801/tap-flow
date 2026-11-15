@@ -9,14 +9,23 @@ import com.tapflow.core.model.inspect.InspectGroup
 import com.tapflow.core.model.inspect.InspectItem
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 @Immutable
 data class InspectGroupWithItems(
   val group: InspectGroup,
   val items: List<InspectItem>,
+)
+
+@Immutable
+data class InspectStorageStats(
+  val groupCount: Int = 0,
+  val itemCount: Int = 0,
+  val totalBytes: Long = 0L,
 )
 
 @Singleton
@@ -46,6 +55,28 @@ class InspectRepository @Inject constructor(
   suspend fun getItem(itemId: String): InspectItem? = inspectDao.getItemById(itemId)?.toDomain()
 
   suspend fun countGroups(): Int = inspectDao.countGroups()
+
+  suspend fun getInspectStorageStats(): InspectStorageStats =
+    withContext(Dispatchers.IO) {
+      val groupCount = inspectDao.countGroups()
+      val itemCount = inspectDao.countItems()
+      val totalBytes = scriptAssetManager.getInspectDiskUsageBytes()
+      InspectStorageStats(
+        groupCount = groupCount,
+        itemCount = itemCount,
+        totalBytes = totalBytes,
+      )
+    }
+
+  suspend fun clearAllInspectData(): Result<Int> =
+    withContext(Dispatchers.IO) {
+      runCatching {
+        val deletedItemsCount = inspectDao.countItems()
+        inspectDao.clearAllTables()
+        val deletedFilesCount = scriptAssetManager.clearInspectDirectories()
+        maxOf(deletedItemsCount, deletedFilesCount)
+      }
+    }
 
   suspend fun saveGroup(group: InspectGroup) {
     val normalized =

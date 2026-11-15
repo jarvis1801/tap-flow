@@ -148,6 +148,40 @@ internal fun HomeDialogs(
     )
   }
 
+  if (state.showClearInspectConfirmDialog) {
+    val sizeText = formatInspectStorageSize(state.inspectStorageStats.totalBytes)
+    AlertDialog(
+      onDismissRequest = { onIntent(HomeUiIntent.DismissClearAllInspectData) },
+      title = { Text("Clear All Inspect Images?") },
+      text = {
+        Text(
+          "This will permanently delete all Inspect groups, pixels, crop regions, and screenshots (freeing $sizeText). Saved Scripts and their Image Match templates will NOT be affected.",
+        )
+      },
+      confirmButton = {
+        Button(
+          onClick = { onIntent(HomeUiIntent.ConfirmClearAllInspectData) },
+          colors =
+            ButtonDefaults.buttonColors(
+              containerColor = MaterialTheme.colorScheme.error,
+              contentColor = MaterialTheme.colorScheme.onError,
+            ),
+          modifier = Modifier.testTag("confirm_clear_inspect_button"),
+        ) {
+          Text("Clear All")
+        }
+      },
+      dismissButton = {
+        TextButton(
+          onClick = { onIntent(HomeUiIntent.DismissClearAllInspectData) },
+          modifier = Modifier.testTag("cancel_clear_inspect_button"),
+        ) {
+          Text("Cancel")
+        }
+      },
+    )
+  }
+
   state.importBackupPrompt?.let { prompt ->
     val preview = prompt.preview
     AlertDialog(

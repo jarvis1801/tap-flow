@@ -10,6 +10,7 @@ import com.tapflow.core.database.backup.ImportConflictStrategy
 import com.tapflow.core.database.backup.TapFlowBackupManager
 import com.tapflow.core.database.repository.InspectGroupWithItems
 import com.tapflow.core.database.repository.InspectRepository
+import com.tapflow.core.database.repository.InspectStorageStats
 import com.tapflow.core.database.repository.PipelineRepository
 import com.tapflow.core.database.repository.ScriptRepository
 import com.tapflow.core.datastore.AppPreferences
@@ -69,6 +70,7 @@ class HomeViewModel @Inject constructor(
     val activeTab: HomeTabType = HomeTabType.SCRIPT,
     val searchQuery: String = "",
     val isSearchExpanded: Boolean = false,
+    val inspectStorageStats: InspectStorageStats = InspectStorageStats(),
     val expandedInspectGroupIds: Set<String> = emptySet(),
     val expandedInspectItemIds: Set<String> = emptySet(),
     val isScriptFabExpanded: Boolean = false,
@@ -77,6 +79,8 @@ class HomeViewModel @Inject constructor(
     val deleteScriptPrompt: DeleteScriptPrompt? = null,
     val deletePipelinePrompt: DeletePipelinePrompt? = null,
     val deleteInspectGroupPrompt: DeleteInspectGroupPrompt? = null,
+    val showClearInspectConfirmDialog: Boolean = false,
+    val isClearingInspectData: Boolean = false,
     val importBackupPrompt: ImportBackupPrompt? = null,
     val showTermsDialog: Boolean = false,
     val showPrivacyDialog: Boolean = false,
@@ -127,6 +131,12 @@ class HomeViewModel @Inject constructor(
           localizedProPrice = price,
         )
       }
+
+    viewModelScope.launch {
+      inspectRepository.observeGroupsWithItems().collect {
+        refreshInspectStorageStats()
+      }
+    }
 
     val systemFlow =
       combine(
@@ -233,6 +243,7 @@ class HomeViewModel @Inject constructor(
           pipelines = filteredPipelines,
           totalPipelinesCount = data.pipelines.size,
           inspectGroups = filteredInspectGroups,
+          inspectStorageStats = local.inspectStorageStats,
           expandedInspectGroupIds = local.expandedInspectGroupIds,
           expandedInspectItemIds = local.expandedInspectItemIds,
           serverStatus = system.serverStatus,
@@ -243,6 +254,8 @@ class HomeViewModel @Inject constructor(
           deleteScriptPrompt = local.deleteScriptPrompt,
           deletePipelinePrompt = local.deletePipelinePrompt,
           deleteInspectGroupPrompt = local.deleteInspectGroupPrompt,
+          showClearInspectConfirmDialog = local.showClearInspectConfirmDialog,
+          isClearingInspectData = local.isClearingInspectData,
           importBackupPrompt = local.importBackupPrompt,
           showTermsDialog = local.showTermsDialog,
           showPrivacyDialog = local.showPrivacyDialog,
@@ -264,6 +277,8 @@ class HomeViewModel @Inject constructor(
           if (intent.tab == HomeTabType.SEAMLESS) {
             shizukuManager.refreshDiagnostics()
             viewModelScope.launch { shizukuManager.isProjectMediaAllowed() }
+          } else if (intent.tab == HomeTabType.SETTINGS || intent.tab == HomeTabType.INSPECT) {
+            refreshInspectStorageStats()
           }
         }
       }
@@ -281,6 +296,8 @@ class HomeViewModel @Inject constructor(
         if (intent.tab == HomeTabType.SEAMLESS) {
           shizukuManager.refreshDiagnostics()
           viewModelScope.launch { shizukuManager.isProjectMediaAllowed() }
+        } else if (intent.tab == HomeTabType.SETTINGS || intent.tab == HomeTabType.INSPECT) {
+          refreshInspectStorageStats()
         }
       }
       is HomeUiIntent.SetSearchExpanded -> {
@@ -496,6 +513,7 @@ class HomeViewModel @Inject constructor(
         _localState.update { it.copy(deleteInspectGroupPrompt = null) }
         viewModelScope.launch {
           inspectRepository.deleteGroup(prompt.groupId)
+          refreshInspectStorageStats()
           sendEffect(
             HomeUiEffect.ShowSnackbar("Removed group \"${prompt.groupTitle}\" and PNG assets"),
           )
@@ -507,6 +525,7 @@ class HomeViewModel @Inject constructor(
       is HomeUiIntent.DeleteInspectItem -> {
         viewModelScope.launch {
           inspectRepository.deleteItem(intent.itemId)
+          refreshInspectStorageStats()
           sendEffect(HomeUiEffect.ShowSnackbar("Inspect screenshot deleted"))
         }
       }
@@ -518,6 +537,7 @@ class HomeViewModel @Inject constructor(
       is HomeUiIntent.DeleteInspectCrop -> {
         viewModelScope.launch {
           inspectRepository.deleteCropFromItem(intent.itemId, intent.cropId)
+          refreshInspectStorageStats()
         }
       }
       is HomeUiIntent.OpenInspectStudio -> {
@@ -552,6 +572,7 @@ class HomeViewModel @Inject constructor(
               _localState.update {
                 it.copy(expandedInspectGroupIds = it.expandedInspectGroupIds + item.groupId)
               }
+              refreshInspectStorageStats()
               sendEffect(HomeUiEffect.ShowSnackbar("Imported lossless PNG into Inspect Studio"))
             },
             onFailure = { err ->
@@ -824,6 +845,56 @@ class HomeViewModel @Inject constructor(
       HomeUiIntent.DismissBackupImportPrompt -> {
         _localState.update { it.copy(importBackupPrompt = null) }
       }
+      HomeUiIntent.RefreshInspectStorageStats -> {
+        refreshInspectStorageStats()
+      }
+      HomeUiIntent.RequestClearAllInspectData -> {
+        viewModelScope.launch {
+          val stats = inspectRepository.getInspectStorageStats()
+          _localState.update {
+            it.copy(
+              inspectStorageStats = stats,
+              showClearInspectConfirmDialog = true,
+            )
+          }
+        }
+      }
+      HomeUiIntent.ConfirmClearAllInspectData -> {
+        if (_localState.value.isClearingInspectData) return
+        _localState.update {
+          it.copy(
+            showClearInspectConfirmDialog = false,
+            isClearingInspectData = true,
+          )
+        }
+        viewModelScope.launch {
+          val result = inspectRepository.clearAllInspectData()
+          val refreshed = inspectRepository.getInspectStorageStats()
+          _localState.update {
+            it.copy(
+              inspectStorageStats = refreshed,
+              expandedInspectGroupIds = emptySet(),
+              expandedInspectItemIds = emptySet(),
+              isClearingInspectData = false,
+            )
+          }
+          result.fold(
+            onSuccess = {
+              sendEffect(HomeUiEffect.ShowSnackbar("Cleared all inspect images"))
+            },
+            onFailure = { err ->
+              sendEffect(
+                HomeUiEffect.ShowSnackbar(
+                  err.message ?: "Failed to clear inspect images",
+                ),
+              )
+            },
+          )
+        }
+      }
+      HomeUiIntent.DismissClearAllInspectData -> {
+        _localState.update { it.copy(showClearInspectConfirmDialog = false) }
+      }
       is HomeUiIntent.SetTermsDialogVisible -> {
         _localState.update { it.copy(showTermsDialog = intent.visible) }
       }
@@ -923,6 +994,13 @@ class HomeViewModel @Inject constructor(
       return false
     }
     return true
+  }
+
+  private fun refreshInspectStorageStats() {
+    viewModelScope.launch {
+      val stats = inspectRepository.getInspectStorageStats()
+      _localState.update { it.copy(inspectStorageStats = stats) }
+    }
   }
 
   private fun sendEffect(effect: HomeUiEffect) {

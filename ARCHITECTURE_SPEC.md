@@ -157,6 +157,8 @@ Tabs:
   # TAB 3: INSPECT
   # -------------------------------------------------------------
   - Inspect Tab:
+      Top App Bar Overflow (`⋮` Menu):
+        - `Clear All Inspect Data`: Available to all users; opens confirmation dialog (`Clear All Inspect Images?`) and wipes Inspect DB tables plus `inspect_screens` / `inspect_crops` directories without touching `script_templates`.
       Search & Filter:
         - Multi-field Search Bar filtering by Group Title, Tag, or Foreground App Name.
       Hierarchical List (Inspect Groups & Items):
@@ -239,6 +241,9 @@ Tabs:
         - Localization:
             - Language Picker: English / Traditional Chinese (繁體中文) / Simplified Chinese (简体中文).
             - Implementation: Uses `AppCompatDelegate.setApplicationLocales()` (`MainActivity : AppCompatActivity()`, `Theme.AppCompat.DayNight.NoActionBar`, `AppLocalesMetadataHolderService`, `generateLocaleConfig = true`).
+        - Storage & Cache (Free for ALL users — Free, Trial, and Pro):
+            - Displays live Inspect storage usage (`Inspect Screenshots: XX.X MB (N items)` calculated on `Dispatchers.IO` from `inspect_screens` & `inspect_crops` plus Room counts).
+            - `[Clear All]` Button (disabled when `0 items` and `0 B`): Opens a destructive confirmation `AlertDialog` (`"Clear All Inspect Images?"`) and deletes all `InspectGroup` / `InspectItem` Room rows and all files inside `inspect_screens` & `inspect_crops` while strictly preserving Script-owned `script_templates` assets.
         - Data Backup & Transfer (Lifetime Pro Only — Excluded from 7-Day Trial):
             - Entitlement Guard: Strictly requires `EntitlementState.ProLifetime` (`ProFeatureGate.DATA_BACKUP`) and is excluded from the 7-Day Free Trial. Free and 7-Day Trial users see `"Requires Lifetime Pro purchase (not included in 7-day trial)."` and tapping Export/Import routes directly to `Route.Paywall` without opening the SAF file picker.
             - Export Data:

@@ -1,10 +1,15 @@
 package com.tapflow.feature.editor
 
 import androidx.compose.runtime.Immutable
+import com.tapflow.core.model.action.ClipboardActionType
 import com.tapflow.core.model.action.LoopMode
 import com.tapflow.core.model.action.ScriptAction
+import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
+import com.tapflow.core.model.common.PostActionDelay
+import com.tapflow.core.model.condition.ConditionGroup
 import com.tapflow.core.model.script.Script
+import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
 
@@ -27,6 +32,13 @@ enum class FlowEdgeKind {
   MERGE_RAIL,
   LOOP_BACK,
 }
+
+@Immutable
+data class FlowDelayBadge(
+  val label: String,
+  val isMutedOff: Boolean = false,
+  val isOverride: Boolean = false,
+)
 
 @Immutable
 sealed interface FlowNode {
@@ -74,6 +86,7 @@ sealed interface FlowNode {
     val action: ScriptAction,
     val title: String,
     val summary: String,
+    val postDelayBadge: FlowDelayBadge? = null,
   ) : FlowNode
 
   @Immutable
@@ -83,9 +96,17 @@ sealed interface FlowNode {
     override val y: Float,
     override val width: Float,
     override val height: Float,
+    val blockId: String,
     val isElseIf: Boolean,
     val title: String,
     val conditionSummary: String,
+    val conditionRoot: ConditionGroup,
+    val canToggleCollapse: Boolean = false,
+    val isCollapsed: Boolean = false,
+    val collapsedStepCount: Int = 0,
+    val branchActionCount: Int = 0,
+    val elseIfCount: Int = 0,
+    val elseActionCount: Int = 0,
   ) : FlowNode
 
   @Immutable
@@ -95,6 +116,8 @@ sealed interface FlowNode {
     override val y: Float,
     override val width: Float,
     override val height: Float,
+    val parentIfName: String = "",
+    val branchActionCount: Int = 0,
   ) : FlowNode
 
   @Immutable
@@ -104,8 +127,12 @@ sealed interface FlowNode {
     override val y: Float,
     override val width: Float,
     override val height: Float,
+    val blockId: String,
     val title: String,
     val summary: String,
+    val loopAction: ScriptAction.LoopBlock,
+    val isCollapsed: Boolean = false,
+    val collapsedStepCount: Int = 0,
   ) : FlowNode
 
   @Immutable
@@ -116,6 +143,7 @@ sealed interface FlowNode {
     override val width: Float,
     override val height: Float,
     val terminationType: FlowTerminationType,
+    val action: ScriptAction,
   ) : FlowNode
 }
 
@@ -138,6 +166,8 @@ data class FlowEdge(
   val hasEndDot: Boolean = false,
   val labelKind: FlowBranchLabelKind? = null,
   val labelAnchor: FlowPoint? = null,
+  val delayBadge: FlowDelayBadge? = null,
+  val delayBadgeAnchor: FlowPoint? = null,
 )
 
 enum class FlowBranchLabelKind {
@@ -153,45 +183,51 @@ data class FlowLayoutResult(
   val containers: List<FlowContainer>,
   val totalWidth: Float,
   val totalHeight: Float,
+  val globalDelay: DelayConfig = DelayConfig.Fixed(0L),
 )
 
 /**
  * Deterministic 2-pass recursive AST bounding-box flow layout calculator.
  * All coordinates are expressed in Float dp units so Compose Canvas and Node Cards align 1:1.
  *
- * Pass 1: Bottom-up bounding-box & entry/exit spine measurement.
- * Pass 2: Top-down absolute positioning emitting nodes, containers, and orthogonal/routed edges.
+ * Pass 1: Bottom-up bounding-box, dynamic decision height, & entry/exit spine measurement.
+ * Pass 2: Top-down absolute positioning emitting nodes, containers, orthogonal edges, & delay badges.
  */
 object ScriptFlowLayoutEngine {
 
   const val OUTER_PAD = 32f
+  const val TOP_PILL_CLEARANCE = 34f
   const val V_GAP = 28f
+  const val V_GAP_WITH_DELAY = 42f
   const val ANCHOR_WIDTH = 132f
   const val ANCHOR_HEIGHT = 38f
-  const val EMPTY_SCRIPT_WIDTH = 184f
+  const val EMPTY_SCRIPT_WIDTH = 196f
   const val EMPTY_SCRIPT_HEIGHT = 44f
-  const val EMPTY_BRANCH_WIDTH = 138f
+  const val EMPTY_BRANCH_WIDTH = 144f
   const val EMPTY_BRANCH_HEIGHT = 34f
-  const val ACTION_WIDTH = 192f
+  const val ACTION_WIDTH = 210f
   const val ACTION_HEIGHT = 56f
-  const val DECISION_WIDTH = 192f
-  const val DECISION_HEIGHT = 60f
-  const val ELSE_HEADER_WIDTH = 160f
+  const val DECISION_WIDTH = 210f
+  const val DECISION_MIN_HEIGHT = 64f
+  const val DECISION_MAX_HEIGHT = 128f
+  const val ELSE_HEADER_WIDTH = 166f
   const val ELSE_HEADER_HEIGHT = 36f
-  const val TERM_WIDTH = 164f
+  const val TERM_WIDTH = 172f
   const val TERM_HEIGHT = 40f
-  const val LOOP_HEADER_WIDTH = 192f
-  const val LOOP_HEADER_HEIGHT = 48f
+  const val LOOP_HEADER_WIDTH = 210f
+  const val LOOP_HEADER_HEIGHT = 54f
 
   const val COL_GAP = 32f
-  const val LADDER_STEP_Y = 54f
+  const val LADDER_STEP_Y = 56f
   const val MERGE_GAP = 24f
+  const val MERGE_GAP_WITH_DELAY = 38f
   const val BYPASS_COL_WIDTH = 44f
 
   const val LOOP_PAD_LEFT = 16f
   const val LOOP_PAD_TOP = 14f
   const val LOOP_BODY_TOP_GAP = 26f
   const val LOOP_BODY_BOTTOM_GAP = 22f
+  const val LOOP_BODY_BOTTOM_GAP_WITH_DELAY = 36f
   const val LOOP_GUTTER_RIGHT = 26f
   const val LOOP_PAD_RIGHT = 14f
   const val LOOP_PAD_BOTTOM = 12f
@@ -202,6 +238,7 @@ object ScriptFlowLayoutEngine {
     val entryX: Float
     val exitX: Float?
     val terminatesEarly: Boolean
+    val exitDelayBadge: FlowDelayBadge?
   }
 
   private data class SequenceSlot(
@@ -216,6 +253,7 @@ object ScriptFlowLayoutEngine {
     override val entryX: Float,
     override val exitX: Float?,
     override val terminatesEarly: Boolean,
+    override val exitDelayBadge: FlowDelayBadge?,
     val slots: List<SequenceSlot>,
   ) : Recipe
 
@@ -225,16 +263,25 @@ object ScriptFlowLayoutEngine {
     override val entryX: Float,
     override val exitX: Float?,
     override val terminatesEarly: Boolean,
+    override val exitDelayBadge: FlowDelayBadge?,
     val factory: (absX: Float, absY: Float) -> FlowNode,
   ) : Recipe
 
   private data class MeasuredIfColumn(
     val key: String,
+    val blockId: String,
+    val parentIfName: String,
     val isBypassOnly: Boolean,
     val isElseColumn: Boolean,
     val isElseIf: Boolean,
     val headerTitle: String,
     val headerSubtitle: String,
+    val conditionRoot: ConditionGroup?,
+    val canToggleCollapse: Boolean,
+    val collapsedStepCount: Int,
+    val branchActionCount: Int,
+    val elseIfCount: Int,
+    val elseActionCount: Int,
     val headerWidth: Float,
     val headerHeight: Float,
     val decCenterRelX: Float,
@@ -256,10 +303,13 @@ object ScriptFlowLayoutEngine {
     override val terminatesEarly: Boolean,
     val columns: List<MeasuredIfColumn>,
     val mergeRailY: Float?,
-  ) : Recipe
+  ) : Recipe {
+    override val exitDelayBadge: FlowDelayBadge? = null
+  }
 
   private data class LoopBlockRecipe(
     val blockId: String,
+    val loopAction: ScriptAction.LoopBlock,
     override val width: Float,
     override val height: Float,
     override val entryX: Float,
@@ -267,6 +317,7 @@ object ScriptFlowLayoutEngine {
     override val terminatesEarly: Boolean,
     val headerTitle: String,
     val headerSummary: String,
+    val collapsedStepCount: Int,
     val headerRelX: Float,
     val headerRelY: Float,
     val bodyRelX: Float,
@@ -274,13 +325,29 @@ object ScriptFlowLayoutEngine {
     val body: Recipe,
     val loopReturnRelY: Float,
     val gutterRelX: Float,
-  ) : Recipe
-
-  fun computeLayout(script: Script): FlowLayoutResult {
-    return computeLayout(script.actions)
+  ) : Recipe {
+    override val exitDelayBadge: FlowDelayBadge? = null
   }
 
-  fun computeLayout(actions: List<ScriptAction>): FlowLayoutResult {
+  fun computeLayout(
+    script: Script,
+    collapsedBlockIds: Set<String> = emptySet(),
+    decisionHeightsByNodeId: Map<String, Float> = emptyMap(),
+  ): FlowLayoutResult {
+    return computeLayout(
+      actions = script.actions,
+      globalDelay = script.globalDelay,
+      collapsedBlockIds = collapsedBlockIds,
+      decisionHeightsByNodeId = decisionHeightsByNodeId,
+    )
+  }
+
+  fun computeLayout(
+    actions: List<ScriptAction>,
+    globalDelay: DelayConfig = DelayConfig.Fixed(0L),
+    collapsedBlockIds: Set<String> = emptySet(),
+    decisionHeightsByNodeId: Map<String, Float> = emptyMap(),
+  ): FlowLayoutResult {
     // Pass 1: Measure Start -> Body -> End spine
     val startRecipe =
       SingleNodeRecipe(
@@ -289,6 +356,7 @@ object ScriptFlowLayoutEngine {
         entryX = ANCHOR_WIDTH / 2f,
         exitX = ANCHOR_WIDTH / 2f,
         terminatesEarly = false,
+        exitDelayBadge = null,
       ) { x, y ->
         FlowNode.StartAnchor(id = "start", x = x, y = y, width = ANCHOR_WIDTH, height = ANCHOR_HEIGHT)
       }
@@ -301,6 +369,7 @@ object ScriptFlowLayoutEngine {
           entryX = EMPTY_SCRIPT_WIDTH / 2f,
           exitX = EMPTY_SCRIPT_WIDTH / 2f,
           terminatesEarly = false,
+          exitDelayBadge = null,
         ) { x, y ->
           FlowNode.EmptyPlaceholder(
             id = "empty_script_placeholder",
@@ -312,7 +381,13 @@ object ScriptFlowLayoutEngine {
           )
         }
       } else {
-        measureSequence(actions, branchOwnerId = "root")
+        measureSequence(
+          actions = actions,
+          branchOwnerId = "root",
+          globalDelay = globalDelay,
+          collapsedBlockIds = collapsedBlockIds,
+          decisionHeightsByNodeId = decisionHeightsByNodeId,
+        )
       }
 
     val endRecipe =
@@ -322,6 +397,7 @@ object ScriptFlowLayoutEngine {
         entryX = ANCHOR_WIDTH / 2f,
         exitX = ANCHOR_WIDTH / 2f,
         terminatesEarly = true,
+        exitDelayBadge = null,
       ) { x, y ->
         FlowNode.EndAnchor(id = "end", x = x, y = y, width = ANCHOR_WIDTH, height = ANCHOR_HEIGHT)
       }
@@ -341,10 +417,11 @@ object ScriptFlowLayoutEngine {
     var edgeSeq = 0
     fun nextEdgeId(tag: String): String = "edge_${tag}_${edgeSeq++}"
 
+    val startOriginY = OUTER_PAD + TOP_PILL_CLEARANCE
     emitRecipe(
       recipe = rootSequence,
       originX = OUTER_PAD,
-      originY = OUTER_PAD,
+      originY = startOriginY,
       nodes = nodes,
       edges = edges,
       containers = containers,
@@ -352,7 +429,7 @@ object ScriptFlowLayoutEngine {
     )
 
     val totalWidth = rootSequence.width + (OUTER_PAD * 2f)
-    val totalHeight = rootSequence.height + (OUTER_PAD * 2f)
+    val totalHeight = startOriginY + rootSequence.height + OUTER_PAD
 
     return FlowLayoutResult(
       nodes = nodes,
@@ -360,14 +437,119 @@ object ScriptFlowLayoutEngine {
       containers = containers,
       totalWidth = totalWidth,
       totalHeight = totalHeight,
+      globalDelay = globalDelay,
     )
   }
+
+  // ---------------------------------------------------------------------------
+  // Delay & Text Helpers
+  // ---------------------------------------------------------------------------
+
+  fun formatDelayDurationShort(config: DelayConfig): String =
+    when (config) {
+      is DelayConfig.Fixed -> formatMsShort(config.durationMs)
+      is DelayConfig.RandomRange ->
+        if (config.minMs < 1000L && config.maxMs < 1000L) {
+          "${config.minMs.coerceAtLeast(0L)}–${config.maxMs.coerceAtLeast(0L)}ms"
+        } else {
+          "${formatMsShort(config.minMs)}–${formatMsShort(config.maxMs)}"
+        }
+      is DelayConfig.Deviation ->
+        if (config.baseMs < 1000L && config.deltaMs < 1000L) {
+          "${config.baseMs.coerceAtLeast(0L)}±${config.deltaMs.coerceAtLeast(0L)}ms"
+        } else {
+          "${formatMsShort(config.baseMs)}±${formatMsShort(config.deltaMs)}"
+        }
+    }
+
+  private fun formatMsShort(ms: Long): String {
+    val safe = ms.coerceAtLeast(0L)
+    return if (safe < 1000L) "${safe}ms" else ActionTreeUtils.formatDurationCompact(safe)
+  }
+
+  fun isEffectivelyZero(config: DelayConfig): Boolean =
+    when (config) {
+      is DelayConfig.Fixed -> config.durationMs <= 0L
+      is DelayConfig.RandomRange -> config.minMs <= 0L && config.maxMs <= 0L
+      is DelayConfig.Deviation -> config.baseMs <= 0L && config.deltaMs <= 0L
+    }
+
+  fun actionPostDelayConfig(action: ScriptAction): PostActionDelay? =
+    when (action) {
+      is ScriptAction.Tap -> action.postDelay
+      is ScriptAction.DoubleTap -> action.postDelay
+      is ScriptAction.LongPress -> action.postDelay
+      is ScriptAction.MultiTouch -> action.postDelay
+      is ScriptAction.SwipeDrag -> action.postDelay
+      is ScriptAction.InputText -> action.postDelay
+      is ScriptAction.KeyEvent -> action.postDelay
+      is ScriptAction.LaunchApp -> action.postDelay
+      is ScriptAction.ForceStopApp -> action.postDelay
+      is ScriptAction.ClipboardOp ->
+        if (action.operation == ClipboardActionType.PASTE) action.postDelay else null
+      is ScriptAction.IfBlock,
+      is ScriptAction.LoopBlock,
+      is ScriptAction.Delay,
+      is ScriptAction.Break,
+      is ScriptAction.Continue,
+      is ScriptAction.EndScript,
+      is ScriptAction.Vibrate,
+      is ScriptAction.PlayAlertSound,
+      is ScriptAction.VariableOp -> null
+    }
+
+  fun resolvePostDelayBadge(
+    action: ScriptAction,
+    globalDelay: DelayConfig,
+  ): FlowDelayBadge? {
+    val postDelay = actionPostDelayConfig(action) ?: return null
+    val globalNonZero = !isEffectivelyZero(globalDelay)
+    return when (postDelay) {
+      PostActionDelay.Off ->
+        if (globalNonZero) FlowDelayBadge(label = "0ms (Off)", isMutedOff = true) else null
+      PostActionDelay.Global ->
+        if (globalNonZero) {
+          FlowDelayBadge(label = "⏱ ${formatDelayDurationShort(globalDelay)}", isOverride = false)
+        } else {
+          null
+        }
+      is PostActionDelay.Override ->
+        if (!isEffectivelyZero(postDelay.config)) {
+          FlowDelayBadge(
+            label = "⏱ ${formatDelayDurationShort(postDelay.config)}",
+            isOverride = true,
+          )
+        } else if (globalNonZero) {
+          FlowDelayBadge(label = "0ms (Off)", isMutedOff = true, isOverride = true)
+        } else {
+          null
+        }
+    }
+  }
+
+  private fun estimateDecisionHeightDp(summary: String): Float {
+    val charsPerLine = 26f
+    val lineCount = max(1, min(4, ceil(summary.length / charsPerLine).toInt()))
+    // 16dp vertical pad + 26dp title row + 5dp gap + 16dp/line + 4dp buffer
+    return (47f + lineCount * 16f + 4f).coerceIn(DECISION_MIN_HEIGHT, DECISION_MAX_HEIGHT)
+  }
+
+  private fun countIfHiddenSteps(action: ScriptAction.IfBlock): Int =
+    ActionTreeUtils.countAllActions(action.thenActions) +
+      action.elseIfBranches.sumOf { ActionTreeUtils.countAllActions(it.actions) } +
+      ActionTreeUtils.countAllActions(action.elseActions)
 
   // ---------------------------------------------------------------------------
   // Pass 1: Bottom-Up Measurement
   // ---------------------------------------------------------------------------
 
-  private fun measureSequence(actions: List<ScriptAction>, branchOwnerId: String): Recipe {
+  private fun measureSequence(
+    actions: List<ScriptAction>,
+    branchOwnerId: String,
+    globalDelay: DelayConfig,
+    collapsedBlockIds: Set<String>,
+    decisionHeightsByNodeId: Map<String, Float>,
+  ): Recipe {
     if (actions.isEmpty()) {
       return SingleNodeRecipe(
         width = EMPTY_BRANCH_WIDTH,
@@ -375,6 +557,7 @@ object ScriptFlowLayoutEngine {
         entryX = EMPTY_BRANCH_WIDTH / 2f,
         exitX = EMPTY_BRANCH_WIDTH / 2f,
         terminatesEarly = false,
+        exitDelayBadge = null,
       ) { x, y ->
         FlowNode.EmptyPlaceholder(
           id = "empty_branch_$branchOwnerId",
@@ -386,7 +569,15 @@ object ScriptFlowLayoutEngine {
         )
       }
     }
-    val children = actions.map { measureAction(it) }
+    val children =
+      actions.map {
+        measureAction(
+          action = it,
+          globalDelay = globalDelay,
+          collapsedBlockIds = collapsedBlockIds,
+          decisionHeightsByNodeId = decisionHeightsByNodeId,
+        )
+      }
     return combineSequence(children)
   }
 
@@ -402,13 +593,15 @@ object ScriptFlowLayoutEngine {
       slots += SequenceSlot(child = child, relX = relX, relY = cursorY)
       cursorY += child.height
       if (idx < children.lastIndex) {
-        cursorY += V_GAP
+        val gap = if (!child.terminatesEarly && child.exitDelayBadge != null) V_GAP_WITH_DELAY else V_GAP
+        cursorY += gap
       }
     }
 
     val lastChild = children.last()
     val terminatesEarly = children.any { it.terminatesEarly }
     val exitX = if (terminatesEarly) null else lastChild.exitX?.let { spineX - lastChild.entryX + it }
+    val exitDelayBadge = if (terminatesEarly) null else lastChild.exitDelayBadge
 
     return SequenceRecipe(
       width = totalWidth,
@@ -416,14 +609,32 @@ object ScriptFlowLayoutEngine {
       entryX = spineX,
       exitX = exitX,
       terminatesEarly = terminatesEarly,
+      exitDelayBadge = exitDelayBadge,
       slots = slots,
     )
   }
 
-  private fun measureAction(action: ScriptAction): Recipe =
+  private fun measureAction(
+    action: ScriptAction,
+    globalDelay: DelayConfig,
+    collapsedBlockIds: Set<String>,
+    decisionHeightsByNodeId: Map<String, Float>,
+  ): Recipe =
     when (action) {
-      is ScriptAction.IfBlock -> measureIfBlock(action)
-      is ScriptAction.LoopBlock -> measureLoopBlock(action)
+      is ScriptAction.IfBlock ->
+        measureIfBlock(
+          action = action,
+          globalDelay = globalDelay,
+          collapsedBlockIds = collapsedBlockIds,
+          decisionHeightsByNodeId = decisionHeightsByNodeId,
+        )
+      is ScriptAction.LoopBlock ->
+        measureLoopBlock(
+          action = action,
+          globalDelay = globalDelay,
+          collapsedBlockIds = collapsedBlockIds,
+          decisionHeightsByNodeId = decisionHeightsByNodeId,
+        )
       is ScriptAction.Break ->
         SingleNodeRecipe(
           width = TERM_WIDTH,
@@ -431,6 +642,7 @@ object ScriptFlowLayoutEngine {
           entryX = TERM_WIDTH / 2f,
           exitX = null,
           terminatesEarly = true,
+          exitDelayBadge = null,
         ) { x, y ->
           FlowNode.EarlyTerminationPill(
             id = "action_${action.id}",
@@ -439,6 +651,7 @@ object ScriptFlowLayoutEngine {
             width = TERM_WIDTH,
             height = TERM_HEIGHT,
             terminationType = FlowTerminationType.BREAK,
+            action = action,
           )
         }
       is ScriptAction.Continue ->
@@ -448,6 +661,7 @@ object ScriptFlowLayoutEngine {
           entryX = TERM_WIDTH / 2f,
           exitX = null,
           terminatesEarly = true,
+          exitDelayBadge = null,
         ) { x, y ->
           FlowNode.EarlyTerminationPill(
             id = "action_${action.id}",
@@ -456,6 +670,7 @@ object ScriptFlowLayoutEngine {
             width = TERM_WIDTH,
             height = TERM_HEIGHT,
             terminationType = FlowTerminationType.CONTINUE,
+            action = action,
           )
         }
       is ScriptAction.EndScript ->
@@ -465,6 +680,7 @@ object ScriptFlowLayoutEngine {
           entryX = TERM_WIDTH / 2f,
           exitX = null,
           terminatesEarly = true,
+          exitDelayBadge = null,
         ) { x, y ->
           FlowNode.EarlyTerminationPill(
             id = "action_${action.id}",
@@ -473,15 +689,18 @@ object ScriptFlowLayoutEngine {
             width = TERM_WIDTH,
             height = TERM_HEIGHT,
             terminationType = FlowTerminationType.END_SCRIPT,
+            action = action,
           )
         }
-      else ->
+      else -> {
+        val delayBadge = resolvePostDelayBadge(action, globalDelay)
         SingleNodeRecipe(
           width = ACTION_WIDTH,
           height = ACTION_HEIGHT,
           entryX = ACTION_WIDTH / 2f,
           exitX = ACTION_WIDTH / 2f,
           terminatesEarly = false,
+          exitDelayBadge = delayBadge,
         ) { x, y ->
           FlowNode.ActionCard(
             id = "action_${action.id}",
@@ -492,84 +711,196 @@ object ScriptFlowLayoutEngine {
             action = action,
             title = ActionTreeUtils.actionTypeTitle(action),
             summary = conciseActionSummary(action),
+            postDelayBadge = delayBadge,
           )
         }
+      }
     }
 
-  private fun measureIfBlock(action: ScriptAction.IfBlock): IfBlockRecipe {
+  private fun measureIfBlock(
+    action: ScriptAction.IfBlock,
+    globalDelay: DelayConfig,
+    collapsedBlockIds: Set<String>,
+    decisionHeightsByNodeId: Map<String, Float>,
+  ): Recipe {
+    val totalSubtreeSteps = countIfHiddenSteps(action)
+    val thenClause =
+      PlainLanguageFormatter.formatConditionClause(action.conditionRoot).ifBlank { "No rule set" }
+    val primaryNodeKey = "if_dec_${action.id}"
+    val primaryHeight =
+      (decisionHeightsByNodeId[primaryNodeKey] ?: estimateDecisionHeightDp(thenClause))
+        .coerceIn(DECISION_MIN_HEIGHT, DECISION_MAX_HEIGHT)
+    val primaryTitle = action.name.trim().ifBlank { "If:" }
+
+    if (action.id in collapsedBlockIds) {
+      val collapsedSummary =
+        buildString {
+          append(thenClause)
+          if (action.elseIfBranches.isNotEmpty()) {
+            append(" (+${action.elseIfBranches.size} alt)")
+          }
+        }
+      val collapsedHeight =
+        (decisionHeightsByNodeId[primaryNodeKey] ?: estimateDecisionHeightDp(collapsedSummary))
+          .coerceIn(DECISION_MIN_HEIGHT, DECISION_MAX_HEIGHT)
+      return SingleNodeRecipe(
+        width = DECISION_WIDTH,
+        height = collapsedHeight,
+        entryX = DECISION_WIDTH / 2f,
+        exitX = DECISION_WIDTH / 2f,
+        terminatesEarly = false,
+        exitDelayBadge = null,
+      ) { x, y ->
+        FlowNode.DecisionCard(
+          id = primaryNodeKey,
+          x = x,
+          y = y,
+          width = DECISION_WIDTH,
+          height = collapsedHeight,
+          blockId = action.id,
+          isElseIf = false,
+          title = primaryTitle,
+          conditionSummary = collapsedSummary,
+          conditionRoot = action.conditionRoot,
+          canToggleCollapse = true,
+          isCollapsed = true,
+          collapsedStepCount = totalSubtreeSteps,
+          branchActionCount = action.thenActions.size,
+          elseIfCount = action.elseIfBranches.size,
+          elseActionCount = action.elseActions.size,
+        )
+      }
+    }
+
     val rawColumns = mutableListOf<MeasuredIfColumn>()
 
     // Column 0: Primary "If:" branch
-    val thenBody = measureSequence(action.thenActions, branchOwnerId = "${action.id}_then")
+    val thenBody =
+      measureSequence(
+        actions = action.thenActions,
+        branchOwnerId = "${action.id}_then",
+        globalDelay = globalDelay,
+        collapsedBlockIds = collapsedBlockIds,
+        decisionHeightsByNodeId = decisionHeightsByNodeId,
+      )
+    val thenBodyGap = if (!thenBody.terminatesEarly && thenBody.exitDelayBadge != null) V_GAP_WITH_DELAY else V_GAP
     val thenDecCenter = max(DECISION_WIDTH / 2f, thenBody.entryX)
     val thenColWidth = thenDecCenter + max(DECISION_WIDTH / 2f, thenBody.width - thenBody.entryX)
-    val thenClause =
-      PlainLanguageFormatter.formatConditionClause(action.conditionRoot).ifBlank { "No rule set" }
     rawColumns +=
       MeasuredIfColumn(
-        key = "if_dec_${action.id}",
+        key = primaryNodeKey,
+        blockId = action.id,
+        parentIfName = primaryTitle,
         isBypassOnly = false,
         isElseColumn = false,
         isElseIf = false,
-        headerTitle = action.name.trim().ifBlank { "If:" },
+        headerTitle = primaryTitle,
         headerSubtitle = thenClause,
+        conditionRoot = action.conditionRoot,
+        canToggleCollapse = true,
+        collapsedStepCount = totalSubtreeSteps,
+        branchActionCount = action.thenActions.size,
+        elseIfCount = action.elseIfBranches.size,
+        elseActionCount = action.elseActions.size,
         headerWidth = DECISION_WIDTH,
-        headerHeight = DECISION_HEIGHT,
+        headerHeight = primaryHeight,
         decCenterRelX = thenDecCenter,
         colWidth = thenColWidth,
         relX = 0f,
         relTopY = 0f,
-        bodyOffsetY = DECISION_HEIGHT + V_GAP,
+        bodyOffsetY = primaryHeight + V_GAP,
         body = thenBody,
-        branchBottomRelY = DECISION_HEIGHT + V_GAP + thenBody.height,
+        branchBottomRelY =
+          primaryHeight + V_GAP + thenBody.height +
+            if (!thenBody.terminatesEarly && thenBody.exitDelayBadge != null) 14f else 0f,
         continues = !thenBody.terminatesEarly,
       )
 
     // Columns 1..M: Ordered "If not, check:" (ElseIf) branches
-    action.elseIfBranches.forEachIndexed { idx, branch ->
-      val colIdx = idx + 1
-      val body = measureSequence(branch.actions, branchOwnerId = "${action.id}_ei_${branch.id}")
-      val decCenter = max(DECISION_WIDTH / 2f, body.entryX)
-      val colWidth = decCenter + max(DECISION_WIDTH / 2f, body.width - body.entryX)
-      val topY = colIdx * LADDER_STEP_Y
+    action.elseIfBranches.forEach { branch ->
+      val prevCol = rawColumns.last()
+      val prevCenterY = prevCol.relTopY + (prevCol.headerHeight / 2f)
+      val topY = max(prevCol.relTopY + LADDER_STEP_Y, prevCenterY + 26f)
+
+      val nodeKey = "elseif_dec_${branch.id}"
       val clause =
         PlainLanguageFormatter.formatConditionClause(branch.conditionRoot).ifBlank { "No rule set" }
+      val headerHeight =
+        (decisionHeightsByNodeId[nodeKey] ?: estimateDecisionHeightDp(clause))
+          .coerceIn(DECISION_MIN_HEIGHT, DECISION_MAX_HEIGHT)
+
+      val body =
+        measureSequence(
+          actions = branch.actions,
+          branchOwnerId = "${action.id}_ei_${branch.id}",
+          globalDelay = globalDelay,
+          collapsedBlockIds = collapsedBlockIds,
+          decisionHeightsByNodeId = decisionHeightsByNodeId,
+        )
+      val decCenter = max(DECISION_WIDTH / 2f, body.entryX)
+      val colWidth = decCenter + max(DECISION_WIDTH / 2f, body.width - body.entryX)
       rawColumns +=
         MeasuredIfColumn(
-          key = "elseif_dec_${branch.id}",
+          key = nodeKey,
+          blockId = action.id,
+          parentIfName = primaryTitle,
           isBypassOnly = false,
           isElseColumn = false,
           isElseIf = true,
           headerTitle = branch.name.trim().ifBlank { "If not, check:" },
           headerSubtitle = clause,
+          conditionRoot = branch.conditionRoot,
+          canToggleCollapse = false,
+          collapsedStepCount = 0,
+          branchActionCount = branch.actions.size,
+          elseIfCount = 0,
+          elseActionCount = 0,
           headerWidth = DECISION_WIDTH,
-          headerHeight = DECISION_HEIGHT,
+          headerHeight = headerHeight,
           decCenterRelX = decCenter,
           colWidth = colWidth,
           relX = 0f,
           relTopY = topY,
-          bodyOffsetY = DECISION_HEIGHT + V_GAP,
+          bodyOffsetY = headerHeight + V_GAP,
           body = body,
-          branchBottomRelY = topY + DECISION_HEIGHT + V_GAP + body.height,
+          branchBottomRelY =
+            topY + headerHeight + V_GAP + body.height +
+              if (!body.terminatesEarly && body.exitDelayBadge != null) 14f else 0f,
           continues = !body.terminatesEarly,
         )
     }
 
     // Final Column: Either populated Else column OR clean bypass line
-    val finalIdx = rawColumns.size
-    val finalTopY = finalIdx * LADDER_STEP_Y
+    val lastDecCol = rawColumns.last()
+    val lastDecCenterY = lastDecCol.relTopY + (lastDecCol.headerHeight / 2f)
     if (action.elseActions.isNotEmpty()) {
-      val elseBody = measureSequence(action.elseActions, branchOwnerId = "${action.id}_else")
+      val finalTopY = max(lastDecCol.relTopY + LADDER_STEP_Y, lastDecCenterY + 26f)
+      val elseBody =
+        measureSequence(
+          actions = action.elseActions,
+          branchOwnerId = "${action.id}_else",
+          globalDelay = globalDelay,
+          collapsedBlockIds = collapsedBlockIds,
+          decisionHeightsByNodeId = decisionHeightsByNodeId,
+        )
       val hdrCenter = max(ELSE_HEADER_WIDTH / 2f, elseBody.entryX)
       val colWidth = hdrCenter + max(ELSE_HEADER_WIDTH / 2f, elseBody.width - elseBody.entryX)
       rawColumns +=
         MeasuredIfColumn(
           key = "else_hdr_${action.id}",
+          blockId = action.id,
+          parentIfName = primaryTitle,
           isBypassOnly = false,
           isElseColumn = true,
           isElseIf = false,
           headerTitle = "If none match",
           headerSubtitle = "",
+          conditionRoot = null,
+          canToggleCollapse = false,
+          collapsedStepCount = 0,
+          branchActionCount = action.elseActions.size,
+          elseIfCount = 0,
+          elseActionCount = 0,
           headerWidth = ELSE_HEADER_WIDTH,
           headerHeight = ELSE_HEADER_HEIGHT,
           decCenterRelX = hdrCenter,
@@ -578,28 +909,37 @@ object ScriptFlowLayoutEngine {
           relTopY = finalTopY,
           bodyOffsetY = ELSE_HEADER_HEIGHT + V_GAP,
           body = elseBody,
-          branchBottomRelY = finalTopY + ELSE_HEADER_HEIGHT + V_GAP + elseBody.height,
+          branchBottomRelY =
+            finalTopY + ELSE_HEADER_HEIGHT + V_GAP + elseBody.height +
+              if (!elseBody.terminatesEarly && elseBody.exitDelayBadge != null) 14f else 0f,
           continues = !elseBody.terminatesEarly,
         )
     } else {
-      val prevDecCenterY = rawColumns.last().relTopY + (DECISION_HEIGHT / 2f)
       rawColumns +=
         MeasuredIfColumn(
           key = "else_bypass_${action.id}",
+          blockId = action.id,
+          parentIfName = primaryTitle,
           isBypassOnly = true,
           isElseColumn = true,
           isElseIf = false,
           headerTitle = "",
           headerSubtitle = "",
+          conditionRoot = null,
+          canToggleCollapse = false,
+          collapsedStepCount = 0,
+          branchActionCount = 0,
+          elseIfCount = 0,
+          elseActionCount = 0,
           headerWidth = 0f,
           headerHeight = 0f,
           decCenterRelX = BYPASS_COL_WIDTH / 2f,
           colWidth = BYPASS_COL_WIDTH,
           relX = 0f,
-          relTopY = prevDecCenterY,
+          relTopY = lastDecCenterY,
           bodyOffsetY = 0f,
           body = null,
-          branchBottomRelY = prevDecCenterY + 18f,
+          branchBottomRelY = lastDecCenterY + 18f,
           continues = true,
         )
     }
@@ -620,7 +960,10 @@ object ScriptFlowLayoutEngine {
     val entryX = positionedColumns.first().relX + positionedColumns.first().decCenterRelX
     val maxBranchBottom = positionedColumns.maxOf { it.branchBottomRelY }
     val anyContinues = positionedColumns.any { it.continues }
-    val mergeRailY = if (anyContinues) maxBranchBottom + MERGE_GAP else null
+    val anyContinuingHasDelay =
+      positionedColumns.any { it.continues && it.body?.exitDelayBadge != null }
+    val mergeGap = if (anyContinuingHasDelay) MERGE_GAP_WITH_DELAY else MERGE_GAP
+    val mergeRailY = if (anyContinues) maxBranchBottom + mergeGap else null
     val totalHeight = mergeRailY ?: maxBranchBottom
 
     return IfBlockRecipe(
@@ -635,8 +978,48 @@ object ScriptFlowLayoutEngine {
     )
   }
 
-  private fun measureLoopBlock(action: ScriptAction.LoopBlock): LoopBlockRecipe {
-    val body = measureSequence(action.bodyActions, branchOwnerId = "loop_${action.id}")
+  private fun measureLoopBlock(
+    action: ScriptAction.LoopBlock,
+    globalDelay: DelayConfig,
+    collapsedBlockIds: Set<String>,
+    decisionHeightsByNodeId: Map<String, Float>,
+  ): Recipe {
+    val totalBodySteps = ActionTreeUtils.countAllActions(action.bodyActions)
+    val (title, summary) = loopHeaderTexts(action)
+
+    if (action.id in collapsedBlockIds) {
+      return SingleNodeRecipe(
+        width = LOOP_HEADER_WIDTH,
+        height = LOOP_HEADER_HEIGHT,
+        entryX = LOOP_HEADER_WIDTH / 2f,
+        exitX = LOOP_HEADER_WIDTH / 2f,
+        terminatesEarly = false,
+        exitDelayBadge = null,
+      ) { x, y ->
+        FlowNode.LoopHeaderCard(
+          id = "loop_hdr_${action.id}",
+          x = x,
+          y = y,
+          width = LOOP_HEADER_WIDTH,
+          height = LOOP_HEADER_HEIGHT,
+          blockId = action.id,
+          title = title,
+          summary = summary,
+          loopAction = action,
+          isCollapsed = true,
+          collapsedStepCount = totalBodySteps,
+        )
+      }
+    }
+
+    val body =
+      measureSequence(
+        actions = action.bodyActions,
+        branchOwnerId = "loop_${action.id}",
+        globalDelay = globalDelay,
+        collapsedBlockIds = collapsedBlockIds,
+        decisionHeightsByNodeId = decisionHeightsByNodeId,
+      )
     val spineOffsetInInner = max(LOOP_HEADER_WIDTH / 2f, body.entryX)
     val rightExtentInInner = max(LOOP_HEADER_WIDTH / 2f, body.width - body.entryX)
     val innerWidth = spineOffsetInInner + rightExtentInInner
@@ -648,14 +1031,19 @@ object ScriptFlowLayoutEngine {
     val bodyRelX = entryX - body.entryX
     val bodyRelY = headerRelY + LOOP_HEADER_HEIGHT + LOOP_BODY_TOP_GAP
     val bodyBottomRelY = bodyRelY + body.height
-    val loopReturnRelY = bodyBottomRelY + LOOP_BODY_BOTTOM_GAP
+    val loopBottomGap =
+      if (!body.terminatesEarly && body.exitDelayBadge != null) {
+        LOOP_BODY_BOTTOM_GAP_WITH_DELAY
+      } else {
+        LOOP_BODY_BOTTOM_GAP
+      }
+    val loopReturnRelY = bodyBottomRelY + loopBottomGap
     val totalHeight = loopReturnRelY + LOOP_PAD_BOTTOM
     val gutterRelX = totalWidth - LOOP_PAD_RIGHT - (LOOP_GUTTER_RIGHT / 2f)
 
-    val (title, summary) = loopHeaderTexts(action)
-
     return LoopBlockRecipe(
       blockId = action.id,
+      loopAction = action,
       width = totalWidth,
       height = totalHeight,
       entryX = entryX,
@@ -663,6 +1051,7 @@ object ScriptFlowLayoutEngine {
       terminatesEarly = false,
       headerTitle = title,
       headerSummary = summary,
+      collapsedStepCount = totalBodySteps,
       headerRelX = headerRelX,
       headerRelY = headerRelY,
       bodyRelX = bodyRelX,
@@ -712,23 +1101,38 @@ object ScriptFlowLayoutEngine {
               val fromY = childY + slot.child.height
               val toX = originX + nextSlot.relX + nextSlot.child.entryX
               val toY = originY + nextSlot.relY
+              val badge = slot.child.exitDelayBadge
+
+              val points: List<FlowPoint>
+              val badgeAnchor: FlowPoint?
+              if (fromX == toX) {
+                points = listOf(FlowPoint(fromX, fromY), FlowPoint(toX, toY))
+                badgeAnchor =
+                  if (badge != null) {
+                    FlowPoint(fromX, fromY + (toY - fromY - 6f) / 2f)
+                  } else {
+                    null
+                  }
+              } else {
+                val midY = if (badge != null) fromY + 26f else (fromY + toY) / 2f
+                points =
+                  listOf(
+                    FlowPoint(fromX, fromY),
+                    FlowPoint(fromX, midY),
+                    FlowPoint(toX, midY),
+                    FlowPoint(toX, toY),
+                  )
+                badgeAnchor = if (badge != null) FlowPoint(fromX, (fromY + midY) / 2f) else null
+              }
+
               edges +=
                 FlowEdge(
                   id = nextEdgeId("seq"),
-                  points =
-                    if (fromX == toX) {
-                      listOf(FlowPoint(fromX, fromY), FlowPoint(toX, toY))
-                    } else {
-                      val midY = (fromY + toY) / 2f
-                      listOf(
-                        FlowPoint(fromX, fromY),
-                        FlowPoint(fromX, midY),
-                        FlowPoint(toX, midY),
-                        FlowPoint(toX, toY),
-                      )
-                    },
+                  points = points,
                   kind = FlowEdgeKind.NORMAL,
                   hasArrowhead = true,
+                  delayBadge = badge,
+                  delayBadgeAnchor = badgeAnchor,
                 )
             }
           }
@@ -771,6 +1175,8 @@ object ScriptFlowLayoutEngine {
                   y = colTopAbsY,
                   width = col.headerWidth,
                   height = col.headerHeight,
+                  parentIfName = col.parentIfName,
+                  branchActionCount = col.branchActionCount,
                 )
             } else {
               nodes +=
@@ -780,9 +1186,17 @@ object ScriptFlowLayoutEngine {
                   y = colTopAbsY,
                   width = col.headerWidth,
                   height = col.headerHeight,
+                  blockId = col.blockId,
                   isElseIf = col.isElseIf,
                   title = col.headerTitle,
                   conditionSummary = col.headerSubtitle,
+                  conditionRoot = col.conditionRoot ?: ConditionGroup(id = "empty_${col.key}"),
+                  canToggleCollapse = col.canToggleCollapse,
+                  isCollapsed = false,
+                  collapsedStepCount = col.collapsedStepCount,
+                  branchActionCount = col.branchActionCount,
+                  elseIfCount = col.elseIfCount,
+                  elseActionCount = col.elseActionCount,
                 )
             }
 
@@ -826,6 +1240,7 @@ object ScriptFlowLayoutEngine {
               if (col.continues && mergeRailAbsY != null && body.exitX != null) {
                 val exitAbsX = bodyOriginX + body.exitX!!
                 val bodyBottomAbsY = bodyOriginY + body.height
+                val branchExitBadge = body.exitDelayBadge
                 edges +=
                   FlowEdge(
                     id = nextEdgeId("if_to_merge"),
@@ -837,6 +1252,16 @@ object ScriptFlowLayoutEngine {
                     kind = FlowEdgeKind.MERGE_RAIL,
                     hasArrowhead = false,
                     hasEndDot = true,
+                    delayBadge = branchExitBadge,
+                    delayBadgeAnchor =
+                      if (branchExitBadge != null) {
+                        FlowPoint(
+                          exitAbsX,
+                          min(bodyBottomAbsY + 18f, (bodyBottomAbsY + mergeRailAbsY) / 2f),
+                        )
+                      } else {
+                        null
+                      },
                   )
                 continuingRailXs += exitAbsX
               }
@@ -924,8 +1349,12 @@ object ScriptFlowLayoutEngine {
             y = headerAbsY,
             width = LOOP_HEADER_WIDTH,
             height = LOOP_HEADER_HEIGHT,
+            blockId = recipe.blockId,
             title = recipe.headerTitle,
             summary = recipe.headerSummary,
+            loopAction = recipe.loopAction,
+            isCollapsed = false,
+            collapsedStepCount = recipe.collapsedStepCount,
           )
 
         val headerCenterX = headerAbsX + (LOOP_HEADER_WIDTH / 2f)
@@ -962,6 +1391,7 @@ object ScriptFlowLayoutEngine {
         if (!recipe.body.terminatesEarly && bodyExitOffset != null) {
           val bodyExitAbsX = bodyAbsX + bodyExitOffset
           val bodyBottomAbsY = bodyAbsY + recipe.body.height
+          val bodyExitBadge = recipe.body.exitDelayBadge
           edges +=
             FlowEdge(
               id = nextEdgeId("loop_back"),
@@ -977,6 +1407,13 @@ object ScriptFlowLayoutEngine {
               hasArrowhead = true,
               labelKind = FlowBranchLabelKind.LOOP_RETURN,
               labelAnchor = FlowPoint(gutterAbsX, (headerCenterY + loopReturnAbsY) / 2f),
+              delayBadge = bodyExitBadge,
+              delayBadgeAnchor =
+                if (bodyExitBadge != null) {
+                  FlowPoint(bodyExitAbsX, (bodyBottomAbsY + loopReturnAbsY) / 2f)
+                } else {
+                  null
+                },
             )
         }
       }
@@ -1031,7 +1468,7 @@ object ScriptFlowLayoutEngine {
       is ScriptAction.SwipeDrag ->
         "(${ActionTreeUtils.formatNumericInput(action.startX)},${ActionTreeUtils.formatNumericInput(action.startY)}) ➔ (${ActionTreeUtils.formatNumericInput(action.endX)},${ActionTreeUtils.formatNumericInput(action.endY)})"
       is ScriptAction.InputText ->
-        "\"${action.textTemplate.take(20)}\""
+        "\"${action.textTemplate.take(24)}\""
       is ScriptAction.Delay ->
         "Wait ${ActionTreeUtils.formatDelayConfig(action.config)}"
       is ScriptAction.KeyEvent ->
@@ -1042,12 +1479,12 @@ object ScriptFlowLayoutEngine {
         "Stop ${action.appLabel.ifBlank { action.packageName }.ifBlank { "app" }}"
       is ScriptAction.ClipboardOp -> {
         val op = PlainLanguageFormatter.clipboardOpLabel(action.operation)
-        val detail = action.targetVariableKey?.let { "{$it}" } ?: action.valueTemplate.take(16)
+        val detail = action.targetVariableKey?.let { "{$it}" } ?: action.valueTemplate.take(18)
         if (detail.isBlank()) op else "$op: $detail"
       }
       is ScriptAction.Vibrate -> PlainLanguageFormatter.vibratePatternLabel(action.pattern)
       is ScriptAction.PlayAlertSound -> "Play ${action.soundUriOrType}"
-      is ScriptAction.SetVariable -> "{${action.targetKey}} = \"${action.valueTemplate.take(14)}\""
+      is ScriptAction.SetVariable -> "{${action.targetKey}} = \"${action.valueTemplate.take(16)}\""
       is ScriptAction.MathOp ->
         "{${action.targetKey}} = ${action.leftOperand} ${PlainLanguageFormatter.mathOpSymbol(action.operator)} ${action.rightOperand}"
       is ScriptAction.RandomOp ->

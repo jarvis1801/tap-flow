@@ -35,4 +35,14 @@
     <string name="flow_next_cycle">下次迴圈</string>
     <string name="flow_end_script">結束腳本</string>
     <string name="flow_navigate_back_cd">返回</string>
+    <string name="flow_global_delay_label">全域延遲：%1$s</string>
+    <string name="flow_delay_off_badge">0ms（關閉）</string>
+    <string name="flow_collapse_branch_cd">收合分支</string>
+    <string name="flow_expand_branch_cd">展開分支</string>
+    <string name="flow_collapsed_step_one">+1 個步驟</string>
+    <string name="flow_collapsed_steps_many">+%1$d 個步驟</string>
+    <string name="flow_detail_dialog_close">關閉</string>
+    <string name="flow_detail_conditions_title">條件規則</string>
+    <string name="flow_detail_parameters_title">動作參數</string>
+    <string name="flow_detail_post_delay_title">動作後延遲</string>
 </resources>

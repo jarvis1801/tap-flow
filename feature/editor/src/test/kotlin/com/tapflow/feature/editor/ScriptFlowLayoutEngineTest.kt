@@ -4,6 +4,7 @@ import com.tapflow.core.model.action.LoopMode
 import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
+import com.tapflow.core.model.common.PostActionDelay
 import com.tapflow.core.model.condition.ColorTarget
 import com.tapflow.core.model.condition.ConditionGroup
 import com.tapflow.core.model.condition.ConditionLeaf
@@ -12,6 +13,7 @@ import com.tapflow.core.model.script.Script
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -188,6 +190,136 @@ class ScriptFlowLayoutEngineTest {
     val endScriptLayout = ScriptFlowLayoutEngine.computeLayout(listOf(ScriptAction.EndScript(id = "end_1")))
     assertNoNodeOverlaps(endScriptLayout)
     assertFalse(endScriptLayout.nodes.any { it is FlowNode.EndAnchor })
+  }
+
+  @Test
+  fun postActionDelays_attachBadgesToPhysicalActionsOnlyAndStayCleanWhenZero() {
+    val tapGlobal = ScriptAction.Tap(id = "tap_g", postDelay = PostActionDelay.Global)
+    val tapOverride =
+      ScriptAction.Tap(
+        id = "tap_o",
+        postDelay = PostActionDelay.Override(DelayConfig.RandomRange(200L, 500L)),
+      )
+    val tapOff = ScriptAction.Tap(id = "tap_off", postDelay = PostActionDelay.Off)
+    val delayNode = ScriptAction.Delay(id = "del_1", config = DelayConfig.Fixed(300L))
+    val varNode = ScriptAction.VariableOp(id = "var_1")
+
+    val layoutNonZero =
+      ScriptFlowLayoutEngine.computeLayout(
+        actions = listOf(tapGlobal, tapOverride, tapOff, delayNode, varNode),
+        globalDelay = DelayConfig.Fixed(500L),
+      )
+    assertNoNodeOverlaps(layoutNonZero)
+
+    val badgesByNodeId =
+      layoutNonZero.nodes.filterIsInstance<FlowNode.ActionCard>().associateBy { it.id }
+    assertEquals("⏱ 500ms", badgesByNodeId.getValue("act_tap_g").postDelayBadge?.label)
+    assertEquals("⏱ 200–500ms", badgesByNodeId.getValue("act_tap_o").postDelayBadge?.label)
+    assertEquals("0ms (Off)", badgesByNodeId.getValue("act_tap_off").postDelayBadge?.label)
+    assertTrue(badgesByNodeId.getValue("act_tap_off").postDelayBadge?.isMutedOff == true)
+    assertNull(badgesByNodeId.getValue("act_del_1").postDelayBadge)
+    assertNull(badgesByNodeId.getValue("act_var_1").postDelayBadge)
+
+    // Outgoing edges carry matching badges on anchors
+    val edgeBadges = layoutNonZero.edges.mapNotNull { it.delayBadge?.label }
+    assertEquals(listOf("⏱ 500ms", "⏱ 200–500ms", "0ms (Off)"), edgeBadges)
+
+    // When globalDelay == 0ms and PostActionDelay.Global / Off, zero badge clutter
+    val layoutZero =
+      ScriptFlowLayoutEngine.computeLayout(
+        actions = listOf(tapGlobal, tapOff, delayNode),
+        globalDelay = DelayConfig.Fixed(0L),
+      )
+    assertNoNodeOverlaps(layoutZero)
+    assertTrue(layoutZero.edges.none { it.delayBadge != null })
+  }
+
+  @Test
+  fun tallMultiLineDecisionCards_expandHeightAndKeepCleanLadderAndNoOverlaps() {
+    val longSummaryIf =
+      ScriptAction.IfBlock(
+        id = "if_long",
+        conditionRoot =
+          ConditionGroup(
+            id = "g_long",
+            children =
+              listOf(
+                ConditionLeaf(
+                  id = "l_a",
+                  predicate = ConditionPredicate.ColorMatch(targets = listOf(ColorTarget(120, 340, "#FF1122"))),
+                ),
+                ConditionLeaf(
+                  id = "l_b",
+                  predicate = ConditionPredicate.ColorMatch(targets = listOf(ColorTarget(520, 940, "#00FF88"))),
+                ),
+                ConditionLeaf(
+                  id = "l_c",
+                  predicate = ConditionPredicate.AppMatch(packageNames = listOf("com.example.superlongpackagename.activity")),
+                ),
+              ),
+          ),
+        thenActions = listOf(ScriptAction.Tap(id = "t_then")),
+        elseIfBranches =
+          listOf(
+            ScriptAction.ElseIfBranch(
+              id = "ei_long",
+              name = "Fallback Branch With Very Long Description",
+              conditionRoot = ConditionGroup("g_ei"),
+              actions = listOf(ScriptAction.Tap(id = "t_ei")),
+            ),
+          ),
+        elseActions = listOf(ScriptAction.Tap(id = "t_else")),
+      )
+
+    val layout =
+      ScriptFlowLayoutEngine.computeLayout(
+        actions = listOf(longSummaryIf),
+        decisionHeightsByNodeId = mapOf("if_dec_if_long" to 118f),
+      )
+    assertNoNodeOverlaps(layout)
+
+    val rootDec = layout.nodes.filterIsInstance<FlowNode.DecisionCard>().first { it.id == "if_dec_if_long" }
+    val eiDec = layout.nodes.filterIsInstance<FlowNode.DecisionCard>().first { it.id == "elseif_dec_ei_long" }
+    assertEquals(118f, rootDec.height)
+    // Dynamic stepping clears the center of the tall DecisionCard cleanly
+    assertTrue(eiDec.y >= rootDec.y + (rootDec.height / 2f) + 26f)
+  }
+
+  @Test
+  fun collapsedIfAndLoopBlocks_hideSubtreesWithoutMutatingScript() {
+    val ifBlock =
+      ScriptAction.IfBlock(
+        id = "if_col",
+        conditionRoot = ConditionGroup("g1"),
+        thenActions = listOf(ScriptAction.Tap(id = "t1"), ScriptAction.Delay(id = "d1")),
+        elseActions = listOf(ScriptAction.Tap(id = "t2")),
+      )
+    val loopBlock =
+      ScriptAction.LoopBlock(
+        id = "loop_col",
+        mode = LoopMode.Count(NumericInput.Literal(3)),
+        bodyActions = listOf(ScriptAction.Tap(id = "lt1"), ScriptAction.Tap(id = "lt2")),
+      )
+    val script = Script(id = "s1", title = "Collapsible", actions = listOf(ifBlock, loopBlock))
+
+    val layout =
+      ScriptFlowLayoutEngine.computeLayout(
+        script = script,
+        collapsedBlockIds = setOf("if_col", "loop_col"),
+      )
+    assertNoNodeOverlaps(layout)
+
+    val ifNode = layout.nodes.filterIsInstance<FlowNode.DecisionCard>().single { it.blockId == "if_col" }
+    assertTrue(ifNode.isCollapsed)
+    assertEquals(3, ifNode.collapsedStepCount)
+    assertFalse(layout.nodes.any { it.id == "act_t1" || it.id == "act_d1" || it.id == "act_t2" || it.id == "else_hdr_if_col" })
+
+    val loopNode = layout.nodes.filterIsInstance<FlowNode.LoopHeaderCard>().single { it.blockId == "loop_col" }
+    assertTrue(loopNode.isCollapsed)
+    assertEquals(2, loopNode.collapsedStepCount)
+    assertTrue(layout.containers.isEmpty())
+    assertFalse(layout.edges.any { it.kind == FlowEdgeKind.LOOP_BACK })
+    assertFalse(layout.nodes.any { it.id == "act_lt1" || it.id == "act_lt2" })
   }
 
   @Test

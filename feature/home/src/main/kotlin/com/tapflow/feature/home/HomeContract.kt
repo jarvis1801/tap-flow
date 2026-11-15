@@ -5,7 +5,9 @@ import androidx.compose.runtime.Immutable
 import com.tapflow.core.database.backup.BackupImportPreview
 import com.tapflow.core.database.backup.ImportConflictStrategy
 import com.tapflow.core.database.repository.InspectGroupWithItems
+import com.tapflow.core.database.repository.InspectStorageStats
 import com.tapflow.core.datastore.AppPreferences
+import java.util.Locale
 import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.ThemePaletteOption
 import com.tapflow.core.model.common.OverlaySizeOption
@@ -100,6 +102,7 @@ data class HomeUiState(
   val pipelines: List<PipelineCardUi> = emptyList(),
   val totalPipelinesCount: Int = 0,
   val inspectGroups: List<InspectGroupWithItems> = emptyList(),
+  val inspectStorageStats: InspectStorageStats = InspectStorageStats(),
   val expandedInspectGroupIds: Set<String> = emptySet(),
   val expandedInspectItemIds: Set<String> = emptySet(),
   val serverStatus: ServerUiStatus = ServerUiStatus(),
@@ -110,6 +113,8 @@ data class HomeUiState(
   val deleteScriptPrompt: DeleteScriptPrompt? = null,
   val deletePipelinePrompt: DeletePipelinePrompt? = null,
   val deleteInspectGroupPrompt: DeleteInspectGroupPrompt? = null,
+  val showClearInspectConfirmDialog: Boolean = false,
+  val isClearingInspectData: Boolean = false,
   val importBackupPrompt: ImportBackupPrompt? = null,
   val showTermsDialog: Boolean = false,
   val showPrivacyDialog: Boolean = false,
@@ -257,6 +262,14 @@ sealed interface HomeUiIntent {
 
   data object DismissBackupImportPrompt : HomeUiIntent
 
+  data object RefreshInspectStorageStats : HomeUiIntent
+
+  data object RequestClearAllInspectData : HomeUiIntent
+
+  data object ConfirmClearAllInspectData : HomeUiIntent
+
+  data object DismissClearAllInspectData : HomeUiIntent
+
   data class SetTermsDialogVisible(val visible: Boolean) : HomeUiIntent
 
   data class SetPrivacyDialogVisible(val visible: Boolean) : HomeUiIntent
@@ -307,4 +320,15 @@ sealed interface HomeUiEffect {
   data class LaunchFeedbackEmail(val subject: String, val body: String) : HomeUiEffect
 
   data class ShowSnackbar(val message: String) : HomeUiEffect
+}
+
+internal fun formatInspectStorageSize(bytes: Long): String {
+  val safeBytes = bytes.coerceAtLeast(0L)
+  return when {
+    safeBytes < 1024L -> "$safeBytes B"
+    safeBytes < 1024L * 1024L -> String.format(Locale.US, "%.1f KB", safeBytes / 1024.0)
+    safeBytes < 1024L * 1024L * 1024L ->
+      String.format(Locale.US, "%.1f MB", safeBytes / (1024.0 * 1024.0))
+    else -> String.format(Locale.US, "%.2f GB", safeBytes / (1024.0 * 1024.0 * 1024.0))
+  }
 }

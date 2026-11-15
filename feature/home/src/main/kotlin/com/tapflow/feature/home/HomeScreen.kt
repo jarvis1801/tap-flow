@@ -31,12 +31,16 @@ import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -337,6 +341,46 @@ fun HomeContent(
                   contentDescription =
                     if (state.isSearchExpanded) "Close search" else "Search",
                 )
+              }
+            }
+
+            if (state.activeTab == HomeTabType.INSPECT && !state.isSearchExpanded) {
+              var showInspectMenu by remember { mutableStateOf(false) }
+              val hasInspectData =
+                state.inspectStorageStats.itemCount > 0 ||
+                  state.inspectStorageStats.totalBytes > 0L ||
+                  state.inspectGroups.isNotEmpty()
+              Box {
+                IconButton(
+                  onClick = { showInspectMenu = true },
+                  modifier = Modifier.size(48.dp).testTag("inspect_overflow_menu_button"),
+                ) {
+                  Icon(
+                    imageVector = Icons.Filled.MoreVert,
+                    contentDescription = "Inspect options",
+                  )
+                }
+                DropdownMenu(
+                  expanded = showInspectMenu,
+                  onDismissRequest = { showInspectMenu = false },
+                ) {
+                  DropdownMenuItem(
+                    text = { Text("Clear All Inspect Data") },
+                    leadingIcon = {
+                      Icon(
+                        imageVector = Icons.Filled.DeleteOutline,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                      )
+                    },
+                    enabled = hasInspectData && !state.isClearingInspectData,
+                    onClick = {
+                      showInspectMenu = false
+                      onIntent(HomeUiIntent.RequestClearAllInspectData)
+                    },
+                    modifier = Modifier.testTag("inspect_menu_clear_all"),
+                  )
+                }
               }
             }
 

@@ -17,14 +17,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.OutlinedFlag
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.CircularProgressIndicator
@@ -59,7 +61,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -79,11 +80,18 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -92,10 +100,12 @@ import com.tapflow.core.model.action.LoopMode
 import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
+import com.tapflow.core.model.common.PostActionDelay
 import com.tapflow.core.model.condition.ColorTarget
 import com.tapflow.core.model.condition.ConditionGroup
 import com.tapflow.core.model.condition.ConditionLeaf
 import com.tapflow.core.model.condition.ConditionPredicate
+import com.tapflow.core.model.script.Script
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.min
@@ -103,8 +113,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlinx.coroutines.launch
 
-private const val MIN_FLOW_ZOOM = 0.25f
-private const val MAX_FLOW_ZOOM = 2.5f
+private const val MAX_FLOW_ZOOM = 3.0f
 
 @Composable
 fun ScriptFlowScreen(
@@ -120,6 +129,7 @@ fun ScriptFlowScreen(
   ScriptFlowContent(
     state = state,
     onNavigateBack = onNavigateBack,
+    onRecomputeLayout = viewModel::recomputeLayout,
   )
 }
 
@@ -127,16 +137,60 @@ fun ScriptFlowScreen(
 fun ScriptFlowContent(
   state: ScriptFlowUiState,
   onNavigateBack: () -> Unit,
+  onRecomputeLayout: (collapsedBlockIds: Set<String>, decisionHeightsByNodeId: Map<String, Float>) -> Unit =
+    { _, _ -> },
 ) {
   val density = LocalDensity.current
+  val textMeasurer = rememberTextMeasurer()
+  val decisionSummaryStyle = MaterialTheme.typography.bodySmall
   val coroutineScope = rememberCoroutineScope()
 
   var viewportSize by remember { mutableStateOf(IntSize.Zero) }
   var hasAppliedInitialFit by remember { mutableStateOf(false) }
+  var collapsedNodeIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+  var inspectedNode by remember { mutableStateOf<FlowNode?>(null) }
+
+  val decisionHeights =
+    remember(state.script, collapsedNodeIds, decisionSummaryStyle, density) {
+      val actions = state.script?.actions.orEmpty()
+      if (actions.isEmpty()) {
+        emptyMap()
+      } else {
+        measureDecisionNodeHeights(
+          actions = actions,
+          collapsedBlockIds = collapsedNodeIds,
+          textMeasurer = textMeasurer,
+          summaryStyle = decisionSummaryStyle,
+          density = density,
+        )
+      }
+    }
+
+  LaunchedEffect(state.script, collapsedNodeIds, decisionHeights) {
+    if (state.script != null) {
+      onRecomputeLayout(collapsedNodeIds, decisionHeights)
+    }
+  }
 
   val scaleAnim = remember { Animatable(1f) }
   val panXAnim = remember { Animatable(0f) }
   val panYAnim = remember { Animatable(0f) }
+
+  fun computeAutoFitScale(
+    viewport: IntSize,
+    layout: FlowLayoutResult,
+  ): Float {
+    if (viewport.width <= 0 || viewport.height <= 0) return 1f
+    val diagramW = with(density) { layout.totalWidth.dp.toPx() }.coerceAtLeast(1f)
+    val diagramH = with(density) { layout.totalHeight.dp.toPx() }.coerceAtLeast(1f)
+    val padPx = with(density) { 20.dp.toPx() }
+    val availW = (viewport.width - padPx * 2f).coerceAtLeast(64f)
+    val availH = (viewport.height - padPx * 2f).coerceAtLeast(64f)
+    return min(availW / diagramW, availH / diagramH).coerceIn(0.02f, 1.35f)
+  }
+
+  fun computeMinScale(autoFitScale: Float): Float =
+    minOf(0.15f, autoFitScale * 0.85f).coerceAtLeast(0.02f)
 
   fun computeFitTransform(
     viewport: IntSize,
@@ -145,10 +199,9 @@ fun ScriptFlowContent(
     if (viewport.width <= 0 || viewport.height <= 0) return Triple(1f, 0f, 0f)
     val diagramW = with(density) { layout.totalWidth.dp.toPx() }.coerceAtLeast(1f)
     val diagramH = with(density) { layout.totalHeight.dp.toPx() }.coerceAtLeast(1f)
-    val padPx = with(density) { 20.dp.toPx() }
-    val availW = (viewport.width - padPx * 2f).coerceAtLeast(64f)
-    val availH = (viewport.height - padPx * 2f).coerceAtLeast(64f)
-    val fitScale = min(availW / diagramW, availH / diagramH).coerceIn(MIN_FLOW_ZOOM, 1.35f)
+    val autoFitScale = computeAutoFitScale(viewport, layout)
+    val minScale = computeMinScale(autoFitScale)
+    val fitScale = autoFitScale.coerceIn(minScale, 1.35f)
     val targetX = (viewport.width - diagramW * fitScale) / 2f
     val targetY = (viewport.height - diagramH * fitScale) / 2f
     return Triple(fitScale, targetX, targetY)
@@ -182,14 +235,15 @@ fun ScriptFlowContent(
     if (viewport.width <= 0 || viewport.height <= 0) return Offset(candidateX, candidateY)
     val scaledW = with(density) { layout.totalWidth.dp.toPx() } * scale
     val scaledH = with(density) { layout.totalHeight.dp.toPx() } * scale
-    val marginPx = with(density) { 96.dp.toPx() }
-    val minX = -(scaledW - marginPx).coerceAtLeast(0f)
-    val maxX = (viewport.width - marginPx).coerceAtLeast(0f)
-    val minY = -(scaledH - marginPx).coerceAtLeast(0f)
-    val maxY = (viewport.height - marginPx).coerceAtLeast(0f)
+    val edgePadPx = with(density) { 24.dp.toPx() }
+    val bottomClearPx = with(density) { 80.dp.toPx() }
+    val minX = minOf(edgePadPx, viewport.width - scaledW - edgePadPx)
+    val maxX = maxOf(edgePadPx, viewport.width - scaledW - edgePadPx)
+    val minY = minOf(edgePadPx, viewport.height - scaledH - bottomClearPx)
+    val maxY = maxOf(edgePadPx, viewport.height - scaledH - edgePadPx)
     return Offset(
-      x = candidateX.coerceIn(minOf(minX, maxX), maxOf(minX, maxX)),
-      y = candidateY.coerceIn(minOf(minY, maxY), maxOf(minY, maxY)),
+      x = candidateX.coerceIn(minX, maxX),
+      y = candidateY.coerceIn(minY, maxY),
     )
   }
 
@@ -202,12 +256,20 @@ fun ScriptFlowContent(
 
   LaunchedEffect(state.layoutResult, viewportSize) {
     val layout = state.layoutResult ?: return@LaunchedEffect
-    if (!hasAppliedInitialFit && viewportSize.width > 0 && viewportSize.height > 0) {
+    if (viewportSize.width <= 0 || viewportSize.height <= 0) return@LaunchedEffect
+    if (!hasAppliedInitialFit) {
       val (fitScale, fitX, fitY) = computeFitTransform(viewportSize, layout)
       scaleAnim.snapTo(fitScale)
       panXAnim.snapTo(fitX)
       panYAnim.snapTo(fitY)
       hasAppliedInitialFit = true
+    } else {
+      val minScale = computeMinScale(computeAutoFitScale(viewportSize, layout))
+      val clampedScale = scaleAnim.value.coerceIn(minScale, MAX_FLOW_ZOOM)
+      val clampedPan = clampPan(panXAnim.value, panYAnim.value, clampedScale, viewportSize, layout)
+      if (clampedScale != scaleAnim.value) scaleAnim.snapTo(clampedScale)
+      if (clampedPan.x != panXAnim.value) panXAnim.snapTo(clampedPan.x)
+      if (clampedPan.y != panYAnim.value) panYAnim.snapTo(clampedPan.y)
     }
   }
 
@@ -250,15 +312,17 @@ fun ScriptFlowContent(
         }
 
         // Interactive 1-finger pan + 2-finger pinch-to-zoom read-only diagram surface
+        // Unbounded wrapContentSize prevents wide/tall nested If trees from clipping to screen bounds.
         Box(
           modifier =
             Modifier
               .fillMaxSize()
               .pointerInput(layout, viewportSize) {
+                val minScale = computeMinScale(computeAutoFitScale(viewportSize, layout))
                 detectTransformGestures { centroid, pan, zoom, _ ->
                   coroutineScope.launch {
                     val oldScale = scaleAnim.value
-                    val newScale = (oldScale * zoom).coerceIn(MIN_FLOW_ZOOM, MAX_FLOW_ZOOM)
+                    val newScale = (oldScale * zoom).coerceIn(minScale, MAX_FLOW_ZOOM)
                     val zoomRatio = newScale / oldScale
                     val rawX = centroid.x - (centroid.x - panXAnim.value) * zoomRatio + pan.x
                     val rawY = centroid.y - (centroid.y - panYAnim.value) * zoomRatio + pan.y
@@ -274,7 +338,9 @@ fun ScriptFlowContent(
           Box(
             modifier =
               Modifier
-                .size(width = layout.totalWidth.dp, height = layout.totalHeight.dp)
+                .fillMaxSize()
+                .wrapContentSize(align = Alignment.TopStart, unbounded = true)
+                .requiredSize(width = layout.totalWidth.dp, height = layout.totalHeight.dp)
                 .graphicsLayer {
                   transformOrigin = TransformOrigin(0f, 0f)
                   scaleX = scaleAnim.value
@@ -299,12 +365,32 @@ fun ScriptFlowContent(
                   )
                 }
               }
+              val delayBadge = edge.delayBadge
+              val delayAnchor = edge.delayBadgeAnchor
+              if (delayBadge != null && delayAnchor != null) {
+                key("dly_${edge.id}") {
+                  FlowEdgeDelayBadge(
+                    edgeId = edge.id,
+                    badge = delayBadge,
+                    anchor = delayAnchor,
+                  )
+                }
+              }
             }
 
             layout.nodes.forEach { node ->
               key(node.id) {
                 FlowNodeRenderer(
                   node = node,
+                  onNodeClick = { inspectedNode = node },
+                  onToggleCollapse = { blockId ->
+                    collapsedNodeIds =
+                      if (blockId in collapsedNodeIds) {
+                        collapsedNodeIds - blockId
+                      } else {
+                        collapsedNodeIds + blockId
+                      }
+                  },
                   modifier =
                     Modifier
                       .offset(x = node.x.dp, y = node.y.dp)
@@ -312,6 +398,42 @@ fun ScriptFlowContent(
                 )
               }
             }
+          }
+        }
+
+        // Top-start Global Delay pill
+        Surface(
+          shape = RoundedCornerShape(999.dp),
+          color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+          border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant),
+          modifier =
+            Modifier
+              .align(Alignment.TopStart)
+              .padding(start = 12.dp, top = 10.dp)
+              .testTag("flow_global_delay_pill"),
+        ) {
+          Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+          ) {
+            Icon(
+              imageVector = Icons.Rounded.Schedule,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.primary,
+              modifier = Modifier.size(14.dp),
+            )
+            Text(
+              text =
+                stringResource(
+                  R.string.flow_global_delay_label,
+                  ScriptFlowLayoutEngine.formatDelayDurationShort(state.globalDelay),
+                ),
+              style = MaterialTheme.typography.labelMedium,
+              fontFamily = FontFamily.Monospace,
+              fontWeight = FontWeight.SemiBold,
+              color = MaterialTheme.colorScheme.onSurface,
+            )
           }
         }
 
@@ -381,6 +503,84 @@ fun ScriptFlowContent(
       }
     }
   }
+
+  val activeInspection = inspectedNode
+  if (activeInspection != null) {
+    FlowNodeDetailDialog(
+      node = activeInspection,
+      scriptTitle = state.scriptTitle,
+      actionCount = state.actionCount,
+      globalDelay = state.globalDelay,
+      onDismiss = { inspectedNode = null },
+    )
+  }
+}
+
+private fun measureDecisionNodeHeights(
+  actions: List<ScriptAction>,
+  collapsedBlockIds: Set<String>,
+  textMeasurer: TextMeasurer,
+  summaryStyle: TextStyle,
+  density: Density,
+): Map<String, Float> {
+  val result = mutableMapOf<String, Float>()
+  val summaryMaxWidthPx =
+    with(density) { (ScriptFlowLayoutEngine.DECISION_WIDTH - 20f).dp.roundToPx() }.coerceAtLeast(32)
+
+  fun measureCardHeight(summary: String): Float {
+    val textResult =
+      textMeasurer.measure(
+        text = AnnotatedString(summary),
+        style = summaryStyle,
+        maxLines = 4,
+        overflow = TextOverflow.Ellipsis,
+        constraints = Constraints(maxWidth = summaryMaxWidthPx),
+      )
+    val summaryHeightDp = textResult.size.height / density.density
+    // 16dp vertical padding + 28dp title row + 5dp gap + measured summary + 3dp safety margin
+    return (16f + 28f + 5f + summaryHeightDp + 3f).coerceIn(
+      ScriptFlowLayoutEngine.DECISION_MIN_HEIGHT,
+      ScriptFlowLayoutEngine.DECISION_MAX_HEIGHT,
+    )
+  }
+
+  fun walk(list: List<ScriptAction>) {
+    list.forEach { action ->
+      when (action) {
+        is ScriptAction.IfBlock -> {
+          val baseClause =
+            PlainLanguageFormatter.formatConditionClause(action.conditionRoot).ifBlank { "No rule set" }
+          val isCollapsed = action.id in collapsedBlockIds
+          val summaryText =
+            if (isCollapsed && action.elseIfBranches.isNotEmpty()) {
+              "$baseClause (+${action.elseIfBranches.size} alt)"
+            } else {
+              baseClause
+            }
+          result["if_dec_${action.id}"] = measureCardHeight(summaryText)
+          if (!isCollapsed) {
+            walk(action.thenActions)
+            action.elseIfBranches.forEach { branch ->
+              val eiClause =
+                PlainLanguageFormatter.formatConditionClause(branch.conditionRoot).ifBlank { "No rule set" }
+              result["elseif_dec_${branch.id}"] = measureCardHeight(eiClause)
+              walk(branch.actions)
+            }
+            walk(action.elseActions)
+          }
+        }
+        is ScriptAction.LoopBlock -> {
+          if (action.id !in collapsedBlockIds) {
+            walk(action.bodyActions)
+          }
+        }
+        else -> Unit
+      }
+    }
+  }
+
+  walk(actions)
+  return result
 }
 
 @Composable
@@ -660,13 +860,73 @@ private fun FlowEdgeLabelBadge(
 }
 
 @Composable
+private fun FlowEdgeDelayBadge(
+  edgeId: String,
+  badge: FlowDelayBadge,
+  anchor: FlowPoint,
+) {
+  val density = LocalDensity.current
+  val anchorXPx = with(density) { anchor.x.dp.toPx() }
+  val anchorYPx = with(density) { anchor.y.dp.toPx() }
+  val containerColor =
+    when {
+      badge.isMutedOff -> MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.94f)
+      badge.isOverride -> MaterialTheme.colorScheme.secondaryContainer
+      else -> MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+  val contentColor =
+    when {
+      badge.isMutedOff -> MaterialTheme.colorScheme.onSurfaceVariant
+      badge.isOverride -> MaterialTheme.colorScheme.onSecondaryContainer
+      else -> MaterialTheme.colorScheme.onSurface
+    }
+  val displayLabel =
+    if (badge.isMutedOff) {
+      stringResource(R.string.flow_delay_off_badge)
+    } else {
+      badge.label
+    }
+
+  Surface(
+    shape = RoundedCornerShape(999.dp),
+    color = containerColor,
+    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f)),
+    modifier =
+      Modifier
+        .layout { measurable, constraints ->
+          val placeable = measurable.measure(constraints)
+          layout(0, 0) {
+            placeable.placeRelative(
+              x = anchorXPx.roundToInt() - placeable.width / 2,
+              y = anchorYPx.roundToInt() - placeable.height / 2,
+            )
+          }
+        }
+        .testTag("flow_delay_badge_$edgeId"),
+  ) {
+    Text(
+      text = displayLabel,
+      style = MaterialTheme.typography.labelSmall,
+      fontFamily = FontFamily.Monospace,
+      fontWeight = if (badge.isMutedOff) FontWeight.Normal else FontWeight.SemiBold,
+      color = contentColor,
+      maxLines = 1,
+      modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+    )
+  }
+}
+
+@Composable
 private fun FlowNodeRenderer(
   node: FlowNode,
+  onNodeClick: () -> Unit,
+  onToggleCollapse: (blockId: String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   when (node) {
     is FlowNode.StartAnchor -> {
       Surface(
+        onClick = onNodeClick,
         shape = CircleShape,
         color = MaterialTheme.colorScheme.primaryContainer,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)),
@@ -696,6 +956,7 @@ private fun FlowNodeRenderer(
 
     is FlowNode.EndAnchor -> {
       Surface(
+        onClick = onNodeClick,
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
@@ -725,6 +986,7 @@ private fun FlowNodeRenderer(
 
     is FlowNode.EmptyPlaceholder -> {
       Surface(
+        onClick = onNodeClick,
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -755,6 +1017,7 @@ private fun FlowNodeRenderer(
 
     is FlowNode.ActionCard -> {
       Surface(
+        onClick = onNodeClick,
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -818,34 +1081,35 @@ private fun FlowNodeRenderer(
         }
 
       Surface(
+        onClick = onNodeClick,
         shape = RoundedCornerShape(14.dp),
         color = containerColor,
         border = BorderStroke(1.25.dp, borderColor.copy(alpha = 0.7f)),
         modifier = modifier.testTag("flow_node_${node.id}"),
       ) {
-        Row(
-          modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 6.dp),
-          verticalAlignment = Alignment.CenterVertically,
-          horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Column(
+          modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 8.dp),
+          verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-          Surface(
-            shape = CircleShape,
-            color = borderColor.copy(alpha = 0.16f),
-            modifier = Modifier.size(30.dp),
+          Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
           ) {
-            Box(contentAlignment = Alignment.Center) {
-              Icon(
-                imageVector = Icons.AutoMirrored.Rounded.AltRoute,
-                contentDescription = null,
-                tint = contentColor,
-                modifier = Modifier.size(17.dp),
-              )
+            Surface(
+              shape = CircleShape,
+              color = borderColor.copy(alpha = 0.16f),
+              modifier = Modifier.size(24.dp),
+            ) {
+              Box(contentAlignment = Alignment.Center) {
+                Icon(
+                  imageVector = Icons.AutoMirrored.Rounded.AltRoute,
+                  contentDescription = null,
+                  tint = contentColor,
+                  modifier = Modifier.size(14.dp),
+                )
+              }
             }
-          }
-          Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(1.dp),
-          ) {
             Text(
               text = node.title,
               style = MaterialTheme.typography.labelLarge,
@@ -853,21 +1117,34 @@ private fun FlowNodeRenderer(
               color = contentColor,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
+              modifier = Modifier.weight(1f),
             )
-            Text(
-              text = node.conditionSummary,
-              style = MaterialTheme.typography.bodySmall,
-              color = contentColor.copy(alpha = 0.88f),
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
+            if (node.canToggleCollapse) {
+              CollapseToggleChip(
+                blockId = node.blockId,
+                isCollapsed = node.isCollapsed,
+                hiddenStepCount = node.collapsedStepCount,
+                contentColor = contentColor,
+                borderColor = borderColor,
+                onClick = { onToggleCollapse(node.blockId) },
+              )
+            }
           }
+
+          Text(
+            text = node.conditionSummary,
+            style = MaterialTheme.typography.bodySmall,
+            color = contentColor.copy(alpha = 0.9f),
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis,
+          )
         }
       }
     }
 
     is FlowNode.ElseHeaderPill -> {
       Surface(
+        onClick = onNodeClick,
         shape = RoundedCornerShape(999.dp),
         color = MaterialTheme.colorScheme.tertiaryContainer,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.55f)),
@@ -891,13 +1168,14 @@ private fun FlowNodeRenderer(
 
     is FlowNode.LoopHeaderCard -> {
       Surface(
+        onClick = onNodeClick,
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.secondaryContainer,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f)),
         modifier = modifier.testTag("flow_node_${node.id}"),
       ) {
         Row(
-          modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 5.dp),
+          modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 6.dp),
           verticalAlignment = Alignment.CenterVertically,
           horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -924,6 +1202,14 @@ private fun FlowNodeRenderer(
               overflow = TextOverflow.Ellipsis,
             )
           }
+          CollapseToggleChip(
+            blockId = node.blockId,
+            isCollapsed = node.isCollapsed,
+            hiddenStepCount = node.collapsedStepCount,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            borderColor = MaterialTheme.colorScheme.secondary,
+            onClick = { onToggleCollapse(node.blockId) },
+          )
         }
       }
     }
@@ -955,6 +1241,7 @@ private fun FlowNodeRenderer(
         }
 
       Surface(
+        onClick = onNodeClick,
         shape = CircleShape,
         color = bg,
         border = BorderStroke(1.dp, fg.copy(alpha = 0.35f)),
@@ -986,6 +1273,53 @@ private fun FlowNodeRenderer(
   }
 }
 
+@Composable
+private fun CollapseToggleChip(
+  blockId: String,
+  isCollapsed: Boolean,
+  hiddenStepCount: Int,
+  contentColor: Color,
+  borderColor: Color,
+  onClick: () -> Unit,
+) {
+  val cdText =
+    if (isCollapsed) {
+      stringResource(R.string.flow_expand_branch_cd)
+    } else {
+      stringResource(R.string.flow_collapse_branch_cd)
+    }
+  val chipLabel =
+    if (!isCollapsed) {
+      "−"
+    } else if (hiddenStepCount == 1) {
+      stringResource(R.string.flow_collapsed_step_one)
+    } else {
+      stringResource(R.string.flow_collapsed_steps_many, hiddenStepCount)
+    }
+
+  Surface(
+    onClick = onClick,
+    shape = RoundedCornerShape(999.dp),
+    color = borderColor.copy(alpha = 0.14f),
+    border = BorderStroke(0.75.dp, borderColor.copy(alpha = 0.45f)),
+    modifier =
+      Modifier
+        .heightIn(min = 24.dp)
+        .semantics { contentDescription = cdText }
+        .testTag("flow_collapse_toggle_$blockId"),
+  ) {
+    Text(
+      text = chipLabel,
+      style = MaterialTheme.typography.labelSmall,
+      fontFamily = FontFamily.Monospace,
+      fontWeight = FontWeight.Bold,
+      color = contentColor,
+      maxLines = 1,
+      modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+    )
+  }
+}
+
 private data class Quad<A, B, C, D>(
   val first: A,
   val second: B,
@@ -996,73 +1330,86 @@ private data class Quad<A, B, C, D>(
 @Preview(showBackground = true)
 @Composable
 private fun ScriptFlowContentPreview() {
-  val sampleActions =
-    listOf(
-      ScriptAction.Tap(
-        id = "tap_1",
-        x = NumericInput.Literal(540),
-        y = NumericInput.Literal(960),
-      ),
-      ScriptAction.IfBlock(
-        id = "if_1",
-        name = "Popup Check",
-        conditionRoot =
-          ConditionGroup(
-            id = "g1",
-            children =
-              listOf(
-                ConditionLeaf(
-                  id = "l1",
-                  predicate =
-                    ConditionPredicate.ColorMatch(
-                      targets = listOf(ColorTarget(x = 900, y = 220, hexColor = "#FF4444")),
+  val sampleScript =
+    Script(
+      id = "preview_script",
+      title = "Daily Quest Auto",
+      globalDelay = DelayConfig.Fixed(500L),
+      actions =
+        listOf(
+          ScriptAction.Tap(
+            id = "tap_1",
+            x = NumericInput.Literal(540),
+            y = NumericInput.Literal(960),
+            postDelay = PostActionDelay.Global,
+          ),
+          ScriptAction.IfBlock(
+            id = "if_1",
+            name = "Popup Check",
+            conditionRoot =
+              ConditionGroup(
+                id = "g1",
+                children =
+                  listOf(
+                    ConditionLeaf(
+                      id = "l1",
+                      predicate =
+                        ConditionPredicate.ColorMatch(
+                          targets = listOf(ColorTarget(x = 900, y = 220, hexColor = "#FF4444")),
+                        ),
                     ),
+                  ),
+              ),
+            thenActions =
+              listOf(
+                ScriptAction.Tap(
+                  id = "tap_close",
+                  x = NumericInput.Literal(900),
+                  y = NumericInput.Literal(220),
+                  postDelay = PostActionDelay.Off,
+                ),
+                ScriptAction.Break(id = "brk_1"),
+              ),
+            elseIfBranches =
+              listOf(
+                ScriptAction.ElseIfBranch(
+                  id = "ei_1",
+                  name = "Skip Ad",
+                  conditionRoot =
+                    ConditionGroup(
+                      id = "g2",
+                      children =
+                        listOf(
+                          ConditionLeaf(
+                            id = "l2",
+                            predicate = ConditionPredicate.AppMatch(packageName = "com.game", appLabel = "Game"),
+                          ),
+                        ),
+                    ),
+                  actions = listOf(ScriptAction.Delay(id = "d_1", config = DelayConfig.Fixed(1000L))),
+                ),
+              ),
+            elseActions =
+              listOf(
+                ScriptAction.SwipeDrag(
+                  id = "sw_1",
+                  startX = NumericInput.Literal(540),
+                  startY = NumericInput.Literal(1400),
+                  endX = NumericInput.Literal(540),
+                  endY = NumericInput.Literal(500),
+                  postDelay = PostActionDelay.Override(DelayConfig.RandomRange(200L, 500L)),
                 ),
               ),
           ),
-        thenActions =
-          listOf(
-            ScriptAction.Tap(id = "tap_close", x = NumericInput.Literal(900), y = NumericInput.Literal(220)),
-            ScriptAction.Break(id = "brk_1"),
+          ScriptAction.LoopBlock(
+            id = "loop_1",
+            mode = LoopMode.Count(NumericInput.Literal(5)),
+            bodyActions =
+              listOf(
+                ScriptAction.Tap(id = "tap_farm", x = NumericInput.Literal(320), y = NumericInput.Literal(1100)),
+              ),
           ),
-        elseIfBranches =
-          listOf(
-            ScriptAction.ElseIfBranch(
-              id = "ei_1",
-              name = "Skip Ad",
-              conditionRoot =
-                ConditionGroup(
-                  id = "g2",
-                  children =
-                    listOf(
-                      ConditionLeaf(
-                        id = "l2",
-                        predicate = ConditionPredicate.AppMatch(packageName = "com.game", appLabel = "Game"),
-                      ),
-                    ),
-                ),
-              actions = listOf(ScriptAction.Delay(id = "d_1", config = DelayConfig.Fixed(1000L))),
-            ),
-          ),
-        elseActions =
-          listOf(
-            ScriptAction.SwipeDrag(
-              id = "sw_1",
-              startX = NumericInput.Literal(540),
-              startY = NumericInput.Literal(1400),
-              endX = NumericInput.Literal(540),
-              endY = NumericInput.Literal(500),
-            ),
-          ),
-      ),
-      ScriptAction.LoopBlock(
-        id = "loop_1",
-        mode = LoopMode.Count(NumericInput.Literal(5)),
-        bodyActions =
-          listOf(
-            ScriptAction.Tap(id = "tap_farm", x = NumericInput.Literal(320), y = NumericInput.Literal(1100)),
-          ),
-      ),
+        ),
     )
 
   MaterialTheme {
@@ -1070,9 +1417,11 @@ private fun ScriptFlowContentPreview() {
       state =
         ScriptFlowUiState(
           isLoading = false,
-          scriptTitle = "Daily Quest Auto",
+          script = sampleScript,
+          scriptTitle = sampleScript.title,
           actionCount = 7,
-          layoutResult = ScriptFlowLayoutEngine.computeLayout(sampleActions),
+          globalDelay = sampleScript.globalDelay,
+          layoutResult = ScriptFlowLayoutEngine.computeLayout(sampleScript),
         ),
       onNavigateBack = {},
     )

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.ColorLens
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.FileDownload
@@ -33,9 +34,11 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
@@ -47,6 +50,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +74,10 @@ fun SettingsTabContent(
   val configuration = LocalConfiguration.current
   val currentLocales = remember(configuration) {
     AppCompatDelegate.getApplicationLocales().toLanguageTags()
+  }
+
+  LaunchedEffect(Unit) {
+    onIntent(HomeUiIntent.RefreshInspectStorageStats)
   }
 
   Column(
@@ -319,6 +327,93 @@ fun SettingsTabContent(
                   label = { Text(localeOption.label) },
                   modifier = Modifier.testTag("locale_${localeOption.languageTag.lowercase()}"),
                 )
+              }
+            }
+          }
+        }
+      }
+
+      item(key = "storage_cache_card") {
+        val stats = state.inspectStorageStats
+        val hasInspectData = stats.itemCount > 0 || stats.totalBytes > 0L
+        val itemWord = if (stats.itemCount == 1) "item" else "items"
+        Card(
+          modifier = Modifier.fillMaxWidth().testTag("settings_storage_cache_card"),
+          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        ) {
+          Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              Icon(
+                imageVector = Icons.Filled.Storage,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+              )
+              Text(
+                text = "Storage & Cache",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+              )
+            }
+
+            Text(
+              text =
+                "Inspect captures and crops are stored locally as lossless PNGs. Clearing Inspect data never affects saved Scripts or Image Match templates.",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Row(
+              modifier = Modifier.fillMaxWidth(),
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+              Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+              ) {
+                Text(
+                  text =
+                    "Inspect Screenshots: ${formatInspectStorageSize(stats.totalBytes)} (${stats.itemCount} $itemWord)",
+                  style = MaterialTheme.typography.bodyMedium,
+                  fontWeight = FontWeight.SemiBold,
+                  modifier = Modifier.testTag("settings_inspect_storage_text"),
+                )
+                if (stats.groupCount > 0) {
+                  val groupWord = if (stats.groupCount == 1) "group" else "groups"
+                  Text(
+                    text = "${stats.groupCount} inspect $groupWord on device",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                }
+              }
+
+              FilledTonalButton(
+                onClick = { onIntent(HomeUiIntent.RequestClearAllInspectData) },
+                enabled = hasInspectData && !state.isClearingInspectData,
+                colors =
+                  ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                  ),
+                modifier =
+                  Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag("settings_clear_inspect_button"),
+              ) {
+                Icon(
+                  imageVector = Icons.Filled.DeleteOutline,
+                  contentDescription = null,
+                  modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Clear All")
               }
             }
           }

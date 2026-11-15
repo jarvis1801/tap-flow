@@ -35,4 +35,14 @@
     <string name="flow_next_cycle">Next Cycle</string>
     <string name="flow_end_script">End Script</string>
     <string name="flow_navigate_back_cd">Navigate back</string>
+    <string name="flow_global_delay_label">Global Delay: %1$s</string>
+    <string name="flow_delay_off_badge">0ms (Off)</string>
+    <string name="flow_collapse_branch_cd">Collapse branch</string>
+    <string name="flow_expand_branch_cd">Expand branch</string>
+    <string name="flow_collapsed_step_one">+1 step</string>
+    <string name="flow_collapsed_steps_many">+%1$d steps</string>
+    <string name="flow_detail_dialog_close">Close</string>
+    <string name="flow_detail_conditions_title">Condition Rules</string>
+    <string name="flow_detail_parameters_title">Parameters</string>
+    <string name="flow_detail_post_delay_title">Post-Action Delay</string>
 </resources>
