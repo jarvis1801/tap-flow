@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Crop
+import androidx.compose.material.icons.rounded.ImageNotSupported
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.StayCurrentLandscape
@@ -76,6 +77,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
@@ -580,6 +582,24 @@ fun InspectTargetPickerBottomSheet(
         ) {
           items(flatItems, key = { it.second.id }) { (groupTitle, item) ->
             val displayAppName = item.appName.ifBlank { "Screen Capture" }
+            val isPreview = LocalInspectionMode.current
+            val imageExists by
+              produceState<Boolean?>(
+                initialValue = if (isPreview) item.fullScreenPngPath.isNotBlank() else null,
+                item.fullScreenPngPath,
+                isPreview,
+              ) {
+                if (isPreview) {
+                  value = item.fullScreenPngPath.isNotBlank()
+                  return@produceState
+                }
+                value =
+                  withContext(Dispatchers.IO) {
+                    val path = item.fullScreenPngPath
+                    path.isNotBlank() && File(path).let { it.exists() && it.isFile }
+                  }
+              }
+
             EditorSectionCard(
               containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ) {
@@ -592,18 +612,45 @@ fun InspectTargetPickerBottomSheet(
                   shape = RoundedCornerShape(10.dp),
                   color = MaterialTheme.colorScheme.surfaceContainerHighest,
                   border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
-                  modifier = Modifier.size(52.dp),
+                  modifier = Modifier.size(64.dp),
                 ) {
                   Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
                   ) {
-                    AsyncImage(
-                      model = File(item.fullScreenPngPath),
-                      contentDescription = "Screenshot for $displayAppName",
-                      contentScale = ContentScale.Fit,
-                      modifier = Modifier.fillMaxSize(),
-                    )
+                    when (imageExists) {
+                      true -> {
+                        AsyncImage(
+                          model = File(item.fullScreenPngPath),
+                          contentDescription = "Screenshot for $displayAppName",
+                          contentScale = ContentScale.Fit,
+                          modifier = Modifier.fillMaxSize(),
+                        )
+                      }
+                      false -> {
+                        Column(
+                          modifier = Modifier.padding(4.dp),
+                          horizontalAlignment = Alignment.CenterHorizontally,
+                          verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                          Icon(
+                            imageVector = Icons.Rounded.ImageNotSupported,
+                            contentDescription = "Image Deleted",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                          )
+                          Text(
+                            text = "Image Deleted",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                          )
+                        }
+                      }
+                      null -> Unit
+                    }
                   }
                 }
 
@@ -634,12 +681,33 @@ fun InspectTargetPickerBottomSheet(
               HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
               if (isCropMode) {
                 item.crops.forEach { crop ->
+                  val cropHasFile by
+                    produceState(
+                      initialValue = isPreview && item.fullScreenPngPath.isNotBlank(),
+                      item.fullScreenPngPath,
+                      crop.cropPngPath,
+                      isPreview,
+                    ) {
+                      if (isPreview) return@produceState
+                      value =
+                        withContext(Dispatchers.IO) {
+                          val legacyOk =
+                            crop.cropPngPath?.takeIf { it.isNotBlank() }?.let {
+                              File(it).let { f -> f.exists() && f.isFile }
+                            } == true
+                          val screenOk =
+                            item.fullScreenPngPath.isNotBlank() &&
+                              File(item.fullScreenPngPath).let { f -> f.exists() && f.isFile }
+                          legacyOk || screenOk
+                        }
+                    }
+
                   Row(
                     modifier =
                       Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(10.dp))
-                        .clickable { onSelectCrop(item, crop) }
+                        .clickable(enabled = cropHasFile) { onSelectCrop(item, crop) }
                         .padding(vertical = 6.dp, horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -654,6 +722,12 @@ fun InspectTargetPickerBottomSheet(
                         text = crop.label.ifBlank { "Crop Template" },
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium,
+                        color =
+                          if (cropHasFile) {
+                            MaterialTheme.colorScheme.onSurface
+                          } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                          },
                       )
                       Text(
                         text = "${crop.width} × ${crop.height} px • (${crop.x}, ${crop.y})",
@@ -661,6 +735,13 @@ fun InspectTargetPickerBottomSheet(
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                       )
+                      if (!cropHasFile) {
+                        Text(
+                          text = "Image Deleted",
+                          style = MaterialTheme.typography.labelSmall,
+                          color = MaterialTheme.colorScheme.error,
+                        )
+                      }
                     }
                   }
                   HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -831,6 +912,11 @@ private fun PickerOrientationBadge(
   }
 }
 
+private data class PickerCropThumbState(
+  val bitmap: ImageBitmap? = null,
+  val isImageDeleted: Boolean = false,
+)
+
 @Composable
 private fun PickerCropRegionThumbnail(
   fullScreenPngPath: String,
@@ -838,9 +924,9 @@ private fun PickerCropRegionThumbnail(
   modifier: Modifier = Modifier,
 ) {
   val isPreview = LocalInspectionMode.current
-  val thumb by
-    produceState<ImageBitmap?>(
-      initialValue = null,
+  val thumbState by
+    produceState(
+      initialValue = PickerCropThumbState(isImageDeleted = isPreview && fullScreenPngPath.isBlank()),
       fullScreenPngPath,
       crop.x,
       crop.y,
@@ -857,16 +943,24 @@ private fun PickerCropRegionThumbnail(
             if (legacyPath != null) {
               val legacyFile = File(legacyPath)
               if (legacyFile.exists() && legacyFile.isFile) {
-                return@runCatching BitmapFactory.decodeFile(legacyFile.absolutePath)?.asImageBitmap()
+                val bmp = BitmapFactory.decodeFile(legacyFile.absolutePath)?.asImageBitmap()
+                return@runCatching PickerCropThumbState(bitmap = bmp, isImageDeleted = bmp == null)
               }
             }
+            if (fullScreenPngPath.isBlank()) {
+              return@runCatching PickerCropThumbState(isImageDeleted = true)
+            }
             val screenFile = File(fullScreenPngPath)
-            if (!screenFile.exists() || !screenFile.isFile) return@runCatching null
+            if (!screenFile.exists() || !screenFile.isFile) {
+              return@runCatching PickerCropThumbState(isImageDeleted = true)
+            }
             val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(screenFile.absolutePath, boundsOpts)
             val imgW = boundsOpts.outWidth
             val imgH = boundsOpts.outHeight
-            if (imgW <= 0 || imgH <= 0) return@runCatching null
+            if (imgW <= 0 || imgH <= 0) {
+              return@runCatching PickerCropThumbState(isImageDeleted = true)
+            }
             val safeX = crop.x.coerceIn(0, imgW - 1)
             val safeY = crop.y.coerceIn(0, imgH - 1)
             val safeW = crop.width.coerceIn(1, imgW - safeX)
@@ -874,14 +968,16 @@ private fun PickerCropRegionThumbnail(
             @Suppress("DEPRECATION")
             val decoder = BitmapRegionDecoder.newInstance(screenFile.absolutePath, false)
             try {
-              decoder.decodeRegion(
-                AndroidRect(safeX, safeY, safeX + safeW, safeY + safeH),
-                BitmapFactory.Options(),
-              )?.asImageBitmap()
+              val bmp =
+                decoder.decodeRegion(
+                  AndroidRect(safeX, safeY, safeX + safeW, safeY + safeH),
+                  BitmapFactory.Options(),
+                )?.asImageBitmap()
+              PickerCropThumbState(bitmap = bmp, isImageDeleted = bmp == null)
             } finally {
               decoder.recycle()
             }
-          }.getOrNull()
+          }.getOrElse { PickerCropThumbState(isImageDeleted = true) }
         }
     }
 
@@ -892,21 +988,32 @@ private fun PickerCropRegionThumbnail(
     modifier = modifier,
   ) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-      val bmp = thumb
-      if (bmp != null) {
-        Image(
-          bitmap = bmp,
-          contentDescription = crop.label.ifBlank { "Crop region" },
-          contentScale = ContentScale.Fit,
-          modifier = Modifier.fillMaxSize().padding(2.dp),
-        )
-      } else {
-        Icon(
-          imageVector = Icons.Rounded.Crop,
-          contentDescription = crop.label.ifBlank { "Crop region" },
-          tint = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.size(18.dp),
-        )
+      val bmp = thumbState.bitmap
+      when {
+        bmp != null -> {
+          Image(
+            bitmap = bmp,
+            contentDescription = crop.label.ifBlank { "Crop region" },
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize().padding(2.dp),
+          )
+        }
+        thumbState.isImageDeleted -> {
+          Icon(
+            imageVector = Icons.Rounded.ImageNotSupported,
+            contentDescription = "Image Deleted",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+          )
+        }
+        else -> {
+          Icon(
+            imageVector = Icons.Rounded.Crop,
+            contentDescription = crop.label.ifBlank { "Crop region" },
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+          )
+        }
       }
     }
   }

@@ -346,10 +346,9 @@ fun HomeContent(
 
             if (state.activeTab == HomeTabType.INSPECT && !state.isSearchExpanded) {
               var showInspectMenu by remember { mutableStateOf(false) }
-              val hasInspectData =
-                state.inspectStorageStats.itemCount > 0 ||
-                  state.inspectStorageStats.totalBytes > 0L ||
-                  state.inspectGroups.isNotEmpty()
+              val hasInspectImages =
+                state.inspectStorageStats.imageCount > 0 ||
+                  state.inspectStorageStats.totalBytes > 0L
               Box {
                 IconButton(
                   onClick = { showInspectMenu = true },
@@ -365,7 +364,7 @@ fun HomeContent(
                   onDismissRequest = { showInspectMenu = false },
                 ) {
                   DropdownMenuItem(
-                    text = { Text("Clear All Inspect Data") },
+                    text = { Text("Clear All Inspect Images") },
                     leadingIcon = {
                       Icon(
                         imageVector = Icons.Filled.DeleteOutline,
@@ -373,7 +372,7 @@ fun HomeContent(
                         tint = MaterialTheme.colorScheme.error,
                       )
                     },
-                    enabled = hasInspectData && !state.isClearingInspectData,
+                    enabled = hasInspectImages && !state.isClearingInspectData,
                     onClick = {
                       showInspectMenu = false
                       onIntent(HomeUiIntent.RequestClearAllInspectData)

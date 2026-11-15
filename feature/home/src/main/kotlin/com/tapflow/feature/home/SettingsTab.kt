@@ -335,8 +335,8 @@ fun SettingsTabContent(
 
       item(key = "storage_cache_card") {
         val stats = state.inspectStorageStats
-        val hasInspectData = stats.itemCount > 0 || stats.totalBytes > 0L
-        val itemWord = if (stats.itemCount == 1) "item" else "items"
+        val hasInspectImages = stats.imageCount > 0 || stats.totalBytes > 0L
+        val imageWord = if (stats.imageCount == 1) "image" else "images"
         Card(
           modifier = Modifier.fillMaxWidth().testTag("settings_storage_cache_card"),
           colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
@@ -363,7 +363,7 @@ fun SettingsTabContent(
 
             Text(
               text =
-                "Inspect captures and crops are stored locally as lossless PNGs. Clearing Inspect data never affects saved Scripts or Image Match templates.",
+                "Clears Inspect screenshot and crop PNGs on disk while keeping Inspect groups, saved Pixel colors, and Scripts with Image Match templates.",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -379,15 +379,15 @@ fun SettingsTabContent(
               ) {
                 Text(
                   text =
-                    "Inspect Screenshots: ${formatInspectStorageSize(stats.totalBytes)} (${stats.itemCount} $itemWord)",
+                    "Inspect Screenshots: ${formatInspectStorageSize(stats.totalBytes)} (${stats.imageCount} $imageWord)",
                   style = MaterialTheme.typography.bodyMedium,
                   fontWeight = FontWeight.SemiBold,
                   modifier = Modifier.testTag("settings_inspect_storage_text"),
                 )
-                if (stats.groupCount > 0) {
-                  val groupWord = if (stats.groupCount == 1) "group" else "groups"
+                if (stats.groupCount > 0 || stats.itemCount > 0) {
+                  val itemWord = if (stats.itemCount == 1) "item" else "items"
                   Text(
-                    text = "${stats.groupCount} inspect $groupWord on device",
+                    text = "${stats.groupCount} group(s) • ${stats.itemCount} inspect $itemWord kept in library",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                   )
@@ -396,7 +396,7 @@ fun SettingsTabContent(
 
               FilledTonalButton(
                 onClick = { onIntent(HomeUiIntent.RequestClearAllInspectData) },
-                enabled = hasInspectData && !state.isClearingInspectData,
+                enabled = hasInspectImages && !state.isClearingInspectData,
                 colors =
                   ButtonDefaults.filledTonalButtonColors(
                     containerColor = MaterialTheme.colorScheme.errorContainer,

@@ -25,6 +25,7 @@ data class InspectGroupWithItems(
 data class InspectStorageStats(
   val groupCount: Int = 0,
   val itemCount: Int = 0,
+  val imageCount: Int = 0,
   val totalBytes: Long = 0L,
 )
 
@@ -60,21 +61,19 @@ class InspectRepository @Inject constructor(
     withContext(Dispatchers.IO) {
       val groupCount = inspectDao.countGroups()
       val itemCount = inspectDao.countItems()
-      val totalBytes = scriptAssetManager.getInspectDiskUsageBytes()
+      val diskUsage = scriptAssetManager.getInspectDiskUsage()
       InspectStorageStats(
         groupCount = groupCount,
         itemCount = itemCount,
-        totalBytes = totalBytes,
+        imageCount = diskUsage.imageCount,
+        totalBytes = diskUsage.totalBytes,
       )
     }
 
-  suspend fun clearAllInspectData(): Result<Int> =
+  suspend fun clearAllInspectImagesOnly(): Result<Int> =
     withContext(Dispatchers.IO) {
       runCatching {
-        val deletedItemsCount = inspectDao.countItems()
-        inspectDao.clearAllTables()
-        val deletedFilesCount = scriptAssetManager.clearInspectDirectories()
-        maxOf(deletedItemsCount, deletedFilesCount)
+        scriptAssetManager.clearInspectDirectories()
       }
     }
 

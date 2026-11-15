@@ -12,8 +12,10 @@ import com.tapflow.core.model.inspect.InspectGroup
 import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.InspectPixel
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.io.File
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +25,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @HiltViewModel
 class InspectStudioViewModel @Inject constructor(
@@ -67,7 +70,30 @@ class InspectStudioViewModel @Inject constructor(
     viewModelScope.launch {
       inspectRepository.observeItem(argItemId).collectLatest { item ->
         if (item == null) {
-          _uiState.update { it.copy(isLoading = false, item = null) }
+          _uiState.update {
+            it.copy(
+              isLoading = false,
+              isSourceImageMissing = false,
+              item = null,
+            )
+          }
+          return@collectLatest
+        }
+
+        val sourceImageMissing =
+          withContext(Dispatchers.IO) {
+            val path = item.fullScreenPngPath
+            path.isBlank() || !File(path).let { it.exists() && it.isFile }
+          }
+
+        if (sourceImageMissing) {
+          _uiState.update {
+            it.copy(
+              isLoading = false,
+              isSourceImageMissing = true,
+              item = item,
+            )
+          }
           return@collectLatest
         }
 
@@ -88,6 +114,7 @@ class InspectStudioViewModel @Inject constructor(
             initializedCursor = true
             state.copy(
               isLoading = false,
+              isSourceImageMissing = false,
               item = item,
               cursorX = initX,
               cursorY = initY,
@@ -102,6 +129,7 @@ class InspectStudioViewModel @Inject constructor(
           } else {
             state.copy(
               isLoading = false,
+              isSourceImageMissing = false,
               item = item,
             )
           }

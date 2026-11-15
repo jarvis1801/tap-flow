@@ -103,6 +103,7 @@ data class HomeUiState(
   val totalPipelinesCount: Int = 0,
   val inspectGroups: List<InspectGroupWithItems> = emptyList(),
   val inspectStorageStats: InspectStorageStats = InspectStorageStats(),
+  val inspectImageRefreshToken: Long = 0L,
   val expandedInspectGroupIds: Set<String> = emptySet(),
   val expandedInspectItemIds: Set<String> = emptySet(),
   val serverStatus: ServerUiStatus = ServerUiStatus(),

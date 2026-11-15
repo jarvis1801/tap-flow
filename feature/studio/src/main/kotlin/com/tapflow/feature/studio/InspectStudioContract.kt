@@ -33,6 +33,7 @@ data class InspectStudioUiState(
   val groupTags: List<String> = emptyList(),
   val item: InspectItem? = null,
   val isLoading: Boolean = true,
+  val isSourceImageMissing: Boolean = false,
   val isPro: Boolean = false,
   val mode: StudioMode = StudioMode.PIXEL_INSPECT,
   val markersVisible: Boolean = true,

@@ -155,7 +155,7 @@ internal fun HomeDialogs(
       title = { Text("Clear All Inspect Images?") },
       text = {
         Text(
-          "This will permanently delete all Inspect groups, pixels, crop regions, and screenshots (freeing $sizeText). Saved Scripts and their Image Match templates will NOT be affected.",
+          "This will permanently delete all Inspect screenshot and crop PNG files on disk (freeing $sizeText). Your Inspect groups, saved Pixel colors, and saved Scripts with Image Match templates will NOT be affected.",
         )
       },
       confirmButton = {

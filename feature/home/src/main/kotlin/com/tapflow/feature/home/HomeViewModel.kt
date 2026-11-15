@@ -71,6 +71,7 @@ class HomeViewModel @Inject constructor(
     val searchQuery: String = "",
     val isSearchExpanded: Boolean = false,
     val inspectStorageStats: InspectStorageStats = InspectStorageStats(),
+    val inspectImageRefreshToken: Long = 0L,
     val expandedInspectGroupIds: Set<String> = emptySet(),
     val expandedInspectItemIds: Set<String> = emptySet(),
     val isScriptFabExpanded: Boolean = false,
@@ -244,6 +245,7 @@ class HomeViewModel @Inject constructor(
           totalPipelinesCount = data.pipelines.size,
           inspectGroups = filteredInspectGroups,
           inspectStorageStats = local.inspectStorageStats,
+          inspectImageRefreshToken = local.inspectImageRefreshToken,
           expandedInspectGroupIds = local.expandedInspectGroupIds,
           expandedInspectItemIds = local.expandedInspectItemIds,
           serverStatus = system.serverStatus,
@@ -868,13 +870,12 @@ class HomeViewModel @Inject constructor(
           )
         }
         viewModelScope.launch {
-          val result = inspectRepository.clearAllInspectData()
+          val result = inspectRepository.clearAllInspectImagesOnly()
           val refreshed = inspectRepository.getInspectStorageStats()
           _localState.update {
             it.copy(
               inspectStorageStats = refreshed,
-              expandedInspectGroupIds = emptySet(),
-              expandedInspectItemIds = emptySet(),
+              inspectImageRefreshToken = it.inspectImageRefreshToken + 1L,
               isClearingInspectData = false,
             )
           }

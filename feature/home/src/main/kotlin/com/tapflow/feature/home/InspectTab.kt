@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.ImageNotSupported
 import androidx.compose.material.icons.rounded.StayCurrentLandscape
 import androidx.compose.material.icons.rounded.StayCurrentPortrait
 import androidx.compose.material.icons.rounded.TabletAndroid
@@ -73,6 +74,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -125,6 +127,7 @@ fun InspectTabContent(
             entry = entry,
             isGroupExpanded = entry.group.id in state.expandedInspectGroupIds,
             expandedItemIds = state.expandedInspectItemIds,
+            imageRefreshToken = state.inspectImageRefreshToken,
             onIntent = onIntent,
           )
         }
@@ -146,6 +149,7 @@ private fun InspectGroupCard(
   entry: InspectGroupWithItems,
   isGroupExpanded: Boolean,
   expandedItemIds: Set<String>,
+  imageRefreshToken: Long,
   onIntent: (HomeUiIntent) -> Unit,
 ) {
   Card(
@@ -219,6 +223,7 @@ private fun InspectGroupCard(
             InspectItemNestedCard(
               item = item,
               isExpanded = item.id in expandedItemIds,
+              imageRefreshToken = imageRefreshToken,
               onIntent = onIntent,
             )
           }
@@ -232,8 +237,28 @@ private fun InspectGroupCard(
 private fun InspectItemNestedCard(
   item: InspectItem,
   isExpanded: Boolean,
+  imageRefreshToken: Long,
   onIntent: (HomeUiIntent) -> Unit,
 ) {
+  val isPreview = LocalInspectionMode.current
+  val imageExists by
+    produceState<Boolean?>(
+      initialValue = if (isPreview) item.fullScreenPngPath.isNotBlank() else null,
+      item.fullScreenPngPath,
+      imageRefreshToken,
+      isPreview,
+    ) {
+      if (isPreview) {
+        value = item.fullScreenPngPath.isNotBlank()
+        return@produceState
+      }
+      value =
+        withContext(Dispatchers.IO) {
+          val path = item.fullScreenPngPath
+          path.isNotBlank() && File(path).let { it.exists() && it.isFile }
+        }
+    }
+
   Card(
     modifier = Modifier.fillMaxWidth().testTag("inspect_item_${item.id}"),
     colors =
@@ -264,12 +289,39 @@ private fun InspectItemNestedCard(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center,
           ) {
-            AsyncImage(
-              model = File(item.fullScreenPngPath),
-              contentDescription = "Screenshot for $displayAppName",
-              contentScale = ContentScale.Fit,
-              modifier = Modifier.fillMaxSize(),
-            )
+            when (imageExists) {
+              true -> {
+                AsyncImage(
+                  model = File(item.fullScreenPngPath),
+                  contentDescription = "Screenshot for $displayAppName",
+                  contentScale = ContentScale.Fit,
+                  modifier = Modifier.fillMaxSize(),
+                )
+              }
+              false -> {
+                Column(
+                  modifier = Modifier.padding(6.dp).testTag("inspect_image_deleted_${item.id}"),
+                  horizontalAlignment = Alignment.CenterHorizontally,
+                  verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                  Icon(
+                    imageVector = Icons.Rounded.ImageNotSupported,
+                    contentDescription = "Image Deleted",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp),
+                  )
+                  Text(
+                    text = "Image Deleted",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                  )
+                }
+              }
+              null -> Unit
+            }
           }
         }
 
@@ -360,6 +412,7 @@ private fun InspectItemNestedCard(
               CropEntryRow(
                 fullScreenPngPath = item.fullScreenPngPath,
                 crop = crop,
+                imageRefreshToken = imageRefreshToken,
                 onDelete = { onIntent(HomeUiIntent.DeleteInspectCrop(item.id, crop.id)) },
               )
             }
@@ -372,23 +425,38 @@ private fun InspectItemNestedCard(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
       ) {
+        val isMissingImage = imageExists == false
+        val canOpenStudio = imageExists == true
         FilledTonalButton(
           onClick = { onIntent(HomeUiIntent.OpenInspectStudio(item.id)) },
+          enabled = canOpenStudio,
           colors =
             ButtonDefaults.filledTonalButtonColors(
               containerColor = MaterialTheme.colorScheme.secondaryContainer,
               contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+              disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+              disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
             ),
           modifier = Modifier.weight(1f).testTag("open_studio_${item.id}"),
         ) {
           Icon(
-            imageVector = Icons.Filled.CenterFocusStrong,
+            imageVector =
+              if (isMissingImage) Icons.Rounded.ImageNotSupported else Icons.Filled.CenterFocusStrong,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            tint =
+              if (canOpenStudio) {
+                MaterialTheme.colorScheme.onSecondaryContainer
+              } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+              },
             modifier = Modifier.size(18.dp),
           )
           Spacer(modifier = Modifier.width(8.dp))
-          Text("Open Studio")
+          Text(
+            text = if (isMissingImage) "Studio Unavailable (Image Deleted)" else "Open Studio",
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
         }
         IconButton(
           onClick = { onIntent(HomeUiIntent.DeleteInspectItem(item.id)) },
@@ -450,22 +518,29 @@ private fun PixelEntryRow(
   }
 }
 
+private data class CropThumbState(
+  val bitmap: ImageBitmap? = null,
+  val isImageDeleted: Boolean = false,
+)
+
 @Composable
 private fun CropEntryRow(
   fullScreenPngPath: String,
   crop: InspectCrop,
+  imageRefreshToken: Long,
   onDelete: () -> Unit,
 ) {
   val isPreview = LocalInspectionMode.current
-  val thumb by
-    produceState<ImageBitmap?>(
-      initialValue = null,
+  val thumbState by
+    produceState(
+      initialValue = CropThumbState(isImageDeleted = isPreview && fullScreenPngPath.isBlank()),
       fullScreenPngPath,
       crop.x,
       crop.y,
       crop.width,
       crop.height,
       crop.cropPngPath,
+      imageRefreshToken,
       isPreview,
     ) {
       if (isPreview) return@produceState
@@ -476,16 +551,24 @@ private fun CropEntryRow(
             if (legacyPath != null) {
               val legacyFile = File(legacyPath)
               if (legacyFile.exists() && legacyFile.isFile) {
-                return@runCatching BitmapFactory.decodeFile(legacyFile.absolutePath)?.asImageBitmap()
+                val bmp = BitmapFactory.decodeFile(legacyFile.absolutePath)?.asImageBitmap()
+                return@runCatching CropThumbState(bitmap = bmp, isImageDeleted = bmp == null)
               }
             }
+            if (fullScreenPngPath.isBlank()) {
+              return@runCatching CropThumbState(isImageDeleted = true)
+            }
             val screenFile = File(fullScreenPngPath)
-            if (!screenFile.exists() || !screenFile.isFile) return@runCatching null
+            if (!screenFile.exists() || !screenFile.isFile) {
+              return@runCatching CropThumbState(isImageDeleted = true)
+            }
             val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(screenFile.absolutePath, boundsOpts)
             val imgW = boundsOpts.outWidth
             val imgH = boundsOpts.outHeight
-            if (imgW <= 0 || imgH <= 0) return@runCatching null
+            if (imgW <= 0 || imgH <= 0) {
+              return@runCatching CropThumbState(isImageDeleted = true)
+            }
             val safeX = crop.x.coerceIn(0, imgW - 1)
             val safeY = crop.y.coerceIn(0, imgH - 1)
             val safeW = crop.width.coerceIn(1, imgW - safeX)
@@ -493,14 +576,16 @@ private fun CropEntryRow(
             @Suppress("DEPRECATION")
             val decoder = BitmapRegionDecoder.newInstance(screenFile.absolutePath, false)
             try {
-              decoder.decodeRegion(
-                AndroidRect(safeX, safeY, safeX + safeW, safeY + safeH),
-                BitmapFactory.Options(),
-              )?.asImageBitmap()
+              val bmp =
+                decoder.decodeRegion(
+                  AndroidRect(safeX, safeY, safeX + safeW, safeY + safeH),
+                  BitmapFactory.Options(),
+                )?.asImageBitmap()
+              CropThumbState(bitmap = bmp, isImageDeleted = bmp == null)
             } finally {
               decoder.recycle()
             }
-          }.getOrNull()
+          }.getOrElse { CropThumbState(isImageDeleted = true) }
         }
     }
 
@@ -515,21 +600,32 @@ private fun CropEntryRow(
       modifier = Modifier.size(40.dp),
     ) {
       Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        val bmp = thumb
-        if (bmp != null) {
-          Image(
-            bitmap = bmp,
-            contentDescription = crop.label,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize(),
-          )
-        } else {
-          Icon(
-            imageVector = Icons.Filled.Crop,
-            contentDescription = crop.label,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(18.dp),
-          )
+        val bmp = thumbState.bitmap
+        when {
+          bmp != null -> {
+            Image(
+              bitmap = bmp,
+              contentDescription = crop.label,
+              contentScale = ContentScale.Fit,
+              modifier = Modifier.fillMaxSize(),
+            )
+          }
+          thumbState.isImageDeleted -> {
+            Icon(
+              imageVector = Icons.Rounded.ImageNotSupported,
+              contentDescription = "Image Deleted",
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.size(18.dp),
+            )
+          }
+          else -> {
+            Icon(
+              imageVector = Icons.Filled.Crop,
+              contentDescription = crop.label,
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.size(18.dp),
+            )
+          }
         }
       }
     }
@@ -545,6 +641,13 @@ private fun CropEntryRow(
         fontFamily = FontFamily.Monospace,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
+      if (thumbState.isImageDeleted) {
+        Text(
+          text = "Image Deleted",
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.error,
+        )
+      }
     }
     IconButton(
       onClick = onDelete,

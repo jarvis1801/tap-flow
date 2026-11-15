@@ -3,6 +3,7 @@ package com.tapflow.core.database.asset
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.compose.runtime.Immutable
 import com.tapflow.core.model.action.LoopMode
 import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.condition.ConditionGroup
@@ -19,6 +20,12 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+@Immutable
+data class InspectDiskUsage(
+  val imageCount: Int = 0,
+  val totalBytes: Long = 0L,
+)
 
 @Singleton
 class ScriptAssetManager @Inject constructor(
@@ -135,12 +142,20 @@ class ScriptAssetManager @Inject constructor(
     return paths
   }
 
-  suspend fun getInspectDiskUsageBytes(): Long =
+  suspend fun getInspectDiskUsage(): InspectDiskUsage =
     withContext(Dispatchers.IO) {
-      listOf(getInspectScreensDir(), getInspectCropsDir()).sumOf { dir ->
-        dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+      var count = 0
+      var bytes = 0L
+      listOf(getInspectScreensDir(), getInspectCropsDir()).forEach { dir ->
+        dir.walkTopDown().filter { it.isFile }.forEach { file ->
+          count++
+          bytes += file.length()
+        }
       }
+      InspectDiskUsage(imageCount = count, totalBytes = bytes)
     }
+
+  suspend fun getInspectDiskUsageBytes(): Long = getInspectDiskUsage().totalBytes
 
   suspend fun clearInspectDirectories(): Int =
     withContext(Dispatchers.IO) {

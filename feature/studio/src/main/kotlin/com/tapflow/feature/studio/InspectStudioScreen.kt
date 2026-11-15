@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.rounded.ImageNotSupported
 import androidx.compose.material.icons.rounded.StayCurrentLandscape
 import androidx.compose.material.icons.rounded.StayCurrentPortrait
 import androidx.compose.material.icons.rounded.TabletAndroid
@@ -84,6 +85,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
@@ -167,13 +169,53 @@ fun InspectStudioContent(
           Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(24.dp),
           ) {
             Text(
               text = "Inspect item not found or was deleted.",
               color = Color.White,
               style = MaterialTheme.typography.titleMedium,
+              textAlign = TextAlign.Center,
             )
-            Button(onClick = { onIntent(InspectStudioUiIntent.BackClicked) }) {
+            Button(
+              onClick = { onIntent(InspectStudioUiIntent.BackClicked) },
+              modifier = Modifier.heightIn(min = 48.dp).testTag("studio_not_found_back_button"),
+            ) {
+              Text("Go Back")
+            }
+          }
+        }
+      }
+      state.isSourceImageMissing -> {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+          Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(24.dp).testTag("studio_missing_image_state"),
+          ) {
+            Icon(
+              imageVector = Icons.Rounded.ImageNotSupported,
+              contentDescription = "Original image was deleted",
+              tint = Color.White.copy(alpha = 0.78f),
+              modifier = Modifier.size(48.dp),
+            )
+            Text(
+              text = "Original image was deleted",
+              color = Color.White,
+              style = MaterialTheme.typography.titleMedium,
+              fontWeight = FontWeight.SemiBold,
+              textAlign = TextAlign.Center,
+            )
+            Text(
+              text = "The screenshot PNG for this inspect item was cleared from device storage. Saved pixel targets remain available in Inspect and Script pickers.",
+              color = Color.White.copy(alpha = 0.72f),
+              style = MaterialTheme.typography.bodySmall,
+              textAlign = TextAlign.Center,
+            )
+            Button(
+              onClick = { onIntent(InspectStudioUiIntent.BackClicked) },
+              modifier = Modifier.heightIn(min = 48.dp).testTag("studio_missing_image_back_button"),
+            ) {
               Text("Go Back")
             }
           }
