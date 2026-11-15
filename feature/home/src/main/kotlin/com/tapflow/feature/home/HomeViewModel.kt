@@ -710,15 +710,15 @@ class HomeViewModel @Inject constructor(
         }
       }
       is HomeUiIntent.SetDarkMode -> {
-        if (intent.option == DarkModeOption.AMOLED &&
+        viewModelScope.launch { preferencesRepository.setDarkMode(intent.option) }
+      }
+      is HomeUiIntent.SetThemePalette -> {
+        if (intent.palette == ThemePaletteOption.AMOLED_TRUE_BLACK &&
           !entitlementRepository.canUseFeature(ProFeatureGate.AMOLED_THEME)
         ) {
           sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.AMOLED_THEME.displayName))
           return
         }
-        viewModelScope.launch { preferencesRepository.setDarkMode(intent.option) }
-      }
-      is HomeUiIntent.SetThemePalette -> {
         viewModelScope.launch { preferencesRepository.setThemePalette(intent.palette) }
       }
       is HomeUiIntent.SelectLocale -> {

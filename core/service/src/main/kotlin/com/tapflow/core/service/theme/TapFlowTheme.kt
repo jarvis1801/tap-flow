@@ -156,63 +156,75 @@ private val AmberLightColorScheme =
     onSecondaryContainer = Color(0xFF001F24),
   )
 
+private val AmoledTrueBlackColorScheme =
+  TapFlowDarkColorScheme.copy(
+    background = Color(0xFF000000),
+    onBackground = Color.White,
+    surface = Color(0xFF000000),
+    onSurface = Color.White,
+    surfaceVariant = Color(0xFF1A1A1A),
+    onSurfaceVariant = Color(0xFFC4CED9),
+    surfaceContainerLowest = Color(0xFF000000),
+    surfaceContainerLow = Color(0xFF0A0A0A),
+    surfaceContainer = Color(0xFF121212),
+    surfaceContainerHigh = Color(0xFF1A1A1A),
+    surfaceContainerHighest = Color(0xFF222222),
+    outline = Color(0xFF525E6B),
+    outlineVariant = Color(0xFF2F3742),
+  )
+
 @Composable
 fun resolveIsDarkTheme(
   darkMode: DarkModeOption,
+  themePalette: ThemePaletteOption = ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
   isPro: Boolean = false,
-): Boolean =
-  when (darkMode) {
+): Boolean {
+  if (themePalette == ThemePaletteOption.AMOLED_TRUE_BLACK && isPro) {
+    return true
+  }
+  return when (darkMode) {
     DarkModeOption.SYSTEM -> isSystemInDarkTheme()
     DarkModeOption.LIGHT -> false
     DarkModeOption.DARK -> true
-    DarkModeOption.AMOLED -> isPro || true
   }
+}
 
 @Composable
 fun TapFlowTheme(
   darkMode: DarkModeOption = DarkModeOption.SYSTEM,
   themePalette: ThemePaletteOption = ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
   isPro: Boolean = false,
-  darkTheme: Boolean = resolveIsDarkTheme(darkMode, isPro),
-  dynamicColor: Boolean = themePalette == ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
+  darkTheme: Boolean = resolveIsDarkTheme(darkMode, themePalette, isPro),
+  dynamicColor: Boolean =
+    (themePalette == ThemePaletteOption.DYNAMIC_MATERIAL_YOU) ||
+      (themePalette == ThemePaletteOption.AMOLED_TRUE_BLACK && !isPro),
   typography: Typography = MaterialTheme.typography,
   content: @Composable () -> Unit,
 ) {
-  val isAmoledActive = darkMode == DarkModeOption.AMOLED && isPro
+  val effectivePalette =
+    if (themePalette == ThemePaletteOption.AMOLED_TRUE_BLACK && !isPro) {
+      ThemePaletteOption.DYNAMIC_MATERIAL_YOU
+    } else {
+      themePalette
+    }
+  val isAmoledActive = effectivePalette == ThemePaletteOption.AMOLED_TRUE_BLACK
   val effectiveDarkTheme = if (isAmoledActive) true else darkTheme
+  val effectiveDynamicColor =
+    effectivePalette == ThemePaletteOption.DYNAMIC_MATERIAL_YOU &&
+      (dynamicColor || themePalette == ThemePaletteOption.AMOLED_TRUE_BLACK)
 
-  val baseColorScheme =
+  val colorScheme =
     when {
-      dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+      isAmoledActive -> AmoledTrueBlackColorScheme
+      effectiveDynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
         val context = LocalContext.current
         if (effectiveDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
       }
-      themePalette == ThemePaletteOption.COBALT_TACTICAL ->
+      effectivePalette == ThemePaletteOption.COBALT_TACTICAL ->
         if (effectiveDarkTheme) CobaltDarkColorScheme else CobaltLightColorScheme
-      themePalette == ThemePaletteOption.AMBER_INDUSTRIAL ->
+      effectivePalette == ThemePaletteOption.AMBER_INDUSTRIAL ->
         if (effectiveDarkTheme) AmberDarkColorScheme else AmberLightColorScheme
       else -> if (effectiveDarkTheme) TapFlowDarkColorScheme else TapFlowLightColorScheme
-    }
-
-  val colorScheme =
-    if (isAmoledActive) {
-      baseColorScheme.copy(
-        background = Color.Black,
-        onBackground = Color(0xFFF2F5F8),
-        surface = Color.Black,
-        onSurface = Color(0xFFF2F5F8),
-        surfaceVariant = Color(0xFF1A1A1A),
-        onSurfaceVariant = Color(0xFFB8C4D0),
-        surfaceContainerLowest = Color.Black,
-        surfaceContainerLow = Color(0xFF0A0A0A),
-        surfaceContainer = Color(0xFF121212),
-        surfaceContainerHigh = Color(0xFF1A1A1A),
-        surfaceContainerHighest = Color(0xFF222222),
-        outline = Color(0xFF424A54),
-        outlineVariant = Color(0xFF262B31),
-      )
-    } else {
-      baseColorScheme
     }
 
   MaterialTheme(

@@ -104,7 +104,8 @@ class MainActivity : AppCompatActivity() {
       val isPro = entitlementState.hasTrialOrLifetimeAccess
       val prefs = prefsOrNull
       val darkMode = prefs?.darkMode ?: AppPreferences().darkMode
-      val isDark = resolveIsDarkTheme(darkMode, isPro = isPro)
+      val themePalette = prefs?.themePalette ?: AppPreferences().themePalette
+      val isDark = resolveIsDarkTheme(darkMode = darkMode, themePalette = themePalette, isPro = isPro)
 
       DisposableEffect(isDark) {
         enableEdgeToEdge(
@@ -126,7 +127,7 @@ class MainActivity : AppCompatActivity() {
 
       TapFlowTheme(
         darkMode = darkMode,
-        themePalette = prefs?.themePalette ?: AppPreferences().themePalette,
+        themePalette = themePalette,
         isPro = isPro,
         darkTheme = isDark,
       ) {

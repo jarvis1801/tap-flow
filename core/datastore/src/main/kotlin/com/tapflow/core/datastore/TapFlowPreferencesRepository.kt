@@ -51,15 +51,26 @@ class TapFlowPreferencesRepository @Inject constructor(
 
   val preferencesFlow: Flow<AppPreferences> =
     safeData.map { prefs ->
+      val rawDarkMode = prefs[Keys.DARK_MODE]
+      val rawPalette = prefs[Keys.THEME_PALETTE]
+      val isLegacyAmoled = rawDarkMode == "AMOLED"
+      val darkMode =
+        if (isLegacyAmoled) {
+          DarkModeOption.DARK
+        } else {
+          DarkModeOption.entries.firstOrNull { it.name == rawDarkMode } ?: DarkModeOption.SYSTEM
+        }
+      val themePalette =
+        if (isLegacyAmoled) {
+          ThemePaletteOption.AMOLED_TRUE_BLACK
+        } else {
+          ThemePaletteOption.entries.firstOrNull { it.name == rawPalette }
+            ?: ThemePaletteOption.DYNAMIC_MATERIAL_YOU
+        }
       AppPreferences(
         hasCompletedPermissionOnboarding = prefs[Keys.HAS_COMPLETED_ONBOARDING] ?: false,
-        darkMode =
-          prefs[Keys.DARK_MODE]?.let { runCatching { DarkModeOption.valueOf(it) }.getOrNull() }
-            ?: DarkModeOption.SYSTEM,
-        themePalette =
-          prefs[Keys.THEME_PALETTE]?.let {
-            runCatching { ThemePaletteOption.valueOf(it) }.getOrNull()
-          } ?: ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
+        darkMode = darkMode,
+        themePalette = themePalette,
         ktorPort = (prefs[Keys.KTOR_PORT] ?: AppPreferences.DEFAULT_KTOR_PORT).coerceIn(1024, 65535),
         shizuku =
           ShizukuPreferences(
@@ -95,11 +106,21 @@ class TapFlowPreferencesRepository @Inject constructor(
   }
 
   suspend fun setDarkMode(option: DarkModeOption) {
-    dataStore.edit { prefs -> prefs[Keys.DARK_MODE] = option.name }
+    dataStore.edit { prefs ->
+      if (prefs[Keys.DARK_MODE] == "AMOLED" && prefs[Keys.THEME_PALETTE] == null) {
+        prefs[Keys.THEME_PALETTE] = ThemePaletteOption.AMOLED_TRUE_BLACK.name
+      }
+      prefs[Keys.DARK_MODE] = option.name
+    }
   }
 
   suspend fun setThemePalette(palette: ThemePaletteOption) {
-    dataStore.edit { prefs -> prefs[Keys.THEME_PALETTE] = palette.name }
+    dataStore.edit { prefs ->
+      prefs[Keys.THEME_PALETTE] = palette.name
+      if (prefs[Keys.DARK_MODE] == "AMOLED") {
+        prefs[Keys.DARK_MODE] = DarkModeOption.DARK.name
+      }
+    }
   }
 
   suspend fun setKtorPort(port: Int) {

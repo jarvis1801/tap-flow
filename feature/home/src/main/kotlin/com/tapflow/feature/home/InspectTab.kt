@@ -18,10 +18,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -42,10 +44,12 @@ import androidx.compose.material.icons.rounded.StayCurrentLandscape
 import androidx.compose.material.icons.rounded.StayCurrentPortrait
 import androidx.compose.material.icons.rounded.TabletAndroid
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -186,6 +190,7 @@ private fun InspectGroupCard(
           Icon(
             imageVector = if (isGroupExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
             contentDescription = if (isGroupExpanded) "Collapse group" else "Expand group",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         }
       }
@@ -293,6 +298,7 @@ private fun InspectItemNestedCard(
               Icon(
                 imageVector = if (isExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                 contentDescription = if (isExpanded) "Hide targets" else "Show targets",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
               )
             }
           }
@@ -368,8 +374,20 @@ private fun InspectItemNestedCard(
       ) {
         FilledTonalButton(
           onClick = { onIntent(HomeUiIntent.OpenInspectStudio(item.id)) },
+          colors =
+            ButtonDefaults.filledTonalButtonColors(
+              containerColor = MaterialTheme.colorScheme.secondaryContainer,
+              contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+            ),
           modifier = Modifier.weight(1f).testTag("open_studio_${item.id}"),
         ) {
+          Icon(
+            imageVector = Icons.Filled.CenterFocusStrong,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.size(18.dp),
+          )
+          Spacer(modifier = Modifier.width(8.dp))
           Text("Open Studio")
         }
         IconButton(
@@ -572,9 +590,16 @@ private fun InspectSpeedDialFab(
         }
         SmallFloatingActionButton(
           onClick = onImportScreenshot,
+          containerColor = MaterialTheme.colorScheme.primaryContainer,
+          contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+          elevation = FloatingActionButtonDefaults.elevation(),
           modifier = Modifier.size(48.dp).testTag("fab_import_screenshot"),
         ) {
-          Icon(imageVector = Icons.Filled.PhotoLibrary, contentDescription = "Import screenshot")
+          Icon(
+            imageVector = Icons.Filled.PhotoLibrary,
+            contentDescription = "Import screenshot",
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+          )
         }
       }
 
@@ -584,31 +609,42 @@ private fun InspectSpeedDialFab(
       ) {
         Surface(
           shape = MaterialTheme.shapes.small,
+          color = MaterialTheme.colorScheme.surfaceContainerHigh,
+          contentColor = MaterialTheme.colorScheme.onSurface,
           tonalElevation = 4.dp,
           shadowElevation = 2.dp,
         ) {
           Text(
             text = "Live Screen Inspect (Pro)",
             style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
           )
         }
         SmallFloatingActionButton(
           onClick = onLiveInspect,
           containerColor = MaterialTheme.colorScheme.secondaryContainer,
+          contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
           modifier = Modifier.size(48.dp).testTag("fab_live_inspect"),
         ) {
-          Icon(imageVector = Icons.Filled.Image, contentDescription = "Live screen inspect")
+          Icon(
+            imageVector = Icons.Filled.Image,
+            contentDescription = "Live screen inspect",
+            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+          )
         }
       }
     }
 
     ExtendedFloatingActionButton(
       onClick = onToggle,
+      containerColor = MaterialTheme.colorScheme.primaryContainer,
+      contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
       icon = {
         Icon(
           imageVector = if (expanded) Icons.Filled.Close else Icons.Filled.Add,
           contentDescription = null,
+          tint = MaterialTheme.colorScheme.onPrimaryContainer,
         )
       },
       text = { Text(if (expanded) "Close" else "New Inspect") },

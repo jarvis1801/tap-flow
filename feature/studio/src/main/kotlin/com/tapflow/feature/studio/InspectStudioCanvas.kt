@@ -507,33 +507,28 @@ fun InteractiveInspectCanvas(
             center = center,
             style = Stroke(width = if (isHighlighted) 2.5.dp.toPx() else 2.dp.toPx()),
           )
-          // Subtle outer reticle ticks leaving center completely open
+          // Subtle outer reticle ticks leaving center completely open (dual-contrast stroke)
           val innerTick = radius + 2.dp.toPx()
           val outerTick = radius + 6.dp.toPx()
-          drawLine(
-            color = ringColor,
-            start = Offset(center.x - outerTick, center.y),
-            end = Offset(center.x - innerTick, center.y),
-            strokeWidth = 1.5.dp.toPx(),
-          )
-          drawLine(
-            color = ringColor,
-            start = Offset(center.x + innerTick, center.y),
-            end = Offset(center.x + outerTick, center.y),
-            strokeWidth = 1.5.dp.toPx(),
-          )
-          drawLine(
-            color = ringColor,
-            start = Offset(center.x, center.y - outerTick),
-            end = Offset(center.x, center.y - innerTick),
-            strokeWidth = 1.5.dp.toPx(),
-          )
-          drawLine(
-            color = ringColor,
-            start = Offset(center.x, center.y + innerTick),
-            end = Offset(center.x, center.y + outerTick),
-            strokeWidth = 1.5.dp.toPx(),
-          )
+          listOf(
+            Offset(center.x - outerTick, center.y) to Offset(center.x - innerTick, center.y),
+            Offset(center.x + innerTick, center.y) to Offset(center.x + outerTick, center.y),
+            Offset(center.x, center.y - outerTick) to Offset(center.x, center.y - innerTick),
+            Offset(center.x, center.y + innerTick) to Offset(center.x, center.y + outerTick),
+          ).forEach { (start, end) ->
+            drawLine(
+              color = Color.Black.copy(alpha = 0.78f),
+              start = start,
+              end = end,
+              strokeWidth = 3.dp.toPx(),
+            )
+            drawLine(
+              color = ringColor,
+              start = start,
+              end = end,
+              strokeWidth = 1.5.dp.toPx(),
+            )
+          }
         }
       }
 
@@ -542,6 +537,12 @@ fun InteractiveInspectCanvas(
         val c = tf.imageToScreen(state.cursorX.toFloat(), state.cursorY.toFloat())
         val crossRadius = 18.dp.toPx()
         drawCircle(
+          color = Color.Black.copy(alpha = 0.78f),
+          radius = 10.dp.toPx(),
+          center = c,
+          style = Stroke(width = 4.dp.toPx()),
+        )
+        drawCircle(
           color = Color.White,
           radius = 10.dp.toPx(),
           center = c,
@@ -549,41 +550,36 @@ fun InteractiveInspectCanvas(
         )
         drawCircle(
           color = primaryColor,
-          radius = 12.dp.toPx(),
+          radius = 12.5.dp.toPx(),
           center = c,
           style = Stroke(width = 1.5.dp.toPx()),
         )
-        drawLine(
-          color = Color.White,
-          start = Offset(c.x - crossRadius, c.y),
-          end = Offset(c.x - 5.dp.toPx(), c.y),
-          strokeWidth = 2.dp.toPx(),
-        )
-        drawLine(
-          color = Color.White,
-          start = Offset(c.x + 5.dp.toPx(), c.y),
-          end = Offset(c.x + crossRadius, c.y),
-          strokeWidth = 2.dp.toPx(),
-        )
-        drawLine(
-          color = Color.White,
-          start = Offset(c.x, c.y - crossRadius),
-          end = Offset(c.x, c.y - 5.dp.toPx()),
-          strokeWidth = 2.dp.toPx(),
-        )
-        drawLine(
-          color = Color.White,
-          start = Offset(c.x, c.y + 5.dp.toPx()),
-          end = Offset(c.x, c.y + crossRadius),
-          strokeWidth = 2.dp.toPx(),
-        )
+        listOf(
+          Offset(c.x - crossRadius, c.y) to Offset(c.x - 5.dp.toPx(), c.y),
+          Offset(c.x + 5.dp.toPx(), c.y) to Offset(c.x + crossRadius, c.y),
+          Offset(c.x, c.y - crossRadius) to Offset(c.x, c.y - 5.dp.toPx()),
+          Offset(c.x, c.y + 5.dp.toPx()) to Offset(c.x, c.y + crossRadius),
+        ).forEach { (start, end) ->
+          drawLine(
+            color = Color.Black.copy(alpha = 0.78f),
+            start = start,
+            end = end,
+            strokeWidth = 3.5.dp.toPx(),
+          )
+          drawLine(
+            color = Color.White,
+            start = start,
+            end = end,
+            strokeWidth = 2.dp.toPx(),
+          )
+        }
       } else {
         val tl = tf.imageToScreen(state.cropX.toFloat(), state.cropY.toFloat())
         val wPx = state.cropWidth * tf.totalScale
         val hPx = state.cropHeight * tf.totalScale
         // 100% transparent border-only crop selector so pixel colors underneath remain unobstructed
         drawRect(
-          color = Color.Black.copy(alpha = 0.55f),
+          color = Color.Black.copy(alpha = 0.65f),
           topLeft = tl,
           size = Size(wPx, hPx),
           style = Stroke(width = 4.dp.toPx()),
@@ -594,7 +590,7 @@ fun InteractiveInspectCanvas(
           size = Size(wPx, hPx),
           style = Stroke(width = 2.5.dp.toPx()),
         )
-        // Corner handles
+        // Corner handles with outer dark halo
         val handleR = 6.dp.toPx()
         listOf(
           tl,
@@ -602,6 +598,7 @@ fun InteractiveInspectCanvas(
           Offset(tl.x, tl.y + hPx),
           Offset(tl.x + wPx, tl.y + hPx),
         ).forEach { corner ->
+          drawCircle(color = Color.Black.copy(alpha = 0.7f), radius = handleR + 1.5.dp.toPx(), center = corner)
           drawCircle(color = primaryColor, radius = handleR, center = corner)
           drawCircle(color = Color.White, radius = handleR * 0.55f, center = corner)
         }

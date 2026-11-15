@@ -11,8 +11,10 @@ fun TapFlowTheme(
   darkMode: DarkModeOption = DarkModeOption.SYSTEM,
   themePalette: ThemePaletteOption = ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
   isPro: Boolean = false,
-  darkTheme: Boolean = resolveIsDarkTheme(darkMode, isPro),
-  dynamicColor: Boolean = themePalette == ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
+  darkTheme: Boolean = resolveIsDarkTheme(darkMode, themePalette, isPro),
+  dynamicColor: Boolean =
+    (themePalette == ThemePaletteOption.DYNAMIC_MATERIAL_YOU) ||
+      (themePalette == ThemePaletteOption.AMOLED_TRUE_BLACK && !isPro),
   content: @Composable () -> Unit,
 ) {
   SharedTapFlowTheme(

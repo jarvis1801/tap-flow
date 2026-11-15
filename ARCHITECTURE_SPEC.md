@@ -233,8 +233,8 @@ Tabs:
             - Shows current tier: `[Pro Lifetime Active ✓]` / `[7-Day Trial: Xd Xh Left]` / `[Free Plan]`.
             - Actions: `[Upgrade to Lifetime Pro]`, `[Start 7-Day Free Trial]` (if unused), `[Restore Google Play Purchase]`.
         - Appearance:
-            - Dark Mode: System Default / Force Light / Force Dark / AMOLED Black (`#000000` surfaces, unlocked for both 7-Day Free Trial and Lifetime Pro via `ProFeatureGate.AMOLED_THEME`; falls back cleanly on Free tier and routes Free taps to `Route.Paywall`).
-            - Theme Palette: Dynamic Material You (Android 12+) / Custom Color Accent Schemes.
+            - Dark Mode: System Default / Force Light / Force Dark.
+            - Theme Palette: Dynamic Material You (Android 12+) / Cyan Precision / Cobalt Tactical / Amber Industrial / AMOLED True Black (`#000000` surfaces with forced dark system bars, unlocked for both 7-Day Free Trial and Lifetime Pro via `ProFeatureGate.AMOLED_THEME`; falls back cleanly to `DYNAMIC_MATERIAL_YOU` on Free tier and routes Free taps to `Route.Paywall`).
         - Localization:
             - Language Picker: English / Traditional Chinese (繁體中文) / Simplified Chinese (简体中文).
             - Implementation: Uses `AppCompatDelegate.setApplicationLocales()` (`MainActivity : AppCompatActivity()`, `Theme.AppCompat.DayNight.NoActionBar`, `AppLocalesMetadataHolderService`, `generateLocaleConfig = true`).

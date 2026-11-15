@@ -6,7 +6,6 @@ enum class DarkModeOption {
   SYSTEM,
   LIGHT,
   DARK,
-  AMOLED,
 }
 
 enum class ThemePaletteOption {
@@ -14,6 +13,7 @@ enum class ThemePaletteOption {
   CYAN_PRECISION,
   COBALT_TACTICAL,
   AMBER_INDUSTRIAL,
+  AMOLED_TRUE_BLACK,
 }
 
 @Immutable

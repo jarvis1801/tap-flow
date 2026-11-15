@@ -113,35 +113,15 @@ fun SettingsTabContent(
               verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
               DarkModeOption.entries.forEach { option ->
-                val isAmoled = option == DarkModeOption.AMOLED
-                val isSelected =
-                  if (isAmoled) {
-                    state.preferences.darkMode == option && state.isPro
-                  } else {
-                    state.preferences.darkMode == option
-                  }
                 FilterChip(
-                  selected = isSelected,
+                  selected = state.preferences.darkMode == option,
                   onClick = { onIntent(HomeUiIntent.SetDarkMode(option)) },
-                  leadingIcon =
-                    if (isAmoled && !state.isPro) {
-                      {
-                        Icon(
-                          imageVector = Icons.Filled.Lock,
-                          contentDescription = "TapFlow Pro required",
-                          modifier = Modifier.size(16.dp),
-                        )
-                      }
-                    } else {
-                      null
-                    },
                   label = {
                     Text(
                       when (option) {
                         DarkModeOption.SYSTEM -> "System Default"
                         DarkModeOption.LIGHT -> "Force Light"
                         DarkModeOption.DARK -> "Force Dark"
-                        DarkModeOption.AMOLED -> "AMOLED Black [Pro]"
                       },
                     )
                   },
@@ -157,14 +137,35 @@ fun SettingsTabContent(
               style = MaterialTheme.typography.labelLarge,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            val effectivePalette =
+              if (state.preferences.themePalette == ThemePaletteOption.AMOLED_TRUE_BLACK &&
+                !state.isPro
+              ) {
+                ThemePaletteOption.DYNAMIC_MATERIAL_YOU
+              } else {
+                state.preferences.themePalette
+              }
             FlowRow(
               horizontalArrangement = Arrangement.spacedBy(8.dp),
               verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
               ThemePaletteOption.entries.forEach { palette ->
+                val isAmoled = palette == ThemePaletteOption.AMOLED_TRUE_BLACK
                 FilterChip(
-                  selected = state.preferences.themePalette == palette,
+                  selected = effectivePalette == palette,
                   onClick = { onIntent(HomeUiIntent.SetThemePalette(palette)) },
+                  leadingIcon =
+                    if (isAmoled && !state.isPro) {
+                      {
+                        Icon(
+                          imageVector = Icons.Filled.Lock,
+                          contentDescription = "TapFlow Pro required",
+                          modifier = Modifier.size(16.dp),
+                        )
+                      }
+                    } else {
+                      null
+                    },
                   label = {
                     Text(
                       when (palette) {
@@ -172,6 +173,7 @@ fun SettingsTabContent(
                         ThemePaletteOption.CYAN_PRECISION -> "Cyan Precision"
                         ThemePaletteOption.COBALT_TACTICAL -> "Cobalt Tactical"
                         ThemePaletteOption.AMBER_INDUSTRIAL -> "Amber Industrial"
+                        ThemePaletteOption.AMOLED_TRUE_BLACK -> "AMOLED True Black [Pro]"
                       },
                     )
                   },

@@ -1,6 +1,7 @@
 package com.tapflow.feature.studio
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,12 +28,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.rounded.StayCurrentLandscape
@@ -46,9 +49,12 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.InputChip
+import androidx.compose.material3.InputChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -148,11 +154,12 @@ fun InspectStudioContent(
   Scaffold(
     snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
     containerColor = Color(0xFF0E1014),
+    contentColor = Color.White,
   ) { _ ->
     when {
       state.isLoading -> {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-          CircularProgressIndicator()
+          CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
       }
       item == null -> {
@@ -305,7 +312,8 @@ private fun StudioTopBar(
 ) {
   val itemName = item.appName.ifBlank { item.packageName }.ifBlank { "Screenshot" }
   Surface(
-    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    contentColor = MaterialTheme.colorScheme.onSurface,
     tonalElevation = 4.dp,
     modifier = Modifier.fillMaxWidth(),
   ) {
@@ -323,9 +331,17 @@ private fun StudioTopBar(
       ) {
         IconButton(
           onClick = onBack,
+          colors =
+            IconButtonDefaults.iconButtonColors(
+              contentColor = MaterialTheme.colorScheme.onSurface,
+            ),
           modifier = Modifier.size(48.dp).testTag("studio_back_button"),
         ) {
-          Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Navigate back")
+          Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Navigate back",
+            tint = MaterialTheme.colorScheme.onSurface,
+          )
         }
 
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -335,6 +351,7 @@ private fun StudioTopBar(
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
           )
           FlowRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -356,12 +373,33 @@ private fun StudioTopBar(
 
         IconButton(
           onClick = onToggleMarkers,
+          colors =
+            IconButtonDefaults.iconButtonColors(
+              containerColor =
+                if (markersVisible) {
+                  MaterialTheme.colorScheme.primaryContainer
+                } else {
+                  MaterialTheme.colorScheme.surfaceContainerHighest
+                },
+              contentColor =
+                if (markersVisible) {
+                  MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                  MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            ),
           modifier = Modifier.size(48.dp).testTag("studio_toggle_markers_button"),
         ) {
           Icon(
             imageVector =
               if (markersVisible) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
             contentDescription = if (markersVisible) "Hide markers" else "Show markers",
+            tint =
+              if (markersVisible) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+              } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+              },
           )
         }
       }
@@ -370,22 +408,58 @@ private fun StudioTopBar(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
+        val pixelSelected = mode == StudioMode.PIXEL_INSPECT
         FilterChip(
-          selected = mode == StudioMode.PIXEL_INSPECT,
+          selected = pixelSelected,
           onClick = { onSwitchMode(StudioMode.PIXEL_INSPECT) },
+          colors =
+            FilterChipDefaults.filterChipColors(
+              containerColor = MaterialTheme.colorScheme.surfaceContainer,
+              labelColor = MaterialTheme.colorScheme.onSurface,
+              iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+              selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+              selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+              selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ),
           leadingIcon = {
-            Icon(Icons.Filled.Palette, contentDescription = null, modifier = Modifier.size(16.dp))
+            Icon(
+              imageVector = Icons.Filled.Palette,
+              contentDescription = null,
+              tint =
+                if (pixelSelected) {
+                  MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                  MaterialTheme.colorScheme.onSurfaceVariant
+                },
+              modifier = Modifier.size(16.dp),
+            )
           },
           label = { Text(StudioMode.PIXEL_INSPECT.label) },
           modifier = Modifier.weight(1f).testTag("studio_mode_pixel"),
         )
+        val cropSelected = mode == StudioMode.IMAGE_CROP
         FilterChip(
-          selected = mode == StudioMode.IMAGE_CROP,
+          selected = cropSelected,
           onClick = { onSwitchMode(StudioMode.IMAGE_CROP) },
+          colors =
+            FilterChipDefaults.filterChipColors(
+              containerColor = MaterialTheme.colorScheme.surfaceContainer,
+              labelColor = MaterialTheme.colorScheme.onSurface,
+              iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+              selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+              selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+              selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            ),
           leadingIcon = {
             Icon(
               imageVector = if (isPro) Icons.Filled.Crop else Icons.Filled.Lock,
               contentDescription = null,
+              tint =
+                if (cropSelected) {
+                  MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                  MaterialTheme.colorScheme.onSurfaceVariant
+                },
               modifier = Modifier.size(16.dp),
             )
           },
@@ -473,7 +547,8 @@ private fun StudioBottomControlBar(
   var adjustSizeInsteadOfOrigin by remember { mutableStateOf(false) }
 
   Surface(
-    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    contentColor = MaterialTheme.colorScheme.onSurface,
     tonalElevation = 8.dp,
     modifier = Modifier.fillMaxWidth(),
   ) {
@@ -506,6 +581,7 @@ private fun StudioBottomControlBar(
               style = MaterialTheme.typography.titleSmall,
               fontFamily = FontFamily.Monospace,
               fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
               text =
@@ -529,10 +605,14 @@ private fun StudioBottomControlBar(
                   ),
                 )
               },
+              colors =
+                IconButtonDefaults.iconButtonColors(
+                  contentColor = MaterialTheme.colorScheme.error,
+                ),
               modifier = Modifier.size(48.dp).testTag("delete_selected_pixel_button"),
             ) {
               Icon(
-                Icons.Filled.DeleteOutline,
+                imageVector = Icons.Filled.DeleteOutline,
                 contentDescription = "Delete selected pixel",
                 tint = MaterialTheme.colorScheme.error,
               )
@@ -550,9 +630,19 @@ private fun StudioBottomControlBar(
         Button(
           onClick = { onIntent(InspectStudioUiIntent.OpenSaveSheet) },
           enabled = !state.isSaving,
+          colors =
+            ButtonDefaults.buttonColors(
+              containerColor = MaterialTheme.colorScheme.primary,
+              contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
           modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("save_pixel_target_button"),
         ) {
-          Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+          Icon(
+            imageVector = Icons.Filled.Save,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(18.dp),
+          )
           Spacer(modifier = Modifier.width(8.dp))
           Text("Save Pixel Target")
         }
@@ -594,23 +684,75 @@ private fun StudioBottomControlBar(
             }
           }
 
-          Column(modifier = Modifier.weight(1f)) {
+          Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
               text = "${state.cropWidth} × ${state.cropHeight} px @ (${state.cropX}, ${state.cropY})",
               style = MaterialTheme.typography.labelLarge,
               fontFamily = FontFamily.Monospace,
               fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.onSurface,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FlowRow(
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+              verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+              val moveSelected = !adjustSizeInsteadOfOrigin
               FilterChip(
-                selected = !adjustSizeInsteadOfOrigin,
+                selected = moveSelected,
                 onClick = { adjustSizeInsteadOfOrigin = false },
-                label = { Text("Move X/Y") },
+                colors =
+                  FilterChipDefaults.filterChipColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    labelColor = MaterialTheme.colorScheme.onSurface,
+                    iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                  ),
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Filled.OpenWith,
+                    contentDescription = null,
+                    tint =
+                      if (moveSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                      } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                      },
+                    modifier = Modifier.size(14.dp),
+                  )
+                },
+                label = { Text("Move X/Y", maxLines = 1) },
+                modifier = Modifier.testTag("crop_mode_move"),
               )
+              val resizeSelected = adjustSizeInsteadOfOrigin
               FilterChip(
-                selected = adjustSizeInsteadOfOrigin,
+                selected = resizeSelected,
                 onClick = { adjustSizeInsteadOfOrigin = true },
-                label = { Text("Resize W/H") },
+                colors =
+                  FilterChipDefaults.filterChipColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    labelColor = MaterialTheme.colorScheme.onSurface,
+                    iconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                  ),
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Filled.AspectRatio,
+                    contentDescription = null,
+                    tint =
+                      if (resizeSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                      } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                      },
+                    modifier = Modifier.size(14.dp),
+                  )
+                },
+                label = { Text("Resize W/H", maxLines = 1) },
+                modifier = Modifier.testTag("crop_mode_resize"),
               )
             }
           }
@@ -626,10 +768,14 @@ private fun StudioBottomControlBar(
                   ),
                 )
               },
+              colors =
+                IconButtonDefaults.iconButtonColors(
+                  contentColor = MaterialTheme.colorScheme.error,
+                ),
               modifier = Modifier.size(48.dp).testTag("delete_selected_crop_button"),
             ) {
               Icon(
-                Icons.Filled.DeleteOutline,
+                imageVector = Icons.Filled.DeleteOutline,
                 contentDescription = "Delete selected crop",
                 tint = MaterialTheme.colorScheme.error,
               )
@@ -671,9 +817,19 @@ private fun StudioBottomControlBar(
         Button(
           onClick = { onIntent(InspectStudioUiIntent.OpenSaveSheet) },
           enabled = !state.isSaving,
+          colors =
+            ButtonDefaults.buttonColors(
+              containerColor = MaterialTheme.colorScheme.primary,
+              contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
           modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("save_image_crop_button"),
         ) {
-          Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+          Icon(
+            imageVector = Icons.Filled.Save,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(18.dp),
+          )
           Spacer(modifier = Modifier.width(8.dp))
           Text("Save Crop Region")
         }
@@ -689,39 +845,69 @@ private fun NudgeDPad(
   onLeft: () -> Unit,
   onRight: () -> Unit,
 ) {
+  val buttonColors =
+    ButtonDefaults.outlinedButtonColors(
+      containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+      contentColor = MaterialTheme.colorScheme.onSurface,
+    )
+  val border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
   Row(
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(2.dp),
   ) {
     OutlinedButton(
       onClick = onLeft,
+      colors = buttonColors,
+      border = border,
       contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
       modifier = Modifier.size(38.dp).testTag("nudge_left"),
     ) {
-      Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Nudge left 1px")
+      Icon(
+        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+        contentDescription = "Nudge left 1px",
+        tint = MaterialTheme.colorScheme.onSurface,
+      )
     }
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
       OutlinedButton(
         onClick = onUp,
+        colors = buttonColors,
+        border = border,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
         modifier = Modifier.size(38.dp).testTag("nudge_up"),
       ) {
-        Icon(Icons.Filled.KeyboardArrowUp, contentDescription = "Nudge up 1px")
+        Icon(
+          imageVector = Icons.Filled.KeyboardArrowUp,
+          contentDescription = "Nudge up 1px",
+          tint = MaterialTheme.colorScheme.onSurface,
+        )
       }
       OutlinedButton(
         onClick = onDown,
+        colors = buttonColors,
+        border = border,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
         modifier = Modifier.size(38.dp).testTag("nudge_down"),
       ) {
-        Icon(Icons.Filled.KeyboardArrowDown, contentDescription = "Nudge down 1px")
+        Icon(
+          imageVector = Icons.Filled.KeyboardArrowDown,
+          contentDescription = "Nudge down 1px",
+          tint = MaterialTheme.colorScheme.onSurface,
+        )
       }
     }
     OutlinedButton(
       onClick = onRight,
+      colors = buttonColors,
+      border = border,
       contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
       modifier = Modifier.size(38.dp).testTag("nudge_right"),
     ) {
-      Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Nudge right 1px")
+      Icon(
+        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+        contentDescription = "Nudge right 1px",
+        tint = MaterialTheme.colorScheme.onSurface,
+      )
     }
   }
 }
@@ -752,6 +938,8 @@ private fun StudioSaveConfirmationSheet(
   ModalBottomSheet(
     onDismissRequest = onDismiss,
     sheetState = sheetState,
+    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    contentColor = MaterialTheme.colorScheme.onSurface,
   ) {
     Column(
       modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
@@ -761,6 +949,7 @@ private fun StudioSaveConfirmationSheet(
         text = if (isCrop) "Save Crop Region" else "Save Pixel Target",
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
       )
 
       OutlinedTextField(
@@ -802,9 +991,20 @@ private fun StudioSaveConfirmationSheet(
             InputChip(
               selected = false,
               onClick = { tags = tags - tag },
+              colors =
+                InputChipDefaults.inputChipColors(
+                  containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                  labelColor = MaterialTheme.colorScheme.onSurface,
+                  trailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
               label = { Text(tag) },
               trailingIcon = {
-                Icon(Icons.Filled.Close, contentDescription = "Remove tag $tag", modifier = Modifier.size(16.dp))
+                Icon(
+                  imageVector = Icons.Filled.Close,
+                  contentDescription = "Remove tag $tag",
+                  tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                  modifier = Modifier.size(16.dp),
+                )
               },
             )
           }
@@ -860,6 +1060,9 @@ private fun MarkerInfoPopupDialog(
 ) {
   AlertDialog(
     onDismissRequest = onDismiss,
+    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    titleContentColor = MaterialTheme.colorScheme.onSurface,
+    textContentColor = MaterialTheme.colorScheme.onSurface,
     modifier = Modifier.testTag("studio_marker_info_dialog"),
     title = {
       Text(
@@ -992,7 +1195,12 @@ private fun MarkerInfoPopupDialog(
         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
         modifier = Modifier.testTag("studio_marker_info_delete"),
       ) {
-        Icon(Icons.Filled.DeleteOutline, contentDescription = null, modifier = Modifier.size(18.dp))
+        Icon(
+          imageVector = Icons.Filled.DeleteOutline,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.error,
+          modifier = Modifier.size(18.dp),
+        )
         Spacer(modifier = Modifier.width(4.dp))
         Text("Delete")
       }
