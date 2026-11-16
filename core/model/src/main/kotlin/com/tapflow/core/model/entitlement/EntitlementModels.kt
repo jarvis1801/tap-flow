@@ -96,6 +96,7 @@ enum class ProFeatureGate(val displayName: String) {
   FULL_EXECUTION_LOGS("Full Execution History & Export"),
   FORCE_STOP_APP("Rootless App Force-Stop"),
   HOLD_GESTURE_MODES("Advanced Long Press Hold Modes"),
+  EXTERNAL_BROADCAST("MacroDroid & Tasker Broadcasts"),
   ;
 
   val requiresLifetimePro: Boolean

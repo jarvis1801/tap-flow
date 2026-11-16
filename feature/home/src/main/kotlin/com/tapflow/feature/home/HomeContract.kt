@@ -235,6 +235,10 @@ sealed interface HomeUiIntent {
 
   data class ToggleShizukuAutoGrantProjectMedia(val enabled: Boolean) : HomeUiIntent
 
+  data class ToggleExternalBroadcast(val enabled: Boolean) : HomeUiIntent
+
+  data object OpenExternalAutomationGuideClicked : HomeUiIntent
+
   // Settings Tab
   data object ActivateSevenDayTrialClicked : HomeUiIntent
 
@@ -299,6 +303,8 @@ sealed interface HomeUiEffect {
   data class NavigateToPipelineLog(val pipelineId: String) : HomeUiEffect
 
   data class NavigateToInspectStudio(val inspectItemId: String) : HomeUiEffect
+
+  data object NavigateToExternalAutomationGuide : HomeUiEffect
 
   data class RequestMediaProjectionPermission(val target: PendingMediaProjectionTarget) : HomeUiEffect
 

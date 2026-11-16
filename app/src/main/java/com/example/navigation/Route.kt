@@ -40,4 +40,7 @@ sealed interface Route {
 
   @Serializable
   data class InspectStudio(val inspectItemId: String) : Route
+
+  @Serializable
+  data object ExternalAutomationGuide : Route
 }

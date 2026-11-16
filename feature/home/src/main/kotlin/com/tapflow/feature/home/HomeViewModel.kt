@@ -713,6 +713,24 @@ class HomeViewModel @Inject constructor(
           }
         }
       }
+      is HomeUiIntent.ToggleExternalBroadcast -> {
+        if (!entitlementRepository.canUseFeature(ProFeatureGate.EXTERNAL_BROADCAST)) {
+          sendEffect(
+            HomeUiEffect.NavigateToPaywall(ProFeatureGate.EXTERNAL_BROADCAST.displayName),
+          )
+          return
+        }
+        if (!shizukuManager.isReadyNow()) {
+          sendEffect(
+            HomeUiEffect.ShowSnackbar("Install, start, and grant Shizuku permission first."),
+          )
+          return
+        }
+        viewModelScope.launch { preferencesRepository.setExternalBroadcastEnabled(intent.enabled) }
+      }
+      HomeUiIntent.OpenExternalAutomationGuideClicked -> {
+        sendEffect(HomeUiEffect.NavigateToExternalAutomationGuide)
+      }
 
       // Settings Tab
       HomeUiIntent.ActivateSevenDayTrialClicked -> {

@@ -36,6 +36,8 @@ import com.tapflow.core.model.log.ExecutionStatus
 import com.tapflow.core.model.script.Script
 import com.tapflow.core.service.accessibility.AccessibilityManagerBridge
 import com.tapflow.core.service.clipboard.BackgroundClipboardManager
+import com.tapflow.core.service.external.ExternalBroadcastContract
+import com.tapflow.core.service.external.ExternalBroadcastEmitter
 import com.tapflow.core.service.projection.MediaProjectionBridge
 import com.tapflow.core.service.projection.ScreenCaptureState
 import com.tapflow.core.service.shizuku.ShizukuManager
@@ -54,12 +56,14 @@ import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.withContext
 
 private sealed interface ControlSignal {
   data object None : ControlSignal
@@ -85,6 +89,7 @@ class AutomationRunnerEngine @Inject constructor(
   private val entitlementRepository: EntitlementRepository,
   private val logRepository: LogRepository,
   private val scriptAssetManager: ScriptAssetManager,
+  private val externalBroadcastEmitter: ExternalBroadcastEmitter,
   val controlHub: RunnerControlHub,
 ) {
   private val engineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -103,6 +108,7 @@ class AutomationRunnerEngine @Inject constructor(
   }
 
   private suspend fun executeStandaloneScript(script: Script) {
+    val wasTriggeredExternally = controlHub.consumeExternalTriggerPending()
     val blockers = entitlementRepository.detectScriptProBlockers(script)
     if (blockers.isNotEmpty()) {
       controlHub.clearSession(
@@ -114,6 +120,22 @@ class AutomationRunnerEngine @Inject constructor(
           blockedProGates = blockers,
         ),
       )
+      val externalEnabled =
+        withContext(NonCancellable) {
+          runCatching { preferencesRepository.getPreferencesOnce().shizuku.externalBroadcastEnabled }
+            .getOrDefault(false)
+        }
+      if (externalEnabled || wasTriggeredExternally) {
+        externalBroadcastEmitter.emitExecutionFinished(
+          status = ExternalBroadcastContract.STATUS_REJECTED,
+          mode = ExternalBroadcastContract.MODE_SCRIPT,
+          targetId = script.id,
+          targetTitle = script.title,
+          durationMs = 0L,
+          stepsExecuted = 0,
+          error = ExternalBroadcastContract.ERROR_PRO_REQUIRED,
+        )
+      }
       return
     }
 
@@ -149,6 +171,34 @@ class AutomationRunnerEngine @Inject constructor(
         lastErrorScreenshotPath = sessionLog.errorScreenshotPath,
       ),
     )
+
+    val externalEnabled =
+      withContext(NonCancellable) {
+        runCatching { preferencesRepository.getPreferencesOnce().shizuku.externalBroadcastEnabled }
+          .getOrDefault(false)
+      }
+    if (externalEnabled || wasTriggeredExternally) {
+      val broadcastStatus =
+        when (sessionLog.status) {
+          ExecutionStatus.SUCCESS -> ExternalBroadcastContract.STATUS_COMPLETED
+          ExecutionStatus.FAILED -> ExternalBroadcastContract.STATUS_FAILED
+          ExecutionStatus.STOPPED -> ExternalBroadcastContract.STATUS_STOPPED
+        }
+      externalBroadcastEmitter.emitExecutionFinished(
+        status = broadcastStatus,
+        mode = ExternalBroadcastContract.MODE_SCRIPT,
+        targetId = script.id,
+        targetTitle = script.title,
+        durationMs = (sessionLog.finishedAtMs - sessionLog.startedAtMs).coerceAtLeast(0L),
+        stepsExecuted = sessionLog.totalStepsExecuted,
+        error =
+          if (sessionLog.status == ExecutionStatus.SUCCESS) {
+            ExternalBroadcastContract.ERROR_NONE
+          } else {
+            sessionLog.errorReason.orEmpty()
+          },
+      )
+    }
   }
 
   /**
@@ -268,7 +318,9 @@ class AutomationRunnerEngine @Inject constructor(
     } catch (_: CancellationException) {
       status = ExecutionStatus.STOPPED
       errorReason = "Stopped by user"
-      accessibilityBridge.releaseActivePress()
+      withContext(NonCancellable) {
+        accessibilityBridge.releaseActivePress()
+      }
     } catch (failure: ScriptFailureException) {
       status = ExecutionStatus.FAILED
       errorReason = failure.message ?: "Script execution failed"
@@ -297,7 +349,9 @@ class AutomationRunnerEngine @Inject constructor(
       )
 
     if (recordStandaloneLog && !isPipelineChild) {
-      logRepository.recordScriptSession(sessionLog, finishedAt)
+      withContext(NonCancellable) {
+        logRepository.recordScriptSession(sessionLog, finishedAt)
+      }
     }
     sessionLog
   }

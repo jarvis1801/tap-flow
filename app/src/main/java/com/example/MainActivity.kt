@@ -50,12 +50,14 @@ import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
 import com.tapflow.core.datastore.ThemePaletteOption
 import com.tapflow.core.service.accessibility.TapFlowAccessibilityService
+import com.tapflow.core.service.external.ExternalBroadcastContract
 import com.tapflow.core.service.overlay.GesturePickerBridge
 import com.tapflow.core.service.overlay.OverlayLaunchIntents
 import com.tapflow.core.service.projection.MediaProjectionBridge
 import com.tapflow.feature.editor.PipelineEditorScreen
 import com.tapflow.feature.editor.ScriptEditorScreen
 import com.tapflow.feature.editor.ScriptFlowScreen
+import com.tapflow.feature.home.ExternalAutomationGuideScreen
 import com.tapflow.feature.home.HomeScreen
 import com.tapflow.feature.home.HomeTabType
 import com.tapflow.feature.home.PendingMediaProjectionTarget
@@ -67,6 +69,7 @@ import com.tapflow.feature.studio.InspectStudioScreen
 import com.tapflow.core.service.theme.resolveIsDarkTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -87,6 +90,8 @@ class MainActivity : AppCompatActivity() {
 
   private var pendingProjectionTarget: PendingMediaProjectionTarget? = null
   private var pendingProjectionDeniedCallback: (() -> Unit)? = null
+  private var deepLinkTabSeq = 0
+  private val deepLinkTabRequest = MutableStateFlow<Pair<HomeTab, Int>?>(null)
 
   private val mediaProjectionLauncher =
     registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -195,12 +200,13 @@ class MainActivity : AppCompatActivity() {
         if (prefs == null) {
           Box(modifier = Modifier.fillMaxSize().background(Color(resolvedWindowBgArgb)))
         } else {
+          val deepLinkState by deepLinkTabRequest.collectAsStateWithLifecycle()
           val initialDestination: Route =
             remember(prefs.hasCompletedPermissionOnboarding) {
               if (prefs.hasCompletedPermissionOnboarding &&
                 areMandatoryPermissionsGranted(this@MainActivity)
               ) {
-                Route.Home(HomeTab.SCRIPT)
+                Route.Home(extractRequestedHomeTab(intent) ?: HomeTab.SCRIPT)
               } else {
                 Route.Onboarding
               }
@@ -209,6 +215,7 @@ class MainActivity : AppCompatActivity() {
             startDestination = initialDestination,
             entitlementRepository = entitlementRepository,
             mediaProjectionBridge = mediaProjectionBridge,
+            deepLinkTabRequest = deepLinkState,
             onRequestMediaProjection = ::requestMediaProjectionForTarget,
           )
         }
@@ -256,12 +263,25 @@ class MainActivity : AppCompatActivity() {
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
+    extractRequestedHomeTab(intent)?.let { requestedTab ->
+      deepLinkTabSeq += 1
+      deepLinkTabRequest.value = requestedTab to deepLinkTabSeq
+    }
     // Preserve active NavHost backstack & ScriptEditor ActionBottomSheet when returning from
     // Overlay Mode 2; GesturePickerBridge delivers the picked result directly to the ViewModel.
     if (gesturePickerBridge.pickedResult.value == null &&
       gesturePickerBridge.pendingRequest.value != null
     ) {
       gesturePickerBridge.cancelPendingPick()
+    }
+  }
+
+  private fun extractRequestedHomeTab(intent: Intent?): HomeTab? {
+    val tabExtra = intent?.getStringExtra(ExternalBroadcastContract.EXTRA_OPEN_HOME_TAB)
+    return if (tabExtra == ExternalBroadcastContract.HOME_TAB_SEAMLESS) {
+      HomeTab.SEAMLESS
+    } else {
+      null
     }
   }
 
@@ -308,8 +328,20 @@ fun TapFlowNavHost(
   entitlementRepository: EntitlementRepository,
   mediaProjectionBridge: MediaProjectionBridge,
   onRequestMediaProjection: (PendingMediaProjectionTarget, onDenied: () -> Unit) -> Unit,
+  deepLinkTabRequest: Pair<HomeTab, Int>? = null,
 ) {
   val navController = rememberNavController()
+  LaunchedEffect(deepLinkTabRequest) {
+    val request = deepLinkTabRequest ?: return@LaunchedEffect
+    if (navController.currentDestination?.hasRoute<Route.Home>() == false &&
+      navController.currentDestination?.hasRoute<Route.Onboarding>() == false
+    ) {
+      navController.navigate(Route.Home(request.first)) {
+        popUpTo<Route.Home> { inclusive = true }
+        launchSingleTop = true
+      }
+    }
+  }
   NavHost(
     navController = navController,
     startDestination = startDestination,
@@ -329,6 +361,8 @@ fun TapFlowNavHost(
       HomeScreen(
         initialTab = route.initialTab.toHomeTabType(),
         mediaProjectionBridge = mediaProjectionBridge,
+        deepLinkTab = deepLinkTabRequest?.first?.toHomeTabType(),
+        deepLinkTabSeq = deepLinkTabRequest?.second ?: 0,
         onRequestMediaProjection = onRequestMediaProjection,
         onNavigateToPaywall = { sourceFeature ->
           navController.navigate(Route.Paywall(sourceFeature)) {
@@ -349,6 +383,11 @@ fun TapFlowNavHost(
         },
         onNavigateToInspectStudio = { itemId ->
           navController.navigate(Route.InspectStudio(itemId))
+        },
+        onNavigateToExternalAutomationGuide = {
+          navController.navigate(Route.ExternalAutomationGuide) {
+            launchSingleTop = true
+          }
         },
       )
     }
@@ -412,6 +451,16 @@ fun TapFlowNavHost(
     }
     composable<Route.InspectStudio> {
       InspectStudioScreen(
+        onNavigateBack = { navController.popBackStackSafely() },
+        onNavigateToPaywall = { sourceFeature ->
+          navController.navigate(Route.Paywall(sourceFeature)) {
+            launchSingleTop = true
+          }
+        },
+      )
+    }
+    composable<Route.ExternalAutomationGuide> {
+      ExternalAutomationGuideScreen(
         onNavigateBack = { navController.popBackStackSafely() },
         onNavigateToPaywall = { sourceFeature ->
           navController.navigate(Route.Paywall(sourceFeature)) {

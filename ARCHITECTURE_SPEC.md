@@ -26,7 +26,7 @@ Entitlement Matrix (Free vs. TapFlow Pro):
       - Advanced Vision: `ImageMatch` (32-pixel / Fast Template Matching), Multi-Point / Region `ColorMatch`, and full `Inspect Studio` + Mode 4 Live Image Inspector.
       - Advanced Logic & Variables: `IfBlock` (Card-in-Card nested groups), `While / Until / Unlimited` Loops, and all `Dynamic Variables` & Variable Operations.
       - Anti-Ban Humanization Suite: `Jitter` dispersion radius, `Micro-movement Jitter`, `Bezier Curve` trajectories, `RandomRange` & `Deviation` delays.
-      - Seamless (Shizuku) Integration: Shell input injection, rootless `am force-stop` crash recovery, enhanced key events, silent screenshots.
+      - Seamless (Shizuku) Integration: Shell input injection, rootless `am force-stop` crash recovery, enhanced key events, silent screenshots, and MacroDroid / Tasker Broadcast Integration (`ProFeatureGate.EXTERNAL_BROADCAST`).
       - Pipeline Watchdog & Logs: Pipeline `Skip & Continue` crash recovery, full Execution History & Crash Screenshots.
       - AMOLED Pure Black Theme (`Settings Tab`, `ProFeatureGate.AMOLED_THEME`).
   - TapFlow Lifetime Pro Exclusive (`EntitlementState.ProLifetime` ONLY — Excluded from 7-Day Trial):
@@ -223,6 +223,8 @@ Tabs:
         - Enhanced Key Event Injection (Direct physical key events).
         - Silent Background Screenshots (Screencap via shell; bypasses MediaProjection when active).
         - Auto-Grant Screen Capture (`PROJECT_MEDIA`): Grants `PROJECT_MEDIA` AppOp via Shizuku (`cmd appops set <pkg> PROJECT_MEDIA allow`), verifies `Allowed ✓`, skips TapFlow's pre-consent dialog so `createScreenCaptureIntent()` resolves silently on supported ROMs (falling back safely if blocked by OEM), and helps prevent Android 15+ screen-lock capture interruption.
+        - MacroDroid / Tasker Broadcasts [Pro] (`externalBroadcastEnabled` in `ShizukuPreferences`): Enables `TapFlowExternalTriggerReceiver` and automatic `ACTION_EXECUTION_FINISHED` completion callbacks.
+        - Setup Guide & Action Generator (MacroDroid / Tasker): Always-clickable entry opening `Route.ExternalAutomationGuide` (`ExternalAutomationGuideScreen`) with live prerequisite checks, Script/Pipeline intent generator with 1-tap copy, all 6 control actions, and step-by-step `MacroDroid` | `Tasker` setup instructions.
       State Guardrail:
         - All feature toggles are strictly Disabled & Greyed Out if Shizuku is not installed, not running, permission is ungranted, OR Pro entitlement is inactive.
 
@@ -558,3 +560,21 @@ Ktor WebSocket Protocol (:core:server - JSON Envelope on ws://localhost:{port}/t
     - PUSH_SCRIPT | DELETE_SCRIPT
     - START_LIVE_STREAM | STOP_LIVE_STREAM # Binary WebSocket Frames
     - REMOTE_RUN_SCRIPT | REMOTE_STOP | EXECUTION_LOG_EVENT
+
+---
+
+## 9. MacroDroid / Tasker External Broadcast Contract (`:core:service` & `:app`)
+Exported BroadcastReceiver: `com.tapflow.core.service.external.TapFlowExternalTriggerReceiver` (`android:exported="true"`).
+  - Incoming Actions (using `${applicationId}` / `context.packageName`):
+      - `com.jarvis.tapflow.ACTION_PLAY_SCRIPT` (Optional extras: `script_id` or case-insensitive `script_name`)
+      - `com.jarvis.tapflow.ACTION_PLAY_PIPELINE` (Optional extras: `pipeline_id` or case-insensitive `pipeline_name`)
+      - `com.jarvis.tapflow.ACTION_RESUME` | `ACTION_PAUSE` | `ACTION_STOP` | `ACTION_CLOSE` | `ACTION_NEXT_ACTION` | `ACTION_PREV_ACTION`
+  - Outgoing Completion / Status Broadcast (`com.jarvis.tapflow.ACTION_EXECUTION_FINISHED`):
+      - Sent as an unrestricted standard broadcast (NO `.setPackage(...)` restriction, `FLAG_INCLUDE_STOPPED_PACKAGES`) whenever a Script or Pipeline finishes (`COMPLETED`, `FAILED`, `STOPPED`) while `externalBroadcastEnabled == true` (or triggered externally), or when a trigger fails guardrails (`REJECTED` / `FAILED`).
+      - Dot-free Extras (Tasker `%var` compatible): `status`, `mode`, `target_id`, `target_title`, `duration_ms` (Long), `steps_executed` (Int), `error`.
+  - Strict Ordered Guardrails (`goAsync()` + cold-start Shizuku binder wait up to ~800ms):
+      1. Pro / 7-Day Trial active (`ProFeatureGate.EXTERNAL_BROADCAST`) ➔ else `REJECTED` (`PRO_REQUIRED`) + user Notification.
+      2. Shizuku installed, `Shizuku.pingBinder()` alive, and permission granted ➔ else `FAILED` (`SHIZUKU_NOT_READY`) + high-priority Notification deep-linking to Seamless tab.
+      3. `ShizukuPreferences.externalBroadcastEnabled == true` ➔ else `REJECTED` (`EXTERNAL_TRIGGER_DISABLED`) + Notification.
+      4. Accessibility & Floating Overlay permissions granted ➔ else `FAILED` (`PERMISSIONS_MISSING`) + Notification.
+      5. Launches `OverlayService` via `ContextCompat.startForegroundService` with Shizuku `am start-foreground-service` fallback.

@@ -79,6 +79,13 @@ private val PAYWALL_COMPARISON_ROWS =
     PaywallComparisonRow("shizuku", "Shizuku Seamless", "Standard Accessibility", "Shell Input + Force-Stop [7-Day Trial + Lifetime]"),
     PaywallComparisonRow("logs", "Execution Logs", "Latest Summary", "Full History + Export [7-Day Trial + Lifetime]"),
     PaywallComparisonRow(
+      id = "external_broadcast",
+      feature = "External Automation",
+      freeTier = "Not Included",
+      proTier = "MacroDroid & Tasker Broadcast Integration [Trial + Lifetime]",
+      lifetimeOnly = false,
+    ),
+    PaywallComparisonRow(
       id = "console",
       feature = "Desktop Console Bridge",
       freeTier = "Not Included",

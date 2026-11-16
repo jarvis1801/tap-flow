@@ -130,6 +130,7 @@ class DomainModelValidationTest {
         ProFeatureGate.UNLIMITED_SCRIPTS,
         ProFeatureGate.UNLIMITED_PIPELINES,
         ProFeatureGate.AMOLED_THEME,
+        ProFeatureGate.EXTERNAL_BROADCAST,
       )
     val lifetimeOnlyGates =
       listOf(

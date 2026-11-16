@@ -119,4 +119,10 @@ class ShizukuManagerHelpersTest {
     assertTrue(ready.isProjectMediaAllowed)
     assertTrue(ready.isFullyReady)
   }
+
+  @Test
+  fun shellSingleQuote_escapesApostrophesSafely() {
+    assertEquals("'hello world'", ShizukuManager.shellSingleQuote("hello world"))
+    assertEquals("'it'\\''s fine'", ShizukuManager.shellSingleQuote("it's fine"))
+  }
 }

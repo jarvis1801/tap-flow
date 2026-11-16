@@ -158,6 +158,10 @@ class OverlayService :
     private const val NOTIFICATION_ID = 3101
     private const val MOVE_THRESHOLD_PX = 24f
     private const val LONG_PRESS_THRESHOLD_MS = 450L
+
+    @Volatile
+    var isServiceRunning: Boolean = false
+      private set
   }
 
   @Inject lateinit var entitlementRepository: EntitlementRepository
@@ -389,6 +393,7 @@ class OverlayService :
 
   override fun onCreate() {
     super.onCreate()
+    isServiceRunning = true
     savedStateController.performRestore(Bundle())
     lifecycleRegistry.currentState = Lifecycle.State.CREATED
     lifecycleRegistry.currentState = Lifecycle.State.STARTED
@@ -487,6 +492,7 @@ class OverlayService :
   }
 
   override fun onDestroy() {
+    isServiceRunning = false
     runnerControlHub.stopExecution()
     accessibilityBridge.forceReleaseActiveStroke()
     stopMediaProjectionIfNotStreamingToDesktop()

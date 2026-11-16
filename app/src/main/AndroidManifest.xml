@@ -89,6 +89,22 @@
             android:exported="true"
             android:multiprocess="false"
             android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+
+        <receiver
+            android:name="com.tapflow.core.service.external.TapFlowExternalTriggerReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="${applicationId}.ACTION_PLAY_SCRIPT" />
+                <action android:name="${applicationId}.ACTION_PLAY_PIPELINE" />
+                <action android:name="${applicationId}.ACTION_RESUME" />
+                <action android:name="${applicationId}.ACTION_PAUSE" />
+                <action android:name="${applicationId}.ACTION_STOP" />
+                <action android:name="${applicationId}.ACTION_CLOSE" />
+                <action android:name="${applicationId}.ACTION_NEXT_ACTION" />
+                <action android:name="${applicationId}.ACTION_PREV_ACTION" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

@@ -3,6 +3,7 @@ package com.tapflow.core.service.shizuku
 import android.app.AppOpsManager
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Build
@@ -18,6 +19,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -97,6 +99,54 @@ class ShizukuManager @Inject constructor(
         isUserServiceBound = userServiceBound,
         isProjectMediaAllowed = projectMediaAllowed,
       )
+    }
+
+    internal fun shellSingleQuote(raw: String): String =
+      "'" + raw.replace("'", "'\\''") + "'"
+
+    internal fun buildStartForegroundServiceShellCommand(
+      intent: Intent,
+      fallbackComponent: String? = null,
+    ): String? {
+      val componentStr =
+        intent.component?.flattenToShortString()
+          ?: fallbackComponent
+          ?: return null
+      val parts = mutableListOf("am", "start-foreground-service", "-n", shellSingleQuote(componentStr))
+      intent.action?.takeIf { it.isNotBlank() }?.let { action ->
+        parts += "-a"
+        parts += shellSingleQuote(action)
+      }
+      val extras = intent.extras
+      if (extras != null) {
+        for (key in extras.keySet().sorted()) {
+          @Suppress("DEPRECATION")
+          val value = extras.get(key)
+          when (value) {
+            is String -> {
+              parts += "--es"
+              parts += shellSingleQuote(key)
+              parts += shellSingleQuote(value)
+            }
+            is Int -> {
+              parts += "--ei"
+              parts += shellSingleQuote(key)
+              parts += value.toString()
+            }
+            is Long -> {
+              parts += "--el"
+              parts += shellSingleQuote(key)
+              parts += value.toString()
+            }
+            is Boolean -> {
+              parts += "--ez"
+              parts += shellSingleQuote(key)
+              parts += value.toString()
+            }
+          }
+        }
+      }
+      return parts.joinToString(" ")
     }
   }
 
@@ -233,6 +283,37 @@ class ShizukuManager @Inject constructor(
       )
     _diagnosticState.value = updated
     return updated
+  }
+
+  /**
+   * On cold process launch, Shizuku's binder arrives asynchronously shortly after ContentProvider
+   * initialization. Waits up to [timeoutMs] for the binder to become reachable when Shizuku is installed.
+   */
+  suspend fun awaitShizukuReady(timeoutMs: Long = 800L): ShizukuDiagnosticState {
+    val initial = refreshDiagnostics()
+    if (!initial.isInstalled || initial.isFullyReady) {
+      return initial
+    }
+    val deadline = android.os.SystemClock.elapsedRealtime() + timeoutMs.coerceAtLeast(0L)
+    var latest = initial
+    while (android.os.SystemClock.elapsedRealtime() < deadline) {
+      delay(40L)
+      latest = refreshDiagnostics()
+      if (latest.isFullyReady) {
+        return latest
+      }
+    }
+    return latest
+  }
+
+  suspend fun startForegroundServiceViaShell(intent: Intent): Result<Unit> {
+    val fallback =
+      intent.component?.flattenToShortString()
+        ?: ComponentName(context.packageName, "com.tapflow.core.service.overlay.OverlayService").flattenToShortString()
+    val cmd =
+      buildStartForegroundServiceShellCommand(intent, fallbackComponent = fallback)
+        ?: return Result.failure(IllegalArgumentException("Unable to build am start-foreground-service command."))
+    return execShellCodeResult(cmd)
   }
 
   fun requestPermission() {

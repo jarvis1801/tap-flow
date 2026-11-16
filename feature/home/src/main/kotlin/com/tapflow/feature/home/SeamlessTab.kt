@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Lock
@@ -301,6 +303,60 @@ fun SeamlessTabContent(
               testTag = "toggle_shizuku_auto_grant_project_media",
               onCheckedChange = { onIntent(HomeUiIntent.ToggleShizukuAutoGrantProjectMedia(it)) },
             )
+            HorizontalDivider()
+            ShizukuToggleRow(
+              title = "MacroDroid / Tasker Broadcasts [Pro]",
+              subtitle = "Trigger scripts/pipelines & receive completion broadcasts (Requires Shizuku & Pro/Trial).",
+              checked = state.preferences.shizuku.externalBroadcastEnabled,
+              enabled = togglesEnabled,
+              testTag = "toggle_shizuku_external_broadcast",
+              onCheckedChange = { onIntent(HomeUiIntent.ToggleExternalBroadcast(it)) },
+            )
+            HorizontalDivider()
+            Surface(
+              onClick = { onIntent(HomeUiIntent.OpenExternalAutomationGuideClicked) },
+              shape = MaterialTheme.shapes.medium,
+              color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
+              modifier =
+                Modifier
+                  .fillMaxWidth()
+                  .padding(top = 6.dp)
+                  .heightIn(min = 52.dp)
+                  .testTag("open_external_automation_guide_button"),
+            ) {
+              Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+              ) {
+                Icon(
+                  imageVector = Icons.Filled.Code,
+                  contentDescription = null,
+                  tint = MaterialTheme.colorScheme.primary,
+                )
+                Column(
+                  modifier = Modifier.weight(1f),
+                  verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                  Text(
+                    text = "Setup Guide & Action Generator (MacroDroid / Tasker)",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                  )
+                  Text(
+                    text = "Copy pre-filled Package, Action & Extra parameters for your scripts and pipelines.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                }
+                Icon(
+                  imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                  contentDescription = "Open Setup Guide",
+                  tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+              }
+            }
           }
         }
       }

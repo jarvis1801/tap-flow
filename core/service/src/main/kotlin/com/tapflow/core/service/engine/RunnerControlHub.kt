@@ -71,9 +71,22 @@ class RunnerControlHub @Inject constructor() {
   @Volatile
   private var stopCallback: (() -> Unit)? = null
 
+  @Volatile
+  private var externalTriggerPending: Boolean = false
+
   private val commandChannel = Channel<RunnerStepCommand>(Channel.UNLIMITED)
   val commandReceiveChannel: ReceiveChannel<RunnerStepCommand>
     get() = commandChannel
+
+  fun markExternalTriggerPending() {
+    externalTriggerPending = true
+  }
+
+  fun consumeExternalTriggerPending(): Boolean {
+    val wasPending = externalTriggerPending
+    externalTriggerPending = false
+    return wasPending
+  }
 
   fun registerSession(job: Job, onStopRequested: () -> Unit) {
     activeSessionJob = job

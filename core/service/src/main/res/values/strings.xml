@@ -10,4 +10,6 @@
     <string name="overlay_notification_title">TapFlow Overlay Active</string>
     <string name="overlay_notification_text">Floating automation controls are running.</string>
     <string name="overlay_stop_action">Close Overlay</string>
+    <string name="external_trigger_channel_name">External Broadcast Triggers</string>
+    <string name="external_trigger_channel_description">Alerts when MacroDroid or Tasker triggers are blocked or fail prerequisites.</string>
 </resources>

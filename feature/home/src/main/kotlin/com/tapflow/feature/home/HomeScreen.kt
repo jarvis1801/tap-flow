@@ -92,6 +92,9 @@ fun HomeScreen(
   onNavigateToPipelineLog: (String) -> Unit,
   onNavigateToInspectStudio: (String) -> Unit,
   modifier: Modifier = Modifier,
+  onNavigateToExternalAutomationGuide: () -> Unit = {},
+  deepLinkTab: HomeTabType? = null,
+  deepLinkTabSeq: Int = 0,
   onRequestMediaProjection: ((PendingMediaProjectionTarget, onDenied: () -> Unit) -> Unit)? = null,
   viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -102,6 +105,12 @@ fun HomeScreen(
 
   LaunchedEffect(initialTab) {
     viewModel.onIntent(HomeUiIntent.InitializeTabIfUnset(initialTab))
+  }
+
+  LaunchedEffect(deepLinkTab, deepLinkTabSeq) {
+    if (deepLinkTab != null && deepLinkTabSeq > 0) {
+      viewModel.onIntent(HomeUiIntent.SelectTab(deepLinkTab))
+    }
   }
 
   LaunchedEffect(context) {
@@ -180,6 +189,7 @@ fun HomeScreen(
         is HomeUiEffect.NavigateToScriptLog -> onNavigateToScriptLog(effect.scriptId)
         is HomeUiEffect.NavigateToPipelineLog -> onNavigateToPipelineLog(effect.pipelineId)
         is HomeUiEffect.NavigateToInspectStudio -> onNavigateToInspectStudio(effect.inspectItemId)
+        HomeUiEffect.NavigateToExternalAutomationGuide -> onNavigateToExternalAutomationGuide()
         is HomeUiEffect.RequestMediaProjectionPermission -> {
           val activityHandler = onRequestMediaProjection
           if (activityHandler != null) {

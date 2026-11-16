@@ -15,6 +15,8 @@ import com.tapflow.core.model.pipeline.PipelineErrorStrategy
 import com.tapflow.core.model.pipeline.PipelineRepeatMode
 import com.tapflow.core.service.accessibility.AccessibilityManagerBridge
 import com.tapflow.core.service.clipboard.BackgroundClipboardManager
+import com.tapflow.core.service.external.ExternalBroadcastContract
+import com.tapflow.core.service.external.ExternalBroadcastEmitter
 import com.tapflow.core.service.shizuku.ShizukuManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
@@ -25,9 +27,11 @@ import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Singleton
 class PipelineExecutionEngine @Inject constructor(
@@ -40,6 +44,7 @@ class PipelineExecutionEngine @Inject constructor(
   private val accessibilityBridge: AccessibilityManagerBridge,
   private val shizukuManager: ShizukuManager,
   private val automationRunnerEngine: AutomationRunnerEngine,
+  private val externalBroadcastEmitter: ExternalBroadcastEmitter,
   private val controlHub: RunnerControlHub,
 ) {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -54,6 +59,7 @@ class PipelineExecutionEngine @Inject constructor(
   }
 
   private suspend fun executePipelineSession(pipeline: Pipeline) {
+    val wasTriggeredExternally = controlHub.consumeExternalTriggerPending()
     val allScripts = scriptRepository.getAllScripts().associateBy { it.id }
     val blockers = entitlementRepository.detectPipelineProBlockers(pipeline, allScripts)
     if (blockers.isNotEmpty()) {
@@ -66,6 +72,22 @@ class PipelineExecutionEngine @Inject constructor(
           blockedProGates = blockers,
         ),
       )
+      val externalEnabled =
+        withContext(NonCancellable) {
+          runCatching { preferencesRepository.getPreferencesOnce().shizuku.externalBroadcastEnabled }
+            .getOrDefault(false)
+        }
+      if (externalEnabled || wasTriggeredExternally) {
+        externalBroadcastEmitter.emitExecutionFinished(
+          status = ExternalBroadcastContract.STATUS_REJECTED,
+          mode = ExternalBroadcastContract.MODE_PIPELINE,
+          targetId = pipeline.id,
+          targetTitle = pipeline.title,
+          durationMs = 0L,
+          stepsExecuted = 0,
+          error = ExternalBroadcastContract.ERROR_PRO_REQUIRED,
+        )
+      }
       return
     }
 
@@ -186,7 +208,9 @@ class PipelineExecutionEngine @Inject constructor(
     } catch (_: CancellationException) {
       pipelineStatus = ExecutionStatus.STOPPED
       pipelineErrorReason = "Stopped by user"
-      accessibilityBridge.releaseActivePress()
+      withContext(NonCancellable) {
+        accessibilityBridge.releaseActivePress()
+      }
     }
 
     val finishedAt = System.currentTimeMillis()
@@ -201,7 +225,9 @@ class PipelineExecutionEngine @Inject constructor(
         stepRuns = stepRunLogs.toList(),
         errorReason = pipelineErrorReason,
       )
-    logRepository.recordPipelineSession(pipelineLog, finishedAt)
+    withContext(NonCancellable) {
+      logRepository.recordPipelineSession(pipelineLog, finishedAt)
+    }
 
     val finalPhase =
       when (pipelineStatus) {
@@ -220,6 +246,35 @@ class PipelineExecutionEngine @Inject constructor(
         lastErrorScreenshotPath = lastErrorShot,
       ),
     )
+
+    val externalEnabled =
+      withContext(NonCancellable) {
+        runCatching { preferencesRepository.getPreferencesOnce().shizuku.externalBroadcastEnabled }
+          .getOrDefault(false)
+      }
+    if (externalEnabled || wasTriggeredExternally) {
+      val broadcastStatus =
+        when (pipelineStatus) {
+          ExecutionStatus.SUCCESS -> ExternalBroadcastContract.STATUS_COMPLETED
+          ExecutionStatus.FAILED -> ExternalBroadcastContract.STATUS_FAILED
+          ExecutionStatus.STOPPED -> ExternalBroadcastContract.STATUS_STOPPED
+        }
+      val totalSteps = stepRunLogs.sumOf { it.scriptSessionLog.totalStepsExecuted }
+      externalBroadcastEmitter.emitExecutionFinished(
+        status = broadcastStatus,
+        mode = ExternalBroadcastContract.MODE_PIPELINE,
+        targetId = pipeline.id,
+        targetTitle = pipeline.title,
+        durationMs = (finishedAt - startedAt).coerceAtLeast(0L),
+        stepsExecuted = totalSteps,
+        error =
+          if (pipelineStatus == ExecutionStatus.SUCCESS) {
+            ExternalBroadcastContract.ERROR_NONE
+          } else {
+            pipelineErrorReason.orEmpty()
+          },
+      )
+    }
   }
 
   private suspend fun performCrashRecovery(

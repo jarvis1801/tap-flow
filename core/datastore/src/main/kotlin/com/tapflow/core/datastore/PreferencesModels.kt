@@ -24,6 +24,7 @@ data class ShizukuPreferences(
   val enhancedKeyEvents: Boolean = false,
   val silentScreenshots: Boolean = false,
   val autoGrantProjectMedia: Boolean = false,
+  val externalBroadcastEnabled: Boolean = false,
 )
 
 @Immutable
