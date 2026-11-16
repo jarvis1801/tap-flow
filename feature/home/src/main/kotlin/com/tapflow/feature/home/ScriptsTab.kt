@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
@@ -27,11 +28,16 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,56 +66,137 @@ fun ScriptsTabContent(
   onIntent: (HomeUiIntent) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Box(
+  val hasActiveFilters = state.searchQuery.isNotBlank() || state.selectedScriptTags.isNotEmpty()
+
+  Column(
     modifier = modifier.fillMaxSize(),
-    contentAlignment = Alignment.TopCenter,
+    horizontalAlignment = Alignment.CenterHorizontally,
   ) {
-    if (state.scripts.isEmpty()) {
-      EmptyTabStateCard(
-        icon = Icons.Filled.TouchApp,
-        title = if (state.searchQuery.isBlank()) "No Scripts Yet" else "No Matching Scripts",
-        subtitle =
-          if (state.searchQuery.isBlank()) {
-            "Create a manual automation script or launch Live Recording over your target app."
-          } else {
-            "Try clearing the search query or searching by another tag."
-          },
-        modifier = Modifier.padding(24.dp).align(Alignment.Center),
+    if (state.availableScriptTags.isNotEmpty()) {
+      TagFilterChipBar(
+        availableTags = state.availableScriptTags,
+        selectedTags = state.selectedScriptTags,
+        testTagPrefix = "script",
+        onToggleTag = { tag -> onIntent(HomeUiIntent.ToggleScriptTagFilter(tag)) },
+        onClearTags = { onIntent(HomeUiIntent.ClearScriptTagFilters) },
       )
-    } else {
-      LazyColumn(
-        modifier = Modifier.widthIn(max = 760.dp).fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        items(
-          items = state.scripts,
-          key = { it.script.id },
-        ) { item ->
-          ScriptItemCard(
-            item = item,
-            onPlay = { onIntent(HomeUiIntent.PlayScriptClicked(item.script.id)) },
-            onEdit = { onIntent(HomeUiIntent.EditScriptClicked(item.script.id)) },
-            onLogs = { onIntent(HomeUiIntent.ViewScriptLogsClicked(item.script.id)) },
-            onDelete = { onIntent(HomeUiIntent.RequestDeleteScript(item.script.id)) },
-          )
+      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+    }
+
+    Box(
+      modifier = Modifier.weight(1f).fillMaxWidth(),
+      contentAlignment = Alignment.TopCenter,
+    ) {
+      if (state.scripts.isEmpty()) {
+        EmptyTabStateCard(
+          icon = Icons.Filled.TouchApp,
+          title = if (!hasActiveFilters) "No Scripts Yet" else "No Matching Scripts",
+          subtitle =
+            if (!hasActiveFilters) {
+              "Create a manual automation script or launch Live Recording over your target app."
+            } else {
+              "Try clearing the search query or selected tag filters."
+            },
+          modifier = Modifier.padding(24.dp).align(Alignment.Center),
+        )
+      } else {
+        LazyColumn(
+          modifier = Modifier.widthIn(max = 760.dp).fillMaxSize(),
+          contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          items(
+            items = state.scripts,
+            key = { it.script.id },
+          ) { item ->
+            ScriptItemCard(
+              item = item,
+              selectedTags = state.selectedScriptTags,
+              onToggleTag = { tag -> onIntent(HomeUiIntent.ToggleScriptTagFilter(tag)) },
+              onPlay = { onIntent(HomeUiIntent.PlayScriptClicked(item.script.id)) },
+              onEdit = { onIntent(HomeUiIntent.EditScriptClicked(item.script.id)) },
+              onLogs = { onIntent(HomeUiIntent.ViewScriptLogsClicked(item.script.id)) },
+              onDelete = { onIntent(HomeUiIntent.RequestDeleteScript(item.script.id)) },
+            )
+          }
         }
+      }
+
+      ScriptSpeedDialFab(
+        expanded = state.isScriptFabExpanded,
+        onToggle = { onIntent(HomeUiIntent.ToggleScriptFab(!state.isScriptFabExpanded)) },
+        onManual = { onIntent(HomeUiIntent.AddManualScriptClicked) },
+        onRecord = { onIntent(HomeUiIntent.AddRecordScriptClicked) },
+        modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+      )
+    }
+  }
+}
+
+@Composable
+internal fun TagFilterChipBar(
+  availableTags: List<String>,
+  selectedTags: Set<String>,
+  testTagPrefix: String,
+  onToggleTag: (String) -> Unit,
+  onClearTags: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  LazyRow(
+    modifier = modifier.widthIn(max = 760.dp).fillMaxWidth().testTag("${testTagPrefix}_tag_filter_bar"),
+    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+    horizontalArrangement = Arrangement.spacedBy(8.dp),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    if (selectedTags.isNotEmpty()) {
+      item(key = "__clear_${testTagPrefix}_tags__") {
+        AssistChip(
+          onClick = onClearTags,
+          leadingIcon = {
+            Icon(
+              imageVector = Icons.Rounded.Clear,
+              contentDescription = "Clear selected tags",
+              modifier = Modifier.size(FilterChipDefaults.IconSize),
+            )
+          },
+          label = { Text("Clear", maxLines = 1) },
+          modifier = Modifier.testTag("clear_${testTagPrefix}_tag_filters_chip"),
+        )
       }
     }
 
-    ScriptSpeedDialFab(
-      expanded = state.isScriptFabExpanded,
-      onToggle = { onIntent(HomeUiIntent.ToggleScriptFab(!state.isScriptFabExpanded)) },
-      onManual = { onIntent(HomeUiIntent.AddManualScriptClicked) },
-      onRecord = { onIntent(HomeUiIntent.AddRecordScriptClicked) },
-      modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
-    )
+    items(
+      items = availableTags,
+      key = { it },
+    ) { tag ->
+      val isSelected = HomeLibraryFilter.isTagSelected(tag, selectedTags)
+      FilterChip(
+        selected = isSelected,
+        onClick = { onToggleTag(tag) },
+        leadingIcon =
+          if (isSelected) {
+            {
+              Icon(
+                imageVector = Icons.Rounded.Check,
+                contentDescription = null,
+                modifier = Modifier.size(FilterChipDefaults.IconSize),
+              )
+            }
+          } else {
+            null
+          },
+        label = { Text(tag, maxLines = 1) },
+        modifier = Modifier.testTag("${testTagPrefix}_tag_filter_chip_$tag"),
+      )
+    }
   }
 }
 
 @Composable
 private fun ScriptItemCard(
   item: ScriptCardUi,
+  selectedTags: Set<String>,
+  onToggleTag: (String) -> Unit,
   onPlay: () -> Unit,
   onEdit: () -> Unit,
   onLogs: () -> Unit,
@@ -193,9 +280,24 @@ private fun ScriptItemCard(
           verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
           script.tags.forEach { tag ->
-            AssistChip(
-              onClick = {},
+            val selected = HomeLibraryFilter.isTagSelected(tag, selectedTags)
+            FilterChip(
+              selected = selected,
+              onClick = { onToggleTag(tag) },
+              leadingIcon =
+                if (selected) {
+                  {
+                    Icon(
+                      imageVector = Icons.Rounded.Check,
+                      contentDescription = null,
+                      modifier = Modifier.size(14.dp),
+                    )
+                  }
+                } else {
+                  null
+                },
               label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
+              modifier = Modifier.testTag("script_card_${script.id}_tag_$tag"),
             )
           }
         }
@@ -413,6 +515,8 @@ private fun ScriptsTabPreview() {
         HomeUiState(
           entitlementState = EntitlementState.Free(TrialStatus.NOT_STARTED, 7),
           totalScriptsCount = 1,
+          availableScriptTags = listOf("Daily", "RPG"),
+          selectedScriptTags = setOf("RPG"),
           scripts =
             listOf(
               ScriptCardUi(

@@ -32,6 +32,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.rounded.AccountTree
@@ -77,6 +80,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -315,11 +319,22 @@ fun ScriptEditorContent(
   }
 
   if (showTagsDialog) {
+    val availableSuggestions =
+      remember(state.suggestedTags, state.tags, tagDraft) {
+        val draft = tagDraft.trim()
+        state.suggestedTags.filter { suggestion ->
+          state.tags.none { existing -> existing.equals(suggestion, ignoreCase = true) } &&
+            (draft.isEmpty() || suggestion.contains(draft, ignoreCase = true))
+        }
+      }
     AlertDialog(
       onDismissRequest = { showTagsDialog = false },
       title = { Text("Script Tags") },
       text = {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(
+          modifier = Modifier.verticalScroll(rememberScrollState()),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
           Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -329,7 +344,17 @@ fun ScriptEditorContent(
               onValueChange = { tagDraft = it },
               label = { Text("New Tag") },
               singleLine = true,
-              modifier = Modifier.weight(1f),
+              keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+              keyboardActions =
+                KeyboardActions(
+                  onDone = {
+                    if (tagDraft.isNotBlank()) {
+                      onIntent(ScriptEditorUiIntent.AddTag(tagDraft))
+                      tagDraft = ""
+                    }
+                  },
+                ),
+              modifier = Modifier.weight(1f).testTag("script_tag_input"),
             )
             FilledTonalButton(
               onClick = {
@@ -338,7 +363,8 @@ fun ScriptEditorContent(
                   tagDraft = ""
                 }
               },
-              modifier = Modifier.heightIn(min = 48.dp),
+              enabled = tagDraft.isNotBlank(),
+              modifier = Modifier.heightIn(min = 48.dp).testTag("script_tag_add_button"),
             ) {
               Text("Add")
             }
@@ -367,6 +393,37 @@ fun ScriptEditorContent(
                     )
                   },
                 )
+              }
+            }
+          }
+          if (availableSuggestions.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+              Text(
+                text = "Existing Tags",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+              FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+              ) {
+                availableSuggestions.forEach { suggestion ->
+                  AssistChip(
+                    onClick = {
+                      onIntent(ScriptEditorUiIntent.AddTag(suggestion))
+                      tagDraft = ""
+                    },
+                    leadingIcon = {
+                      Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                      )
+                    },
+                    label = { Text(suggestion) },
+                    modifier = Modifier.testTag("script_tag_suggestion_$suggestion"),
+                  )
+                }
               }
             }
           }

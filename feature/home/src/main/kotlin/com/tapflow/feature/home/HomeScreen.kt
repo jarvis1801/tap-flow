@@ -10,6 +10,7 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,10 +24,16 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CenterFocusStrong
@@ -49,7 +56,6 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -57,6 +63,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,10 +71,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -314,24 +327,21 @@ fun HomeContent(
       contentWindowInsets = WindowInsets(0, 0, 0, 0),
       snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
       topBar = {
+        val searchActive = state.isSearchExpanded && state.supportsSearch
         TopAppBar(
           title = {
-            if (state.isSearchExpanded && state.supportsSearch) {
-              OutlinedTextField(
-                value = state.searchQuery,
-                onValueChange = { onIntent(HomeUiIntent.UpdateSearchQuery(it)) },
-                placeholder = {
-                  Text(
-                    when (state.activeTab) {
-                      HomeTabType.SCRIPT -> "Search title or tag..."
-                      HomeTabType.PIPELINE -> "Search pipeline or tag..."
-                      HomeTabType.INSPECT -> "Search group, tag, or app..."
-                      else -> "Search..."
-                    },
-                  )
-                },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth().testTag("home_search_field"),
+            if (searchActive) {
+              HomeTopBarSearchField(
+                query = state.searchQuery,
+                placeholder =
+                  when (state.activeTab) {
+                    HomeTabType.SCRIPT -> "Search title or tag..."
+                    HomeTabType.PIPELINE -> "Search pipeline or tag..."
+                    HomeTabType.INSPECT -> "Search group, tag, or app..."
+                    else -> "Search..."
+                  },
+                onQueryChange = { onIntent(HomeUiIntent.UpdateSearchQuery(it)) },
+                onCollapseAndClear = { onIntent(HomeUiIntent.SetSearchExpanded(false)) },
               )
             } else {
               Text(
@@ -342,64 +352,64 @@ fun HomeContent(
             }
           },
           actions = {
-            if (state.supportsSearch) {
-              IconButton(
-                onClick = { onIntent(HomeUiIntent.SetSearchExpanded(!state.isSearchExpanded)) },
-                modifier = Modifier.size(48.dp).testTag("home_search_toggle_button"),
-              ) {
-                Icon(
-                  imageVector =
-                    if (state.isSearchExpanded) Icons.Filled.Close else Icons.Filled.Search,
-                  contentDescription =
-                    if (state.isSearchExpanded) "Close search" else "Search",
-                )
-              }
-            }
-
-            if (state.activeTab == HomeTabType.INSPECT && !state.isSearchExpanded) {
-              var showInspectMenu by remember { mutableStateOf(false) }
-              val hasInspectImages =
-                state.inspectStorageStats.imageCount > 0 ||
-                  state.inspectStorageStats.totalBytes > 0L
-              Box {
+            if (!searchActive) {
+              if (state.supportsSearch) {
                 IconButton(
-                  onClick = { showInspectMenu = true },
-                  modifier = Modifier.size(48.dp).testTag("inspect_overflow_menu_button"),
+                  onClick = { onIntent(HomeUiIntent.SetSearchExpanded(true)) },
+                  modifier = Modifier.size(48.dp).testTag("home_search_toggle_button"),
                 ) {
                   Icon(
-                    imageVector = Icons.Filled.MoreVert,
-                    contentDescription = "Inspect options",
-                  )
-                }
-                DropdownMenu(
-                  expanded = showInspectMenu,
-                  onDismissRequest = { showInspectMenu = false },
-                ) {
-                  DropdownMenuItem(
-                    text = { Text("Clear All Inspect Images") },
-                    leadingIcon = {
-                      Icon(
-                        imageVector = Icons.Filled.DeleteOutline,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                      )
-                    },
-                    enabled = hasInspectImages && !state.isClearingInspectData,
-                    onClick = {
-                      showInspectMenu = false
-                      onIntent(HomeUiIntent.RequestClearAllInspectData)
-                    },
-                    modifier = Modifier.testTag("inspect_menu_clear_all"),
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = "Search",
                   )
                 }
               }
-            }
 
-            EntitlementPill(
-              entitlementState = state.entitlementState,
-              onClick = { onIntent(HomeUiIntent.OpenPaywallClicked) },
-              modifier = Modifier.padding(end = 12.dp),
-            )
+              if (state.activeTab == HomeTabType.INSPECT) {
+                var showInspectMenu by remember { mutableStateOf(false) }
+                val hasInspectImages =
+                  state.inspectStorageStats.imageCount > 0 ||
+                    state.inspectStorageStats.totalBytes > 0L
+                Box {
+                  IconButton(
+                    onClick = { showInspectMenu = true },
+                    modifier = Modifier.size(48.dp).testTag("inspect_overflow_menu_button"),
+                  ) {
+                    Icon(
+                      imageVector = Icons.Filled.MoreVert,
+                      contentDescription = "Inspect options",
+                    )
+                  }
+                  DropdownMenu(
+                    expanded = showInspectMenu,
+                    onDismissRequest = { showInspectMenu = false },
+                  ) {
+                    DropdownMenuItem(
+                      text = { Text("Clear All Inspect Images") },
+                      leadingIcon = {
+                        Icon(
+                          imageVector = Icons.Filled.DeleteOutline,
+                          contentDescription = null,
+                          tint = MaterialTheme.colorScheme.error,
+                        )
+                      },
+                      enabled = hasInspectImages && !state.isClearingInspectData,
+                      onClick = {
+                        showInspectMenu = false
+                        onIntent(HomeUiIntent.RequestClearAllInspectData)
+                      },
+                      modifier = Modifier.testTag("inspect_menu_clear_all"),
+                    )
+                  }
+                }
+              }
+
+              EntitlementPill(
+                entitlementState = state.entitlementState,
+                onClick = { onIntent(HomeUiIntent.OpenPaywallClicked) },
+                modifier = Modifier.padding(end = 12.dp),
+              )
+            }
           },
         )
       },
@@ -460,6 +470,122 @@ fun HomeContent(
             HomeTabType.SETTINGS -> SettingsTabContent(state = state, onIntent = onIntent)
           }
         }
+      }
+    }
+  }
+}
+
+@Composable
+private fun HomeTopBarSearchField(
+  query: String,
+  placeholder: String,
+  onQueryChange: (String) -> Unit,
+  onCollapseAndClear: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val focusRequester = remember { FocusRequester() }
+  val focusManager = LocalFocusManager.current
+  val keyboardController = LocalSoftwareKeyboardController.current
+
+  val collapseAndClear: () -> Unit = {
+    keyboardController?.hide()
+    focusManager.clearFocus()
+    onCollapseAndClear()
+  }
+
+  BackHandler(enabled = true) {
+    collapseAndClear()
+  }
+
+  LaunchedEffect(Unit) {
+    focusRequester.requestFocus()
+    keyboardController?.show()
+  }
+
+  DisposableEffect(Unit) {
+    onDispose {
+      keyboardController?.hide()
+    }
+  }
+
+  Surface(
+    shape = RoundedCornerShape(999.dp),
+    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    modifier = modifier.fillMaxWidth().padding(end = 12.dp).heightIn(min = 48.dp),
+  ) {
+    Row(
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      IconButton(
+        onClick = collapseAndClear,
+        modifier = Modifier.size(48.dp).testTag("home_search_back_button"),
+      ) {
+        Icon(
+          imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+          contentDescription = "Collapse search",
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+
+      Box(
+        modifier = Modifier.weight(1f),
+        contentAlignment = Alignment.CenterStart,
+      ) {
+        BasicTextField(
+          value = query,
+          onValueChange = onQueryChange,
+          singleLine = true,
+          keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+          keyboardActions =
+            KeyboardActions(
+              onSearch = {
+                focusManager.clearFocus()
+                keyboardController?.hide()
+              },
+            ),
+          textStyle =
+            MaterialTheme.typography.bodyLarge.copy(
+              color = MaterialTheme.colorScheme.onSurface,
+            ),
+          cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+          modifier =
+            Modifier
+              .fillMaxWidth()
+              .focusRequester(focusRequester)
+              .testTag("home_search_field"),
+          decorationBox = { innerTextField ->
+            if (query.isEmpty()) {
+              Text(
+                text = placeholder,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+              )
+            }
+            innerTextField()
+          },
+        )
+      }
+
+      IconButton(
+        onClick = {
+          if (query.isNotEmpty()) {
+            onQueryChange("")
+            focusRequester.requestFocus()
+            keyboardController?.show()
+          } else {
+            collapseAndClear()
+          }
+        },
+        modifier = Modifier.size(48.dp).testTag("home_search_clear_button"),
+      ) {
+        Icon(
+          imageVector = Icons.Filled.Close,
+          contentDescription = if (query.isNotEmpty()) "Clear search" else "Close search",
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
       }
     }
   }

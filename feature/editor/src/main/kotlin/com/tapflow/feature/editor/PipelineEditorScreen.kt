@@ -31,6 +31,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -91,6 +92,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -259,11 +261,22 @@ fun PipelineEditorContent(
   }
 
   if (showTagsDialog) {
+    val availableSuggestions =
+      remember(state.suggestedTags, state.tags, tagDraft) {
+        val draft = tagDraft.trim()
+        state.suggestedTags.filter { suggestion ->
+          state.tags.none { existing -> existing.equals(suggestion, ignoreCase = true) } &&
+            (draft.isEmpty() || suggestion.contains(draft, ignoreCase = true))
+        }
+      }
     AlertDialog(
       onDismissRequest = { showTagsDialog = false },
       title = { Text("Pipeline Tags") },
       text = {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(
+          modifier = Modifier.verticalScroll(rememberScrollState()),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
           Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -273,7 +286,17 @@ fun PipelineEditorContent(
               onValueChange = { tagDraft = it },
               label = { Text("New Tag") },
               singleLine = true,
-              modifier = Modifier.weight(1f),
+              keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+              keyboardActions =
+                KeyboardActions(
+                  onDone = {
+                    if (tagDraft.isNotBlank()) {
+                      onIntent(PipelineEditorUiIntent.AddTag(tagDraft))
+                      tagDraft = ""
+                    }
+                  },
+                ),
+              modifier = Modifier.weight(1f).testTag("pipeline_tag_input"),
             )
             FilledTonalButton(
               onClick = {
@@ -282,7 +305,8 @@ fun PipelineEditorContent(
                   tagDraft = ""
                 }
               },
-              modifier = Modifier.heightIn(min = 48.dp),
+              enabled = tagDraft.isNotBlank(),
+              modifier = Modifier.heightIn(min = 48.dp).testTag("pipeline_tag_add_button"),
             ) {
               Text("Add")
             }
@@ -311,6 +335,37 @@ fun PipelineEditorContent(
                     )
                   },
                 )
+              }
+            }
+          }
+          if (availableSuggestions.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+              Text(
+                text = "Existing Tags",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+              FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+              ) {
+                availableSuggestions.forEach { suggestion ->
+                  AssistChip(
+                    onClick = {
+                      onIntent(PipelineEditorUiIntent.AddTag(suggestion))
+                      tagDraft = ""
+                    },
+                    leadingIcon = {
+                      Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                      )
+                    },
+                    label = { Text(suggestion) },
+                    modifier = Modifier.testTag("pipeline_tag_suggestion_$suggestion"),
+                  )
+                }
               }
             }
           }

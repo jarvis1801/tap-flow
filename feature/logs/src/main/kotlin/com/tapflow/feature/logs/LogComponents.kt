@@ -1,5 +1,6 @@
 package com.tapflow.feature.logs
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -23,6 +24,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Cancel
@@ -58,14 +61,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -88,6 +97,19 @@ fun LogSearchAndStatusFilter(
   onFilterChange: (LogStatusFilter) -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val focusRequester = remember { FocusRequester() }
+  val focusManager = LocalFocusManager.current
+  val keyboardController = LocalSoftwareKeyboardController.current
+  var isSearchFocused by remember { mutableStateOf(false) }
+
+  BackHandler(enabled = isSearchFocused) {
+    if (searchQuery.isNotEmpty()) {
+      onQueryChange("")
+    }
+    focusManager.clearFocus()
+    keyboardController?.hide()
+  }
+
   Column(
     modifier = modifier.fillMaxWidth(),
     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -98,14 +120,34 @@ fun LogSearchAndStatusFilter(
       leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
       trailingIcon = {
         if (searchQuery.isNotEmpty()) {
-          IconButton(onClick = { onQueryChange("") }) {
+          IconButton(
+            onClick = {
+              onQueryChange("")
+              focusRequester.requestFocus()
+              keyboardController?.show()
+            },
+            modifier = Modifier.size(48.dp).testTag("log_search_clear_button"),
+          ) {
             Icon(Icons.Filled.Close, contentDescription = "Clear search")
           }
         }
       },
       placeholder = { Text("Search action, error, or session...") },
       singleLine = true,
-      modifier = Modifier.fillMaxWidth().testTag("log_search_input"),
+      keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+      keyboardActions =
+        KeyboardActions(
+          onSearch = {
+            focusManager.clearFocus()
+            keyboardController?.hide()
+          },
+        ),
+      modifier =
+        Modifier
+          .fillMaxWidth()
+          .focusRequester(focusRequester)
+          .onFocusChanged { isSearchFocused = it.isFocused }
+          .testTag("log_search_input"),
     )
 
     Row(

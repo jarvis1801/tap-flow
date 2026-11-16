@@ -132,8 +132,12 @@ data class HomeUiState(
   val preferences: AppPreferences = AppPreferences(),
   val scripts: List<ScriptCardUi> = emptyList(),
   val totalScriptsCount: Int = 0,
+  val availableScriptTags: List<String> = emptyList(),
+  val selectedScriptTags: Set<String> = emptySet(),
   val pipelines: List<PipelineCardUi> = emptyList(),
   val totalPipelinesCount: Int = 0,
+  val availablePipelineTags: List<String> = emptyList(),
+  val selectedPipelineTags: Set<String> = emptySet(),
   val inspectGroups: List<InspectGroupWithItems> = emptyList(),
   val inspectStorageStats: InspectStorageStats = InspectStorageStats(),
   val inspectImageRefreshToken: Long = 0L,
@@ -201,6 +205,10 @@ sealed interface HomeUiIntent {
 
   data object DismissDeleteScript : HomeUiIntent
 
+  data class ToggleScriptTagFilter(val tag: String) : HomeUiIntent
+
+  data object ClearScriptTagFilters : HomeUiIntent
+
   // Pipelines Tab
   data object AddPipelineClicked : HomeUiIntent
 
@@ -215,6 +223,10 @@ sealed interface HomeUiIntent {
   data object ConfirmDeletePipeline : HomeUiIntent
 
   data object DismissDeletePipeline : HomeUiIntent
+
+  data class TogglePipelineTagFilter(val tag: String) : HomeUiIntent
+
+  data object ClearPipelineTagFilters : HomeUiIntent
 
   // Inspect Tab
   data class ToggleInspectGroupExpanded(val groupId: String) : HomeUiIntent

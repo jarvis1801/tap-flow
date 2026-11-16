@@ -73,6 +73,8 @@ class HomeViewModel @Inject constructor(
     val activeTab: HomeTabType = HomeTabType.SCRIPT,
     val searchQuery: String = "",
     val isSearchExpanded: Boolean = false,
+    val selectedScriptTags: Set<String> = emptySet(),
+    val selectedPipelineTags: Set<String> = emptySet(),
     val inspectStorageStats: InspectStorageStats = InspectStorageStats(),
     val inspectImageRefreshToken: Long = 0L,
     val expandedInspectGroupIds: Set<String> = emptySet(),
@@ -161,12 +163,25 @@ class HomeViewModel @Inject constructor(
         val query = local.searchQuery.trim()
         val scriptsById = data.scripts.associateBy { it.id }
 
+        val availableScriptTags =
+          HomeLibraryFilter.extractAvailableTags(data.scripts.map { it.tags })
+        val prunedScriptTags =
+          HomeLibraryFilter.pruneSelectedTags(local.selectedScriptTags, availableScriptTags)
+
+        val availablePipelineTags =
+          HomeLibraryFilter.extractAvailableTags(data.pipelines.map { it.tags })
+        val prunedPipelineTags =
+          HomeLibraryFilter.pruneSelectedTags(local.selectedPipelineTags, availablePipelineTags)
+
         val filteredScripts =
           data.scripts
             .filter { script ->
-              query.isEmpty() ||
-                script.title.contains(query, ignoreCase = true) ||
-                script.tags.any { it.contains(query, ignoreCase = true) }
+              HomeLibraryFilter.matchesSearchAndTags(
+                title = script.title,
+                tags = script.tags,
+                query = query,
+                selectedTags = prunedScriptTags,
+              )
             }
             .map { script ->
               ScriptCardUi(
@@ -184,9 +199,12 @@ class HomeViewModel @Inject constructor(
         val filteredPipelines =
           data.pipelines
             .filter { pipeline ->
-              query.isEmpty() ||
-                pipeline.title.contains(query, ignoreCase = true) ||
-                pipeline.tags.any { it.contains(query, ignoreCase = true) }
+              HomeLibraryFilter.matchesSearchAndTags(
+                title = pipeline.title,
+                tags = pipeline.tags,
+                query = query,
+                selectedTags = prunedPipelineTags,
+              )
             }
             .map { pipeline ->
               val missingCount = pipeline.steps.count { it.scriptId !in scriptsById }
@@ -245,8 +263,12 @@ class HomeViewModel @Inject constructor(
           preferences = system.preferences,
           scripts = filteredScripts,
           totalScriptsCount = data.scripts.size,
+          availableScriptTags = availableScriptTags,
+          selectedScriptTags = prunedScriptTags,
           pipelines = filteredPipelines,
           totalPipelinesCount = data.pipelines.size,
+          availablePipelineTags = availablePipelineTags,
+          selectedPipelineTags = prunedPipelineTags,
           inspectGroups = filteredInspectGroups,
           inspectStorageStats = local.inspectStorageStats,
           inspectImageRefreshToken = local.inspectImageRefreshToken,
@@ -271,6 +293,30 @@ class HomeViewModel @Inject constructor(
         )
       }.collect { computed ->
         _uiState.value = computed
+      }
+    }
+
+    viewModelScope.launch {
+      scriptRepository.observeScripts().collect { scripts ->
+        val available = HomeLibraryFilter.extractAvailableTags(scripts.map { it.tags })
+        _localState.update { state ->
+          val pruned = HomeLibraryFilter.pruneSelectedTags(state.selectedScriptTags, available)
+          if (pruned == state.selectedScriptTags) state else state.copy(selectedScriptTags = pruned)
+        }
+      }
+    }
+
+    viewModelScope.launch {
+      pipelineRepository.observePipelines().collect { pipelines ->
+        val available = HomeLibraryFilter.extractAvailableTags(pipelines.map { it.tags })
+        _localState.update { state ->
+          val pruned = HomeLibraryFilter.pruneSelectedTags(state.selectedPipelineTags, available)
+          if (pruned == state.selectedPipelineTags) {
+            state
+          } else {
+            state.copy(selectedPipelineTags = pruned)
+          }
+        }
       }
     }
   }
@@ -414,6 +460,22 @@ class HomeViewModel @Inject constructor(
       HomeUiIntent.DismissDeleteScript -> {
         _localState.update { it.copy(deleteScriptPrompt = null) }
       }
+      is HomeUiIntent.ToggleScriptTagFilter -> {
+        val available = _uiState.value.availableScriptTags
+        _localState.update { state ->
+          state.copy(
+            selectedScriptTags =
+              HomeLibraryFilter.toggleTagSelection(
+                selectedTags = state.selectedScriptTags,
+                rawTag = intent.tag,
+                availableTags = available,
+              ),
+          )
+        }
+      }
+      HomeUiIntent.ClearScriptTagFilters -> {
+        _localState.update { it.copy(selectedScriptTags = emptySet()) }
+      }
 
       // Pipelines Tab
       HomeUiIntent.AddPipelineClicked -> {
@@ -495,6 +557,22 @@ class HomeViewModel @Inject constructor(
       }
       HomeUiIntent.DismissDeletePipeline -> {
         _localState.update { it.copy(deletePipelinePrompt = null) }
+      }
+      is HomeUiIntent.TogglePipelineTagFilter -> {
+        val available = _uiState.value.availablePipelineTags
+        _localState.update { state ->
+          state.copy(
+            selectedPipelineTags =
+              HomeLibraryFilter.toggleTagSelection(
+                selectedTags = state.selectedPipelineTags,
+                rawTag = intent.tag,
+                availableTags = available,
+              ),
+          )
+        }
+      }
+      HomeUiIntent.ClearPipelineTagFilters -> {
+        _localState.update { it.copy(selectedPipelineTags = emptySet()) }
       }
 
       // Inspect Tab

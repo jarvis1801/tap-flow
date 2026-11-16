@@ -87,6 +87,21 @@ class PipelineEditorViewModel @Inject constructor(
     }
 
     viewModelScope.launch {
+      pipelineRepository.observePipelines().collectLatest { pipelines ->
+        val suggestions =
+          pipelines
+            .asSequence()
+            .flatMap { it.tags.asSequence() }
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinctBy { it.lowercase() }
+            .sortedWith(String.CASE_INSENSITIVE_ORDER)
+            .toList()
+        _uiState.update { it.copy(suggestedTags = suggestions) }
+      }
+    }
+
+    viewModelScope.launch {
       entitlementRepository.entitlementState.collectLatest { ent ->
         _uiState.update { it.copy(isPro = EntitlementValidator.isPro(ent)) }
       }
@@ -110,8 +125,12 @@ class PipelineEditorViewModel @Inject constructor(
       is PipelineEditorUiIntent.AddTag -> {
         val clean = intent.tag.trim()
         if (clean.isBlank()) return
-        _uiState.update {
-          if (clean in it.tags) it else it.copy(tags = it.tags + clean, isDirty = true)
+        _uiState.update { state ->
+          if (state.tags.any { it.equals(clean, ignoreCase = true) }) {
+            state
+          } else {
+            state.copy(tags = state.tags + clean, isDirty = true)
+          }
         }
       }
       is PipelineEditorUiIntent.RemoveTag -> {

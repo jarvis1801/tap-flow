@@ -17,6 +17,7 @@ data class PipelineEditorUiState(
   val title: String = "New Pipeline",
   val description: String = "",
   val tags: List<String> = emptyList(),
+  val suggestedTags: List<String> = emptyList(),
   val steps: List<PipelineStep> = emptyList(),
   val repeatMode: PipelineRepeatMode = PipelineRepeatMode.RunOnce,
   val errorStrategy: PipelineErrorStrategy = PipelineErrorStrategy.ABORT,

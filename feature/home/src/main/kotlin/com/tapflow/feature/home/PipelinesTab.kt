@@ -24,10 +24,12 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.AssistChip
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,59 +54,81 @@ fun PipelinesTabContent(
   onIntent: (HomeUiIntent) -> Unit,
   modifier: Modifier = Modifier,
 ) {
-  Box(
+  val hasActiveFilters = state.searchQuery.isNotBlank() || state.selectedPipelineTags.isNotEmpty()
+
+  Column(
     modifier = modifier.fillMaxSize(),
-    contentAlignment = Alignment.TopCenter,
+    horizontalAlignment = Alignment.CenterHorizontally,
   ) {
-    if (state.pipelines.isEmpty()) {
-      EmptyTabStateCard(
-        icon = Icons.Filled.AccountTree,
-        title = if (state.searchQuery.isBlank()) "No Pipelines Yet" else "No Matching Pipelines",
-        subtitle =
-          if (state.searchQuery.isBlank()) {
-            "Chain multiple scripts sequentially with repeat counts and error recovery."
-          } else {
-            "Try clearing the search bar or searching another tag."
-          },
-        modifier = Modifier.padding(24.dp).align(Alignment.Center),
+    if (state.availablePipelineTags.isNotEmpty()) {
+      TagFilterChipBar(
+        availableTags = state.availablePipelineTags,
+        selectedTags = state.selectedPipelineTags,
+        testTagPrefix = "pipeline",
+        onToggleTag = { tag -> onIntent(HomeUiIntent.TogglePipelineTagFilter(tag)) },
+        onClearTags = { onIntent(HomeUiIntent.ClearPipelineTagFilters) },
       )
-    } else {
-      LazyColumn(
-        modifier = Modifier.widthIn(max = 760.dp).fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-      ) {
-        items(
-          items = state.pipelines,
-          key = { it.pipeline.id },
-        ) { item ->
-          PipelineItemCard(
-            item = item,
-            onPlay = { onIntent(HomeUiIntent.PlayPipelineClicked(item.pipeline.id)) },
-            onEdit = { onIntent(HomeUiIntent.EditPipelineClicked(item.pipeline.id)) },
-            onLogs = { onIntent(HomeUiIntent.ViewPipelineLogsClicked(item.pipeline.id)) },
-            onDelete = { onIntent(HomeUiIntent.RequestDeletePipeline(item.pipeline.id)) },
-          )
-        }
-      }
+      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
     }
 
-    ExtendedFloatingActionButton(
-      onClick = { onIntent(HomeUiIntent.AddPipelineClicked) },
-      icon = { Icon(imageVector = Icons.Filled.Add, contentDescription = null) },
-      text = { Text("Add Pipeline") },
-      modifier =
-        Modifier
-          .align(Alignment.BottomEnd)
-          .padding(20.dp)
-          .testTag("fab_add_pipeline"),
-    )
+    Box(
+      modifier = Modifier.weight(1f).fillMaxWidth(),
+      contentAlignment = Alignment.TopCenter,
+    ) {
+      if (state.pipelines.isEmpty()) {
+        EmptyTabStateCard(
+          icon = Icons.Filled.AccountTree,
+          title = if (!hasActiveFilters) "No Pipelines Yet" else "No Matching Pipelines",
+          subtitle =
+            if (!hasActiveFilters) {
+              "Chain multiple scripts sequentially with repeat counts and error recovery."
+            } else {
+              "Try clearing the search bar or selected tag filters."
+            },
+          modifier = Modifier.padding(24.dp).align(Alignment.Center),
+        )
+      } else {
+        LazyColumn(
+          modifier = Modifier.widthIn(max = 760.dp).fillMaxSize(),
+          contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+          items(
+            items = state.pipelines,
+            key = { it.pipeline.id },
+          ) { item ->
+            PipelineItemCard(
+              item = item,
+              selectedTags = state.selectedPipelineTags,
+              onToggleTag = { tag -> onIntent(HomeUiIntent.TogglePipelineTagFilter(tag)) },
+              onPlay = { onIntent(HomeUiIntent.PlayPipelineClicked(item.pipeline.id)) },
+              onEdit = { onIntent(HomeUiIntent.EditPipelineClicked(item.pipeline.id)) },
+              onLogs = { onIntent(HomeUiIntent.ViewPipelineLogsClicked(item.pipeline.id)) },
+              onDelete = { onIntent(HomeUiIntent.RequestDeletePipeline(item.pipeline.id)) },
+            )
+          }
+        }
+      }
+
+      ExtendedFloatingActionButton(
+        onClick = { onIntent(HomeUiIntent.AddPipelineClicked) },
+        icon = { Icon(imageVector = Icons.Filled.Add, contentDescription = null) },
+        text = { Text("Add Pipeline") },
+        modifier =
+          Modifier
+            .align(Alignment.BottomEnd)
+            .padding(20.dp)
+            .testTag("fab_add_pipeline"),
+      )
+    }
   }
 }
 
 @Composable
 private fun PipelineItemCard(
   item: PipelineCardUi,
+  selectedTags: Set<String>,
+  onToggleTag: (String) -> Unit,
   onPlay: () -> Unit,
   onEdit: () -> Unit,
   onLogs: () -> Unit,
@@ -180,9 +204,24 @@ private fun PipelineItemCard(
           verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
           pipeline.tags.forEach { tag ->
-            AssistChip(
-              onClick = {},
+            val selected = HomeLibraryFilter.isTagSelected(tag, selectedTags)
+            FilterChip(
+              selected = selected,
+              onClick = { onToggleTag(tag) },
+              leadingIcon =
+                if (selected) {
+                  {
+                    Icon(
+                      imageVector = Icons.Rounded.Check,
+                      contentDescription = null,
+                      modifier = Modifier.size(14.dp),
+                    )
+                  }
+                } else {
+                  null
+                },
               label = { Text(tag, style = MaterialTheme.typography.labelSmall) },
+              modifier = Modifier.testTag("pipeline_card_${pipeline.id}_tag_$tag"),
             )
           }
         }
@@ -309,6 +348,8 @@ private fun PipelinesTabPreview() {
         HomeUiState(
           entitlementState = EntitlementState.Free(TrialStatus.NOT_STARTED, 7),
           totalPipelinesCount = 1,
+          availablePipelineTags = listOf("Farming"),
+          selectedPipelineTags = setOf("Farming"),
           pipelines =
             listOf(
               PipelineCardUi(
