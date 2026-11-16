@@ -137,8 +137,8 @@ class ScriptLogViewModel @Inject constructor(
       }
 
       ScriptLogUiIntent.OpenExportSheet -> {
-        if (!entitlementRepository.canUseFeature(ProFeatureGate.FULL_EXECUTION_LOGS)) {
-          sendEffect(ScriptLogUiEffect.NavigateToPaywall(ProFeatureGate.FULL_EXECUTION_LOGS.displayName))
+        if (!entitlementRepository.canUseFeature(ProFeatureGate.FULL_LOGS)) {
+          sendEffect(ScriptLogUiEffect.NavigateToPaywall(ProFeatureGate.FULL_LOGS.displayName))
           return
         }
         if (_uiState.value.filteredLogs.isEmpty()) {
@@ -153,9 +153,9 @@ class ScriptLogViewModel @Inject constructor(
       }
 
       is ScriptLogUiIntent.RequestExport -> {
-        if (!entitlementRepository.canUseFeature(ProFeatureGate.FULL_EXECUTION_LOGS)) {
+        if (!entitlementRepository.canUseFeature(ProFeatureGate.FULL_LOGS)) {
           _uiState.update { it.copy(showExportSheet = false) }
-          sendEffect(ScriptLogUiEffect.NavigateToPaywall(ProFeatureGate.FULL_EXECUTION_LOGS.displayName))
+          sendEffect(ScriptLogUiEffect.NavigateToPaywall(ProFeatureGate.FULL_LOGS.displayName))
           return
         }
         val logsToExport = _uiState.value.filteredLogs
@@ -182,6 +182,10 @@ class ScriptLogViewModel @Inject constructor(
 
       is ScriptLogUiIntent.NotifyExportResult -> {
         sendEffect(ScriptLogUiEffect.ShowSnackbar(intent.message))
+      }
+
+      ScriptLogUiIntent.UpgradeForFullLogs -> {
+        sendEffect(ScriptLogUiEffect.NavigateToPaywall(ProFeatureGate.FULL_LOGS.displayName))
       }
     }
   }

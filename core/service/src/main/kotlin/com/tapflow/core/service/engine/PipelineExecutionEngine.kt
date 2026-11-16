@@ -6,6 +6,8 @@ import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.database.repository.LogRepository
 import com.tapflow.core.database.repository.ScriptRepository
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
+import com.tapflow.core.model.action.SystemKeyType
+import com.tapflow.core.model.entitlement.ProFeatureGate
 import com.tapflow.core.model.log.ExecutionSessionLog
 import com.tapflow.core.model.log.ExecutionStatus
 import com.tapflow.core.model.log.PipelineSessionLog
@@ -282,8 +284,19 @@ class PipelineExecutionEngine @Inject constructor(
     useShizukuForceStop: Boolean,
   ) {
     if (recoveryPackageName.isNullOrBlank()) return
-    if (useShizukuForceStop && shizukuManager.isReadyNow()) {
+    val useShizuku =
+      useShizukuForceStop &&
+        entitlementRepository.canUseFeature(ProFeatureGate.SHIZUKU_SUITE) &&
+        shizukuManager.isReadyNow()
+    if (useShizuku) {
       shizukuManager.forceStopApp(recoveryPackageName)
+      delay(400L)
+    } else {
+      accessibilityBridge.performGlobalAction(SystemKeyType.HOME)
+      val activityManager =
+        context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+      @Suppress("DEPRECATION")
+      runCatching { activityManager?.killBackgroundProcesses(recoveryPackageName) }
       delay(400L)
     }
     val launchIntent =

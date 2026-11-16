@@ -55,6 +55,8 @@ sealed interface ScriptLogUiIntent {
   data class RequestExport(val format: LogExportFormat) : ScriptLogUiIntent
 
   data class NotifyExportResult(val message: String) : ScriptLogUiIntent
+
+  data object UpgradeForFullLogs : ScriptLogUiIntent
 }
 
 sealed interface ScriptLogUiEffect {

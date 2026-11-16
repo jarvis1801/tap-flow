@@ -217,27 +217,12 @@ fun ActionCatalogBottomSheet(
               label = { Text("All") },
             )
             ActionCategoryGroup.entries.forEach { category ->
-              val locked = category == ActionCategoryGroup.VARIABLE_OPS && !isPro
               FilterChip(
                 selected = !showAllCategories && session.selectedCategory == category,
                 onClick = {
-                  if (category != ActionCategoryGroup.VARIABLE_OPS || isPro) {
-                    showAllCategories = false
-                  }
+                  showAllCategories = false
                   onIntent(ScriptEditorUiIntent.SelectCatalogCategory(category))
                 },
-                leadingIcon =
-                  if (locked) {
-                    {
-                      Icon(
-                        imageVector = Icons.Rounded.Lock,
-                        contentDescription = "Pro feature",
-                        modifier = Modifier.size(14.dp),
-                      )
-                    }
-                  } else {
-                    null
-                  },
                 label = { Text(categoryTitle(category)) },
               )
             }
@@ -702,7 +687,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           hint = "Pinch, zoom, multi-tap",
           icon = Icons.Rounded.Pinch,
           category = ActionCategoryGroup.TOUCH_GESTURES,
-          isPro = true,
+          isPro = false,
           factory = { id ->
             ScriptAction.MultiTouch(id = id, centerX = UNSET_COORD, centerY = UNSET_COORD)
           },
@@ -745,7 +730,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           hintRes = R.string.if_block_catalog_hint,
           icon = Icons.AutoMirrored.Rounded.AltRoute,
           category = ActionCategoryGroup.FLOW_CONTROL,
-          isPro = true,
+          isPro = false,
           factory = { id ->
             ScriptAction.IfBlock(
               id = id,
@@ -827,7 +812,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           hint = "Close target app",
           icon = Icons.Rounded.Cancel,
           category = ActionCategoryGroup.SYSTEM_HARDWARE,
-          isPro = true,
+          isPro = false,
           factory = { id -> ScriptAction.ForceStopApp(id = id, packageName = "") },
           matcher = { it is ScriptAction.ForceStopApp },
         ),
@@ -869,7 +854,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           hint = "Store a value",
           icon = Icons.Rounded.DataObject,
           category = ActionCategoryGroup.VARIABLE_OPS,
-          isPro = true,
+          isPro = false,
           factory = { id ->
             ScriptAction.SetVariable(id = id, targetKey = "", valueTemplate = "")
           },
@@ -880,7 +865,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           hint = "Add, subtract, divide",
           icon = Icons.Rounded.Calculate,
           category = ActionCategoryGroup.VARIABLE_OPS,
-          isPro = true,
+          isPro = false,
           factory = { id ->
             ScriptAction.MathOp(
               id = id,
@@ -897,7 +882,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           hint = "Random number or Yes/No",
           icon = Icons.Rounded.Casino,
           category = ActionCategoryGroup.VARIABLE_OPS,
-          isPro = true,
+          isPro = false,
           factory = { id ->
             ScriptAction.RandomOp(
               id = id,
@@ -914,7 +899,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           hint = "Join, trim, replace text",
           icon = Icons.Rounded.TextFields,
           category = ActionCategoryGroup.VARIABLE_OPS,
-          isPro = true,
+          isPro = false,
           factory = { id ->
             ScriptAction.StringOp(
               id = id,
@@ -931,7 +916,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           hint = "Flip or combine flags",
           icon = Icons.Rounded.ToggleOn,
           category = ActionCategoryGroup.VARIABLE_OPS,
-          isPro = true,
+          isPro = false,
           factory = { id ->
             ScriptAction.BooleanOp(
               id = id,
@@ -947,7 +932,7 @@ private fun templatesForCategory(category: ActionCategoryGroup): List<ActionTemp
           hint = "Text to number & back",
           icon = Icons.Rounded.SwapHoriz,
           category = ActionCategoryGroup.VARIABLE_OPS,
-          isPro = true,
+          isPro = false,
           factory = { id ->
             ScriptAction.TypeCastOp(
               id = id,

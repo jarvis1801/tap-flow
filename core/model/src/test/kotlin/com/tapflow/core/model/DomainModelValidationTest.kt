@@ -4,6 +4,7 @@ import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
 import com.tapflow.core.model.common.OverlaySizeOption
+import com.tapflow.core.model.condition.ColorMatchMode
 import com.tapflow.core.model.condition.ColorTarget
 import com.tapflow.core.model.condition.ConditionGroup
 import com.tapflow.core.model.condition.ConditionLeaf
@@ -18,6 +19,10 @@ import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.ScreenOrientation
 import com.tapflow.core.model.ipc.WsMessage
 import com.tapflow.core.model.ipc.WsMessageType
+import com.tapflow.core.model.pipeline.Pipeline
+import com.tapflow.core.model.pipeline.PipelineErrorStrategy
+import com.tapflow.core.model.pipeline.PipelineRepeatMode
+import com.tapflow.core.model.pipeline.PipelineStep
 import com.tapflow.core.model.script.Script
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -52,28 +57,16 @@ class DomainModelValidationTest {
   }
 
   @Test
-  fun entitlementValidatorDetectsFreeVsProScriptFeatures() {
-    val freeScript =
+  fun entitlementValidatorDetectsFreeVsProScriptAndPipelineFeatures() {
+    val richFreeScript =
       Script(
         id = "s1",
-        title = "Basic Tap",
-        actions = listOf(
-          ScriptAction.Tap(
-            id = "a1",
-            x = NumericInput.Literal(540),
-            y = NumericInput.Literal(960),
-          )
-        ),
-      )
-    assertTrue(EntitlementValidator.detectProFeaturesInScript(freeScript).isEmpty())
-
-    val proScript =
-      Script(
-        id = "s2",
-        title = "Smart Tap",
+        title = "Full Logic + Jitter + Single Color",
         globalDelay = DelayConfig.RandomRange(100L, 250L),
         actions = listOf(
           ScriptAction.Tap(id = "a1", jitterPx = 12),
+          ScriptAction.MultiTouch(id = "a2"),
+          ScriptAction.ForceStopApp(id = "a3", packageName = "com.example.game"),
           ScriptAction.IfBlock(
             id = "if1",
             conditionRoot = ConditionGroup(
@@ -82,23 +75,78 @@ class DomainModelValidationTest {
                 ConditionLeaf(
                   id = "c1",
                   predicate = ConditionPredicate.ColorMatch(
+                    mode = ColorMatchMode.SINGLE_POINT,
                     targets = listOf(ColorTarget(10, 20, "#00E5FF")),
                   ),
+                ),
+                ConditionLeaf(
+                  id = "c2",
+                  predicate = ConditionPredicate.AppMatch("com.example.game", "Game"),
                 ),
               ),
             ),
           ),
         ),
       )
-    val detected = EntitlementValidator.detectProFeaturesInScript(proScript)
-    assertTrue(detected.contains(ProFeatureGate.RANDOM_DEVIATION_DELAY))
-    assertTrue(detected.contains(ProFeatureGate.ANTI_BAN_JITTER))
-    assertTrue(detected.contains(ProFeatureGate.IF_BLOCK))
+    assertTrue(EntitlementValidator.detectProFeaturesInScript(richFreeScript).isEmpty())
+
+    val visionProScript =
+      Script(
+        id = "s2",
+        title = "Multi-Point & Template Match",
+        actions = listOf(
+          ScriptAction.IfBlock(
+            id = "if2",
+            conditionRoot = ConditionGroup(
+              id = "root2",
+              children = listOf(
+                ConditionLeaf(
+                  id = "c3",
+                  predicate = ConditionPredicate.ColorMatch(
+                    mode = ColorMatchMode.MULTI_POINT,
+                    targets = listOf(
+                      ColorTarget(10, 20, "#00E5FF"),
+                      ColorTarget(30, 40, "#FF0000"),
+                    ),
+                  ),
+                ),
+                ConditionLeaf(
+                  id = "c4",
+                  predicate = ConditionPredicate.ImageMatch(templatePngPath = "/tmp/tpl.png"),
+                ),
+              ),
+            ),
+          ),
+        ),
+      )
+    assertEquals(
+      setOf(ProFeatureGate.ADVANCED_VISION),
+      EntitlementValidator.detectProFeaturesInScript(visionProScript),
+    )
+
+    val scriptsMap = mapOf("s1" to richFreeScript, "s2" to visionProScript)
+    val freePipeline =
+      Pipeline(
+        id = "p1",
+        title = "Free Once",
+        repeatMode = PipelineRepeatMode.RunOnce,
+        errorStrategy = PipelineErrorStrategy.ABORT,
+        steps = listOf(PipelineStep(id = "st1", scriptId = "s1")),
+      )
+    assertTrue(EntitlementValidator.detectProFeaturesInPipeline(freePipeline, scriptsMap).isEmpty())
+
+    val loopPipeline =
+      freePipeline.copy(
+        repeatMode = PipelineRepeatMode.Count(3),
+        errorStrategy = PipelineErrorStrategy.SKIP_AND_CONTINUE,
+      )
+    assertEquals(
+      setOf(ProFeatureGate.PIPELINE_AUTOMATION),
+      EntitlementValidator.detectProFeaturesInPipeline(loopPipeline, scriptsMap),
+    )
 
     val freeState = EntitlementState.Free(TrialStatus.NOT_STARTED)
     assertFalse(EntitlementValidator.isPro(freeState))
-    assertTrue(EntitlementValidator.canCreateScript(freeState, 2))
-    assertFalse(EntitlementValidator.canCreateScript(freeState, 3))
   }
 
   @Test
@@ -119,24 +167,23 @@ class DomainModelValidationTest {
 
     val trialUnlockedGates =
       listOf(
-        ProFeatureGate.IMAGE_MATCH,
-        ProFeatureGate.IF_BLOCK,
-        ProFeatureGate.ADVANCED_LOOPS,
-        ProFeatureGate.DYNAMIC_VARIABLES,
-        ProFeatureGate.ANTI_BAN_JITTER,
-        ProFeatureGate.SHIZUKU_INTEGRATION,
-        ProFeatureGate.LIVE_IMAGE_INSPECTOR,
-        ProFeatureGate.FULL_EXECUTION_LOGS,
-        ProFeatureGate.UNLIMITED_SCRIPTS,
-        ProFeatureGate.UNLIMITED_PIPELINES,
-        ProFeatureGate.AMOLED_THEME,
         ProFeatureGate.EXTERNAL_BROADCAST,
+        ProFeatureGate.SHIZUKU_SUITE,
+        ProFeatureGate.ADVANCED_VISION,
+        ProFeatureGate.PIPELINE_AUTOMATION,
+        ProFeatureGate.FULL_LOGS,
+        ProFeatureGate.AMOLED_THEME,
       )
     val lifetimeOnlyGates =
       listOf(
         ProFeatureGate.DESKTOP_CONSOLE,
         ProFeatureGate.DATA_BACKUP,
       )
+
+    assertEquals(
+      8,
+      trialUnlockedGates.size + lifetimeOnlyGates.size,
+    )
 
     trialUnlockedGates.forEach { gate ->
       assertFalse(EntitlementValidator.canUseFeature(freeState, gate))
@@ -267,7 +314,8 @@ class DomainModelValidationTest {
                     listOf(
                       ConditionLeaf(
                         id = "ei1-leaf",
-                        predicate = ConditionPredicate.ColorMatch(targets = listOf(ColorTarget(10, 20, "#FF0000"))),
+                        predicate =
+                          ConditionPredicate.ImageMatch(templatePngPath = "/tmp/popup.png"),
                       ),
                     ),
                 ),
@@ -285,7 +333,6 @@ class DomainModelValidationTest {
     assertEquals(4, script.totalActionCount())
 
     val proGates = EntitlementValidator.detectProFeaturesInScript(script)
-    assertTrue(proGates.contains(ProFeatureGate.IF_BLOCK))
-    assertTrue(proGates.contains(ProFeatureGate.ANTI_BAN_JITTER))
+    assertEquals(setOf(ProFeatureGate.ADVANCED_VISION), proGates)
   }
 }

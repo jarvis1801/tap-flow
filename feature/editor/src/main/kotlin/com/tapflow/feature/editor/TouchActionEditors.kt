@@ -20,7 +20,6 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
-import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -63,7 +62,6 @@ import com.tapflow.core.model.action.TextInjectionEngine
 import com.tapflow.core.model.common.NumericInput
 import com.tapflow.core.model.common.VariableDefinition
 import com.tapflow.core.model.condition.ConditionGroup
-import com.tapflow.core.model.entitlement.ProFeatureGate
 import com.tapflow.core.service.overlay.GesturePickerTargetType
 import java.util.UUID
 
@@ -116,14 +114,13 @@ fun TapActionEditor(
         )
       }
 
-      ProIntField(
+      IntTextField(
         label = "Random Tap Offset (Anti-Detection)",
         value = action.jitterPx,
-        isPro = isPro,
-        proGate = ProFeatureGate.ANTI_BAN_JITTER,
-        onValueChange = { onChange(action.copy(jitterPx = it.coerceIn(0, 300))) },
-        onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+        min = 0,
+        onChange = { onChange(action.copy(jitterPx = it.coerceIn(0, 300))) },
         supportingHint = "Adds slight randomness so taps look human (0 = exact spot)",
+        modifier = Modifier.fillMaxWidth(),
       )
     }
 
@@ -219,14 +216,13 @@ fun DoubleTapActionEditor(
         )
       }
 
-      ProIntField(
+      IntTextField(
         label = "Random Tap Offset (Anti-Detection)",
         value = action.jitterPx,
-        isPro = isPro,
-        proGate = ProFeatureGate.ANTI_BAN_JITTER,
-        onValueChange = { onChange(action.copy(jitterPx = it.coerceIn(0, 300))) },
-        onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+        min = 0,
+        onChange = { onChange(action.copy(jitterPx = it.coerceIn(0, 300))) },
         supportingHint = "Adds slight randomness so taps look human (0 = exact spot)",
+        modifier = Modifier.fillMaxWidth(),
       )
     }
 
@@ -269,32 +265,17 @@ fun LongPressActionEditor(
         verticalArrangement = Arrangement.spacedBy(6.dp),
       ) {
         LongPressMode.entries.forEach { mode ->
-          val requiresPro = mode != LongPressMode.STANDARD
           FilterChip(
             selected = action.mode == mode,
             onClick = {
-              if (requiresPro && !isPro) {
-                onIntent(
-                  ScriptEditorUiIntent.RequestProUpgrade(
-                    ProFeatureGate.HOLD_GESTURE_MODES.displayName,
-                  ),
-                )
-              } else {
-                val nextHoldCond =
-                  if (mode == LongPressMode.HOLD_UNTIL && action.holdUntilCondition == null) {
-                    ConditionGroup(id = UUID.randomUUID().toString(), name = "Stop Holding When")
-                  } else {
-                    action.holdUntilCondition
-                  }
-                onChange(action.copy(mode = mode, holdUntilCondition = nextHoldCond))
-              }
+              val nextHoldCond =
+                if (mode == LongPressMode.HOLD_UNTIL && action.holdUntilCondition == null) {
+                  ConditionGroup(id = UUID.randomUUID().toString(), name = "Stop Holding When")
+                } else {
+                  action.holdUntilCondition
+                }
+              onChange(action.copy(mode = mode, holdUntilCondition = nextHoldCond))
             },
-            leadingIcon =
-              if (requiresPro && !isPro) {
-                { Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(14.dp)) }
-              } else {
-                null
-              },
             label = {
               Text(
                 when (mode) {
@@ -350,14 +331,13 @@ fun LongPressActionEditor(
           )
         }
 
-        ProIntField(
+        IntTextField(
           label = "Random Tap Offset (Anti-Detection)",
           value = action.jitterPx,
-          isPro = isPro,
-          proGate = ProFeatureGate.ANTI_BAN_JITTER,
-          onValueChange = { onChange(action.copy(jitterPx = it.coerceIn(0, 300))) },
-          onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          min = 0,
+          onChange = { onChange(action.copy(jitterPx = it.coerceIn(0, 300))) },
           supportingHint = "Adds slight randomness so taps look human (0 = exact spot)",
+          modifier = Modifier.fillMaxWidth(),
         )
 
         if (action.mode == LongPressMode.STANDARD) {
@@ -415,12 +395,7 @@ fun LongPressActionEditor(
               fontWeight = FontWeight.Medium,
             )
             Text(
-              text =
-                if (isPro) {
-                  "Adds tiny natural finger movement while holding"
-                } else {
-                  "Pro feature — adds tiny natural finger movement"
-                },
+              text = "Adds tiny natural finger movement while holding",
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -428,13 +403,7 @@ fun LongPressActionEditor(
           Switch(
             checked = action.microMovementJitter,
             onCheckedChange = { checked ->
-              if (!isPro && checked) {
-                onIntent(
-                  ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.ANTI_BAN_JITTER.displayName),
-                )
-              } else {
-                onChange(action.copy(microMovementJitter = checked))
-              }
+              onChange(action.copy(microMovementJitter = checked))
             },
           )
         }
@@ -811,13 +780,6 @@ fun SwipeDragActionEditor(
       val modes = SwipeTrajectoryMode.entries
       SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
         modes.forEachIndexed { index, mode ->
-          val requiresPro = mode != SwipeTrajectoryMode.LINEAR
-          val proGate =
-            if (mode == SwipeTrajectoryMode.BEZIER_CURVE) {
-              ProFeatureGate.BEZIER_TRAJECTORY
-            } else {
-              ProFeatureGate.MULTI_POINT_SWIPE
-            }
           val label =
             when (mode) {
               SwipeTrajectoryMode.LINEAR -> "Straight Line"
@@ -826,21 +788,9 @@ fun SwipeDragActionEditor(
             }
           SegmentedButton(
             selected = action.trajectoryMode == mode,
-            onClick = {
-              if (requiresPro && !isPro) {
-                onIntent(ScriptEditorUiIntent.RequestProUpgrade(proGate.displayName))
-              } else {
-                onChange(action.copy(trajectoryMode = mode))
-              }
-            },
+            onClick = { onChange(action.copy(trajectoryMode = mode)) },
             shape = SegmentedButtonDefaults.itemShape(index = index, count = modes.size),
-            icon = {
-              if (requiresPro && !isPro) {
-                Icon(Icons.Rounded.Lock, contentDescription = "Pro feature", modifier = Modifier.size(14.dp))
-              } else {
-                SegmentedButtonDefaults.Icon(active = action.trajectoryMode == mode)
-              }
-            },
+            icon = { SegmentedButtonDefaults.Icon(active = action.trajectoryMode == mode) },
           ) {
             Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
           }
@@ -907,23 +857,19 @@ fun SwipeDragActionEditor(
       }
 
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        ProIntField(
+        IntTextField(
           label = "Start Random Offset (px)",
           value = action.startJitterPx,
-          isPro = isPro,
-          proGate = ProFeatureGate.ANTI_BAN_JITTER,
-          onValueChange = { onChange(action.copy(startJitterPx = it.coerceIn(0, 200))) },
-          onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          min = 0,
+          onChange = { onChange(action.copy(startJitterPx = it.coerceIn(0, 200))) },
           supportingHint = "0 = exact spot",
           modifier = Modifier.weight(1f),
         )
-        ProIntField(
+        IntTextField(
           label = "End Random Offset (px)",
           value = action.endJitterPx,
-          isPro = isPro,
-          proGate = ProFeatureGate.ANTI_BAN_JITTER,
-          onValueChange = { onChange(action.copy(endJitterPx = it.coerceIn(0, 200))) },
-          onProRequested = { onIntent(ScriptEditorUiIntent.RequestProUpgrade(it)) },
+          min = 0,
+          onChange = { onChange(action.copy(endJitterPx = it.coerceIn(0, 200))) },
           supportingHint = "0 = exact spot",
           modifier = Modifier.weight(1f),
         )
@@ -1202,7 +1148,6 @@ fun InputTextActionEditor(
     EditorSectionCard(title = "How to Type") {
       Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         TextInjectionEngine.entries.forEach { engine ->
-          val requiresPro = engine == TextInjectionEngine.HUMAN_TYPING
           val selected = action.engine == engine
           val (title, desc) =
             when (engine) {
@@ -1235,15 +1180,7 @@ fun InputTextActionEditor(
               Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .clickable {
-                  if (requiresPro && !isPro) {
-                    onIntent(
-                      ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.HUMAN_TYPING.displayName),
-                    )
-                  } else {
-                    onChange(action.copy(engine = engine))
-                  }
-                },
+                .clickable { onChange(action.copy(engine = engine)) },
           ) {
             Row(
               modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
@@ -1252,15 +1189,7 @@ fun InputTextActionEditor(
             ) {
               RadioButton(
                 selected = selected,
-                onClick = {
-                  if (requiresPro && !isPro) {
-                    onIntent(
-                      ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.HUMAN_TYPING.displayName),
-                    )
-                  } else {
-                    onChange(action.copy(engine = engine))
-                  }
-                },
+                onClick = { onChange(action.copy(engine = engine)) },
               )
               Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -1272,14 +1201,6 @@ fun InputTextActionEditor(
                   text = desc,
                   style = MaterialTheme.typography.bodySmall,
                   color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-              }
-              if (requiresPro && !isPro) {
-                Icon(
-                  imageVector = Icons.Rounded.Lock,
-                  contentDescription = "Pro feature",
-                  tint = MaterialTheme.colorScheme.tertiary,
-                  modifier = Modifier.size(16.dp),
                 )
               }
             }
@@ -1352,48 +1273,6 @@ internal fun OverlayPickButton(
     Spacer(modifier = Modifier.width(8.dp))
     Text(label)
   }
-}
-
-@Composable
-internal fun ProIntField(
-  label: String,
-  value: Int,
-  isPro: Boolean,
-  proGate: ProFeatureGate,
-  onValueChange: (Int) -> Unit,
-  onProRequested: (String) -> Unit,
-  modifier: Modifier = Modifier,
-  supportingHint: String? = null,
-) {
-  var text by remember(value) { mutableStateOf(value.toString()) }
-  OutlinedTextField(
-    value = text,
-    onValueChange = { raw ->
-      if (!isPro) {
-        onProRequested(proGate.displayName)
-        return@OutlinedTextField
-      }
-      val clean = raw.filter { it.isDigit() }
-      text = clean
-      if (clean.isEmpty()) {
-        onValueChange(0)
-      } else {
-        clean.toIntOrNull()?.let(onValueChange)
-      }
-    },
-    label = {
-      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (!isPro) {
-          Icon(Icons.Rounded.Lock, contentDescription = null, modifier = Modifier.size(14.dp))
-        }
-        Text(label)
-      }
-    },
-    supportingText = supportingHint?.let { hint -> { Text(hint) } },
-    singleLine = true,
-    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-    modifier = modifier.fillMaxWidth(),
-  )
 }
 
 @Composable

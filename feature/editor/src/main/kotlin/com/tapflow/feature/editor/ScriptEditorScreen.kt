@@ -603,7 +603,7 @@ private fun ScriptEditorTopHeaderBar(
                 onClick = { onIntent(ScriptEditorUiIntent.SetVariablesSheetVisible(true)) },
                 leadingIcon = {
                   Icon(
-                    imageVector = if (!state.isPro) Icons.Rounded.Lock else Icons.Rounded.DataObject,
+                    imageVector = Icons.Rounded.DataObject,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
                   )

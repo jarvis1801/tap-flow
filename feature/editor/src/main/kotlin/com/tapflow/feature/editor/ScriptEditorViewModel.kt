@@ -7,13 +7,10 @@ import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.database.asset.ScriptAssetManager
 import com.tapflow.core.database.repository.InspectRepository
 import com.tapflow.core.database.repository.ScriptRepository
-import com.tapflow.core.model.action.LongPressMode
 import com.tapflow.core.model.action.MultiTouchMode
 import com.tapflow.core.model.action.MultiTouchPoint
 import com.tapflow.core.model.action.Point2D
 import com.tapflow.core.model.action.ScriptAction
-import com.tapflow.core.model.action.SwipeTrajectoryMode
-import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
 import com.tapflow.core.model.common.VariableDefinition
 import com.tapflow.core.model.condition.ColorMatchMode
@@ -24,7 +21,6 @@ import com.tapflow.core.model.condition.ConditionNode
 import com.tapflow.core.model.condition.ConditionPredicate
 import com.tapflow.core.model.condition.RegionBounds
 import com.tapflow.core.model.entitlement.EntitlementValidator
-import com.tapflow.core.model.entitlement.ProFeatureGate
 import com.tapflow.core.model.script.Script
 import com.tapflow.core.service.accessibility.AccessibilityManagerBridge
 import com.tapflow.core.service.overlay.GesturePickerBridge
@@ -209,14 +205,6 @@ class ScriptEditorViewModel @Inject constructor(
       }
       is ScriptEditorUiIntent.SaveGlobalDelay -> {
         val clamped = intent.config.clamped()
-        if (clamped !is DelayConfig.Fixed && !entitlementRepository.isPro()) {
-          sendEffect(
-            ScriptEditorUiEffect.NavigateToPaywall(
-              ProFeatureGate.RANDOM_DEVIATION_DELAY.displayName,
-            ),
-          )
-          return
-        }
         _uiState.update {
           it.copy(
             globalDelay = clamped,
@@ -227,14 +215,6 @@ class ScriptEditorViewModel @Inject constructor(
       }
       is ScriptEditorUiIntent.ApplyGlobalDelayToAllActions -> {
         val clamped = intent.config.clamped()
-        if (clamped !is DelayConfig.Fixed && !entitlementRepository.isPro()) {
-          sendEffect(
-            ScriptEditorUiEffect.NavigateToPaywall(
-              ProFeatureGate.RANDOM_DEVIATION_DELAY.displayName,
-            ),
-          )
-          return
-        }
         _uiState.update { state ->
           state.copy(
             globalDelay = clamped,
@@ -250,12 +230,6 @@ class ScriptEditorViewModel @Inject constructor(
 
       // Dynamic Variables
       is ScriptEditorUiIntent.SetVariablesSheetVisible -> {
-        if (intent.visible && !entitlementRepository.canUseFeature(ProFeatureGate.DYNAMIC_VARIABLES)) {
-          sendEffect(
-            ScriptEditorUiEffect.NavigateToPaywall(ProFeatureGate.DYNAMIC_VARIABLES.displayName),
-          )
-          return
-        }
         _uiState.update { it.copy(showVariablesSheet = intent.visible) }
       }
       is ScriptEditorUiIntent.UpsertVariable -> {
@@ -337,17 +311,6 @@ class ScriptEditorViewModel @Inject constructor(
       }
       is ScriptEditorUiIntent.OpenAddActionSheet -> {
         val state = _uiState.value
-        if (intent.location.branchKind == BranchKind.ROOT &&
-          !state.isPro &&
-          state.actions.size >= EntitlementValidator.FREE_MAX_ACTIONS_PER_SCRIPT
-        ) {
-          sendEffect(
-            ScriptEditorUiEffect.NavigateToPaywall(
-              "${ProFeatureGate.UNLIMITED_ACTIONS.displayName} (Free limit: ${EntitlementValidator.FREE_MAX_ACTIONS_PER_SCRIPT})",
-            ),
-          )
-          return
-        }
         val canAddNestedIf =
           ActionTreeUtils.ifNestingDepthForLocation(state.actions, intent.location) <
             ActionTreeUtils.MAX_IF_NESTING_DEPTH
@@ -394,7 +357,6 @@ class ScriptEditorViewModel @Inject constructor(
         val ifBlock =
           ActionTreeUtils.findActionById(_uiState.value.actions, intent.ifBlockId)
             as? ScriptAction.IfBlock ?: return
-        if (!verifyProGateForAction(ifBlock)) return
         val newBranch =
           ScriptAction.ElseIfBranch(
             id = UUID.randomUUID().toString(),
@@ -486,12 +448,6 @@ class ScriptEditorViewModel @Inject constructor(
 
       // Action Sheet Edits
       is ScriptEditorUiIntent.SelectCatalogCategory -> {
-        if (intent.category == ActionCategoryGroup.VARIABLE_OPS && !entitlementRepository.isPro()) {
-          sendEffect(
-            ScriptEditorUiEffect.NavigateToPaywall(ProFeatureGate.DYNAMIC_VARIABLES.displayName),
-          )
-          return
-        }
         _uiState.update { state ->
           val session = state.actionEditorSession ?: return@update state
           state.copy(actionEditorSession = session.copy(selectedCategory = intent.category))
@@ -510,7 +466,6 @@ class ScriptEditorViewModel @Inject constructor(
           )
           return
         }
-        if (!verifyProGateForAction(intent.action)) return
         _uiState.update { state ->
           val session = state.actionEditorSession ?: return@update state
           val preservedId = session.draftAction.id
@@ -557,7 +512,6 @@ class ScriptEditorViewModel @Inject constructor(
           )
           return
         }
-        if (!verifyProGateForAction(session.draftAction)) return
         val errors = ActionValidator.validate(session.draftAction, session.editingElseIfBranchId)
         if (errors.isNotEmpty()) {
           _uiState.update { state ->
@@ -830,31 +784,6 @@ class ScriptEditorViewModel @Inject constructor(
         sendEffect(ScriptEditorUiEffect.NavigateBack)
       }
     }
-  }
-
-  private fun verifyProGateForAction(action: ScriptAction): Boolean {
-    if (entitlementRepository.isPro()) return true
-    val blocker: ProFeatureGate? =
-      when (action) {
-        is ScriptAction.MultiTouch -> ProFeatureGate.MULTI_TOUCH
-        is ScriptAction.IfBlock -> ProFeatureGate.IF_BLOCK
-        is ScriptAction.ForceStopApp -> ProFeatureGate.FORCE_STOP_APP
-        is ScriptAction.VariableOp -> ProFeatureGate.DYNAMIC_VARIABLES
-        is ScriptAction.LongPress ->
-          if (action.mode != LongPressMode.STANDARD) ProFeatureGate.HOLD_GESTURE_MODES else null
-        is ScriptAction.SwipeDrag ->
-          when (action.trajectoryMode) {
-            SwipeTrajectoryMode.BEZIER_CURVE -> ProFeatureGate.BEZIER_TRAJECTORY
-            SwipeTrajectoryMode.MULTI_POINT_PATH -> ProFeatureGate.MULTI_POINT_SWIPE
-            SwipeTrajectoryMode.LINEAR -> null
-          }
-        else -> null
-      }
-    if (blocker != null) {
-      sendEffect(ScriptEditorUiEffect.NavigateToPaywall(blocker.displayName))
-      return false
-    }
-    return true
   }
 
   private fun applyPickedGestureToDraft(

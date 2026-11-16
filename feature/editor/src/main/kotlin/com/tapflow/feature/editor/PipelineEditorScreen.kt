@@ -960,20 +960,21 @@ private fun PipelineSettingsBottomSheet(
         val repeatOptions = listOf("Run Once", "Loop N", "Unlimited")
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
           repeatOptions.forEachIndexed { idx, label ->
-            val locked = idx == 2 && !state.isPro
+            val locked = idx > 0 && !state.isPro
             SegmentedButton(
               selected = repeatIdx == idx,
               onClick = {
                 when (idx) {
                   0 -> draftRepeat = PipelineRepeatMode.RunOnce
-                  1 -> {
-                    if (draftRepeat !is PipelineRepeatMode.Count) {
+                  1 ->
+                    if (!state.isPro) {
+                      onProRequested(ProFeatureGate.PIPELINE_AUTOMATION.displayName)
+                    } else if (draftRepeat !is PipelineRepeatMode.Count) {
                       draftRepeat = PipelineRepeatMode.Count(3)
                     }
-                  }
                   2 ->
                     if (!state.isPro) {
-                      onProRequested(ProFeatureGate.ADVANCED_LOOPS.displayName)
+                      onProRequested(ProFeatureGate.PIPELINE_AUTOMATION.displayName)
                     } else {
                       draftRepeat = PipelineRepeatMode.Unlimited
                     }
@@ -1023,7 +1024,7 @@ private fun PipelineSettingsBottomSheet(
               selected = draftErrorStrategy == strategy,
               onClick = {
                 if (locked) {
-                  onProRequested(ProFeatureGate.PIPELINE_SKIP_CONTINUE.displayName)
+                  onProRequested(ProFeatureGate.PIPELINE_AUTOMATION.displayName)
                 } else {
                   draftErrorStrategy = strategy
                 }

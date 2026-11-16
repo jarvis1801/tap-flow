@@ -268,9 +268,11 @@ fun ScriptLogContent(
               val isExpanded = session.id in state.expandedSessionIds
               ScriptSessionCard(
                 session = session,
+                isPro = state.isPro,
                 isExpanded = isExpanded,
                 onToggleExpand = { onIntent(ScriptLogUiIntent.ToggleSessionExpanded(session.id)) },
                 onOpenScreenshot = { onIntent(ScriptLogUiIntent.OpenScreenshotViewer(it)) },
+                onUpgradeClick = { onIntent(ScriptLogUiIntent.UpgradeForFullLogs) },
               )
             }
           }
@@ -352,9 +354,11 @@ fun ScriptLogContent(
 @Composable
 private fun ScriptSessionCard(
   session: ExecutionSessionLog,
+  isPro: Boolean,
   isExpanded: Boolean,
   onToggleExpand: () -> Unit,
   onOpenScreenshot: (String) -> Unit,
+  onUpgradeClick: () -> Unit,
 ) {
   val borderColor =
     if (session.status == ExecutionStatus.FAILED) {
@@ -415,10 +419,19 @@ private fun ScriptSessionCard(
       }
 
       AnimatedVisibility(visible = isExpanded) {
-        ExecutionSessionDetailBody(
-          session = session,
-          onOpenScreenshot = onOpenScreenshot,
-        )
+        if (isPro) {
+          ExecutionSessionDetailBody(
+            session = session,
+            onOpenScreenshot = onOpenScreenshot,
+          )
+        } else {
+          LockedFullLogsDetailCard(
+            detailsSummary =
+              "${session.entries.size} step event(s)" +
+                if (!session.errorReason.isNullOrBlank()) " • Crash diagnostics recorded" else "",
+            onUpgradeClick = onUpgradeClick,
+          )
+        }
       }
     }
   }

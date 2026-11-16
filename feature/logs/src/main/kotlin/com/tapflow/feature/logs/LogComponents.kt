@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PauseCircleOutline
 import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Search
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -171,6 +173,59 @@ fun ExecutionStatusBadge(
         fontWeight = FontWeight.Bold,
         color = contentColor,
       )
+    }
+  }
+}
+
+@Composable
+fun LockedFullLogsDetailCard(
+  detailsSummary: String,
+  onUpgradeClick: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    shape = MaterialTheme.shapes.medium,
+    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    modifier = modifier.fillMaxWidth(),
+  ) {
+    Column(
+      modifier = Modifier.padding(12.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        Icon(
+          imageVector = Icons.Filled.Lock,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.size(18.dp),
+        )
+        Text(
+          text = "Detailed Error History & Export (Pro)",
+          style = MaterialTheme.typography.labelLarge,
+          fontWeight = FontWeight.Bold,
+        )
+      }
+      Text(
+        text =
+          buildString {
+            append("Action timeline, condition evaluation traces, crash screenshots, and JSON/Text export unlock with 7-Day Trial or Lifetime Pro.")
+            if (detailsSummary.isNotBlank()) {
+              append(" ($detailsSummary)")
+            }
+          },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      FilledTonalButton(
+        onClick = onUpgradeClick,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("unlock_full_logs_button"),
+      ) {
+        Text("Unlock Full Execution Logs")
+      }
     }
   }
 }

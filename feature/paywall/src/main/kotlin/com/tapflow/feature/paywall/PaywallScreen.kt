@@ -70,26 +70,60 @@ import kotlinx.coroutines.launch
 
 private val PAYWALL_COMPARISON_ROWS =
   listOf(
-    PaywallComparisonRow("scripts", "Scripts & Actions", "3 Scripts / 15 Actions", "Unlimited [7-Day Trial + Lifetime]"),
-    PaywallComparisonRow("pipelines", "Pipelines", "1 Pipeline", "Unlimited + Skip Recovery [7-Day Trial + Lifetime]"),
-    PaywallComparisonRow("vision", "Vision Matching", "Single-Point Color", "ImageMatch + Multi-Point [7-Day Trial + Lifetime]"),
-    PaywallComparisonRow("inspect", "Inspect Studio", "Pixel View Only", "Full Crop + Mode 4 Live [7-Day Trial + Lifetime]"),
-    PaywallComparisonRow("logic", "Logic & Variables", "Fixed Delay & Count Loop", "Nested If + Loops + Vars [7-Day Trial + Lifetime]"),
-    PaywallComparisonRow("human", "Anti-Ban Humanization", "Linear Swipes", "Jitter + Bezier + Deviation [7-Day Trial + Lifetime]"),
-    PaywallComparisonRow("shizuku", "Shizuku Seamless", "Standard Accessibility", "Shell Input + Force-Stop [7-Day Trial + Lifetime]"),
-    PaywallComparisonRow("logs", "Execution Logs", "Latest Summary", "Full History + Export [7-Day Trial + Lifetime]"),
+    PaywallComparisonRow(
+      id = "core_automation",
+      feature = "All Actions, Unlimited Scripts & Flows",
+      freeTier = "Forever Free ✓",
+      proTier = "Forever Free ✓",
+      lifetimeOnly = false,
+    ),
     PaywallComparisonRow(
       id = "external_broadcast",
-      feature = "External Automation",
+      feature = "MacroDroid & Tasker Automation",
       freeTier = "Not Included",
-      proTier = "MacroDroid & Tasker Broadcast Integration [Trial + Lifetime]",
+      proTier = "Broadcast Triggers & Callbacks [Trial + Lifetime]",
+      lifetimeOnly = false,
+    ),
+    PaywallComparisonRow(
+      id = "shizuku",
+      feature = "Seamless (Shizuku) Suite",
+      freeTier = "Standard Accessibility",
+      proTier = "Shell Input, Force-Stop & Auto Media [Trial + Lifetime]",
+      lifetimeOnly = false,
+    ),
+    PaywallComparisonRow(
+      id = "vision",
+      feature = "Advanced Image Vision & Inspector",
+      freeTier = "Single-Point Color & App Match",
+      proTier = "ImageMatch, Multi-Point/Region, Crop & Mode 4 [Trial + Lifetime]",
+      lifetimeOnly = false,
+    ),
+    PaywallComparisonRow(
+      id = "pipeline_automation",
+      feature = "Pipeline Looping & Crash Recovery",
+      freeTier = "Run Pipeline Once",
+      proTier = "Multi-Repeat / Infinite Loop & Skip Recovery [Trial + Lifetime]",
+      lifetimeOnly = false,
+    ),
+    PaywallComparisonRow(
+      id = "logs",
+      feature = "Full Execution Logs & Export",
+      freeTier = "Basic Run Status",
+      proTier = "Detailed Error Traces, Snapshots & Export [Trial + Lifetime]",
+      lifetimeOnly = false,
+    ),
+    PaywallComparisonRow(
+      id = "amoled",
+      feature = "AMOLED Pure Black Theme",
+      freeTier = "System / Light / Dark",
+      proTier = "True #000000 Black [Trial + Lifetime]",
       lifetimeOnly = false,
     ),
     PaywallComparisonRow(
       id = "console",
       feature = "Desktop Console Bridge",
       freeTier = "Not Included",
-      proTier = "Ktor WS Bridge [Lifetime Only]",
+      proTier = "Ktor Desktop Studio ADB Bridge [Lifetime Only]",
       lifetimeOnly = true,
     ),
     PaywallComparisonRow(
@@ -98,13 +132,6 @@ private val PAYWALL_COMPARISON_ROWS =
       freeTier = "Not Included",
       proTier = "Export / Import [Lifetime Only]",
       lifetimeOnly = true,
-    ),
-    PaywallComparisonRow(
-      id = "amoled",
-      feature = "AMOLED Pure Black Theme",
-      freeTier = "System / Light / Dark",
-      proTier = "True #000000 Black [7-Day Trial + Lifetime]",
-      lifetimeOnly = false,
     ),
   )
 
@@ -494,11 +521,11 @@ private fun PaywallHeroCard(state: PaywallUiState) {
             text =
               when (entitlement.trialStatus) {
                 TrialStatus.NOT_STARTED ->
-                  "Unlock unlimited scripts, template matching, nested logic, Bezier humanization, Shizuku, and AMOLED black theme for 7 days with no credit card required. Desktop Console & Data Backup unlock with Lifetime Pro."
+                  "All Actions, Unlimited Scripts & Flows — Forever Free. Start a 7-day trial (no card needed) for MacroDroid/Tasker broadcasts, Seamless Shizuku, Image Vision, Pipeline Looping & Crash Recovery, Full Logs, and AMOLED black theme. Desktop Console & .tapflow Backup unlock with Lifetime Pro."
                 TrialStatus.EXPIRED ->
-                  "Basic scripts remain free forever. Unlock Lifetime Pro with a single one-time purchase to continue using Pro automation tools."
+                  "All Actions, Unlimited Scripts & Flows remain free forever. Unlock Lifetime Pro with a single one-time purchase for unattended Pipeline looping, Shizuku, Image Vision, External Triggers, Desktop Console & Backup."
                 TrialStatus.EXPIRED_TAMPERED ->
-                  "Local trial verification failed due to device clock rollback or integrity mismatch. Unlock Lifetime Pro via Google Play to continue."
+                  "Local trial verification failed due to device clock rollback or integrity mismatch. All Actions & Unlimited Scripts remain free; unlock Lifetime Pro via Google Play for Pro automation."
                 TrialStatus.ACTIVE -> ""
               },
             style = MaterialTheme.typography.bodyMedium,

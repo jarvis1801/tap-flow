@@ -95,12 +95,6 @@ class EntitlementRepository @Inject constructor(
   fun canUseFeature(gate: ProFeatureGate): Boolean =
     EntitlementValidator.canUseFeature(entitlementState.value, gate)
 
-  fun canCreateScript(existingCount: Int): Boolean =
-    EntitlementValidator.canCreateScript(entitlementState.value, existingCount)
-
-  fun canCreatePipeline(existingCount: Int): Boolean =
-    EntitlementValidator.canCreatePipeline(entitlementState.value, existingCount)
-
   fun detectScriptProBlockers(script: Script): Set<ProFeatureGate> {
     if (isPro()) return emptySet()
     return EntitlementValidator.detectProFeaturesInScript(script)

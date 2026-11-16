@@ -46,6 +46,8 @@ sealed interface PipelineLogUiIntent {
   data class RequestExport(val format: LogExportFormat) : PipelineLogUiIntent
 
   data class NotifyExportResult(val message: String) : PipelineLogUiIntent
+
+  data object UpgradeForFullLogs : PipelineLogUiIntent
 }
 
 sealed interface PipelineLogUiEffect {

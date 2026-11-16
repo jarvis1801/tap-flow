@@ -686,7 +686,7 @@ private fun InspectSpeedDialFab(
           shadowElevation = 2.dp,
         ) {
           Text(
-            text = "Import Screenshot (Pro)",
+            text = "Import Screenshot",
             style = MaterialTheme.typography.labelLarge,
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
           )

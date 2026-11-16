@@ -49,7 +49,6 @@ import androidx.compose.ui.unit.dp
 import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.common.NumericInput
 import com.tapflow.core.model.entitlement.EntitlementState
-import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.entitlement.TrialStatus
 import com.tapflow.core.model.script.Script
 import java.text.DateFormat
@@ -83,24 +82,6 @@ fun ScriptsTabContent(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
-        if (!state.isPro) {
-          item(key = "free_script_quota") {
-            Surface(
-              shape = MaterialTheme.shapes.small,
-              color = MaterialTheme.colorScheme.surfaceContainerHigh,
-              modifier = Modifier.fillMaxWidth(),
-            ) {
-              Text(
-                text =
-                  "Free Plan: ${state.totalScriptsCount}/${EntitlementValidator.FREE_MAX_SCRIPTS} Scripts • Max ${EntitlementValidator.FREE_MAX_ACTIONS_PER_SCRIPT} actions each",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-              )
-            }
-          }
-        }
-
         items(
           items = state.scripts,
           key = { it.script.id },

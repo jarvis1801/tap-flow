@@ -42,7 +42,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tapflow.core.model.entitlement.EntitlementState
-import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.entitlement.TrialStatus
 import com.tapflow.core.model.pipeline.Pipeline
 import com.tapflow.core.model.pipeline.PipelineStep
@@ -75,24 +74,6 @@ fun PipelinesTabContent(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 104.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
       ) {
-        if (!state.isPro) {
-          item(key = "free_pipeline_quota") {
-            Surface(
-              shape = MaterialTheme.shapes.small,
-              color = MaterialTheme.colorScheme.surfaceContainerHigh,
-              modifier = Modifier.fillMaxWidth(),
-            ) {
-              Text(
-                text =
-                  "Free Plan: ${state.totalPipelinesCount}/${EntitlementValidator.FREE_MAX_PIPELINES} Pipeline",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-              )
-            }
-          }
-        }
-
         items(
           items = state.pipelines,
           key = { it.pipeline.id },

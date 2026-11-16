@@ -8,11 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
@@ -33,7 +30,6 @@ import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
 import com.tapflow.core.model.common.VariableDefinition
 import com.tapflow.core.model.condition.ConditionGroup
-import com.tapflow.core.model.entitlement.ProFeatureGate
 import java.util.UUID
 
 @Composable
@@ -147,50 +143,26 @@ fun LoopBlockActionEditor(
         verticalArrangement = Arrangement.spacedBy(4.dp),
       ) {
         modeLabels.forEachIndexed { idx, label ->
-          val locked = idx > 0 && !isPro
           FilterChip(
             selected = modeIndex == idx,
             onClick = {
               when (idx) {
                 0 -> onChange(action.copy(mode = LoopMode.Count()))
-                1 ->
-                  if (!isPro) {
-                    onIntent(
-                      ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.ADVANCED_LOOPS.displayName),
-                    )
-                  } else {
-                    val existing =
-                      (action.mode as? LoopMode.UntilCondition)?.conditionRoot
-                        ?: ConditionGroup(id = UUID.randomUUID().toString(), name = "Repeat While")
-                    onChange(action.copy(mode = LoopMode.WhileCondition(existing)))
-                  }
-                2 ->
-                  if (!isPro) {
-                    onIntent(
-                      ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.ADVANCED_LOOPS.displayName),
-                    )
-                  } else {
-                    val existing =
-                      (action.mode as? LoopMode.WhileCondition)?.conditionRoot
-                        ?: ConditionGroup(id = UUID.randomUUID().toString(), name = "Repeat Until")
-                    onChange(action.copy(mode = LoopMode.UntilCondition(existing)))
-                  }
-                3 ->
-                  if (!isPro) {
-                    onIntent(
-                      ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.ADVANCED_LOOPS.displayName),
-                    )
-                  } else {
-                    onChange(action.copy(mode = LoopMode.Unlimited))
-                  }
+                1 -> {
+                  val existing =
+                    (action.mode as? LoopMode.UntilCondition)?.conditionRoot
+                      ?: ConditionGroup(id = UUID.randomUUID().toString(), name = "Repeat While")
+                  onChange(action.copy(mode = LoopMode.WhileCondition(existing)))
+                }
+                2 -> {
+                  val existing =
+                    (action.mode as? LoopMode.WhileCondition)?.conditionRoot
+                      ?: ConditionGroup(id = UUID.randomUUID().toString(), name = "Repeat Until")
+                  onChange(action.copy(mode = LoopMode.UntilCondition(existing)))
+                }
+                3 -> onChange(action.copy(mode = LoopMode.Unlimited))
               }
             },
-            leadingIcon =
-              if (locked) {
-                { Icon(Icons.Rounded.Lock, contentDescription = "Pro feature", modifier = Modifier.size(14.dp)) }
-              } else {
-                null
-              },
             label = { Text(label) },
           )
         }
@@ -219,17 +191,9 @@ fun LoopBlockActionEditor(
           OutlinedTextField(
             value = mode.exportIndexVarKey.orEmpty(),
             onValueChange = { next ->
-              if (!isPro && next.isNotEmpty()) {
-                onIntent(
-                  ScriptEditorUiIntent.RequestProUpgrade(
-                    ProFeatureGate.DYNAMIC_VARIABLES.displayName,
-                  ),
-                )
-              } else {
-                onChange(action.copy(mode = mode.copy(exportIndexVarKey = next.ifBlank { null })))
-              }
+              onChange(action.copy(mode = mode.copy(exportIndexVarKey = next.ifBlank { null })))
             },
-            label = { Text("Save Current Loop Number (Optional, Pro)") },
+            label = { Text("Save Current Loop Number (Optional)") },
             placeholder = { Text("e.g. loop_num") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),

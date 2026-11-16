@@ -151,9 +151,9 @@ class PipelineLogViewModel @Inject constructor(
       }
 
       PipelineLogUiIntent.OpenExportSheet -> {
-        if (!entitlementRepository.canUseFeature(ProFeatureGate.FULL_EXECUTION_LOGS)) {
+        if (!entitlementRepository.canUseFeature(ProFeatureGate.FULL_LOGS)) {
           sendEffect(
-            PipelineLogUiEffect.NavigateToPaywall(ProFeatureGate.FULL_EXECUTION_LOGS.displayName),
+            PipelineLogUiEffect.NavigateToPaywall(ProFeatureGate.FULL_LOGS.displayName),
           )
           return
         }
@@ -169,10 +169,10 @@ class PipelineLogViewModel @Inject constructor(
       }
 
       is PipelineLogUiIntent.RequestExport -> {
-        if (!entitlementRepository.canUseFeature(ProFeatureGate.FULL_EXECUTION_LOGS)) {
+        if (!entitlementRepository.canUseFeature(ProFeatureGate.FULL_LOGS)) {
           _uiState.update { it.copy(showExportSheet = false) }
           sendEffect(
-            PipelineLogUiEffect.NavigateToPaywall(ProFeatureGate.FULL_EXECUTION_LOGS.displayName),
+            PipelineLogUiEffect.NavigateToPaywall(ProFeatureGate.FULL_LOGS.displayName),
           )
           return
         }
@@ -204,6 +204,10 @@ class PipelineLogViewModel @Inject constructor(
 
       is PipelineLogUiIntent.NotifyExportResult -> {
         sendEffect(PipelineLogUiEffect.ShowSnackbar(intent.message))
+      }
+
+      PipelineLogUiIntent.UpgradeForFullLogs -> {
+        sendEffect(PipelineLogUiEffect.NavigateToPaywall(ProFeatureGate.FULL_LOGS.displayName))
       }
     }
   }

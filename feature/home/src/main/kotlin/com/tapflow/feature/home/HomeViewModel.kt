@@ -323,26 +323,10 @@ class HomeViewModel @Inject constructor(
       }
       HomeUiIntent.AddManualScriptClicked -> {
         _localState.update { it.copy(isScriptFabExpanded = false) }
-        if (!entitlementRepository.canCreateScript(_uiState.value.totalScriptsCount)) {
-          sendEffect(
-            HomeUiEffect.NavigateToPaywall(
-              "${ProFeatureGate.UNLIMITED_SCRIPTS.displayName} (Free limit: ${EntitlementValidator.FREE_MAX_SCRIPTS})",
-            ),
-          )
-          return
-        }
         sendEffect(HomeUiEffect.NavigateToScriptEditor(null))
       }
       HomeUiIntent.AddRecordScriptClicked -> {
         _localState.update { it.copy(isScriptFabExpanded = false) }
-        if (!entitlementRepository.canCreateScript(_uiState.value.totalScriptsCount)) {
-          sendEffect(
-            HomeUiEffect.NavigateToPaywall(
-              "${ProFeatureGate.UNLIMITED_SCRIPTS.displayName} (Free limit: ${EntitlementValidator.FREE_MAX_SCRIPTS})",
-            ),
-          )
-          return
-        }
         launchTargetWithVisionGuard(
           target = PendingMediaProjectionTarget.LiveRecorder,
           requiresVision = true,
@@ -370,10 +354,6 @@ class HomeViewModel @Inject constructor(
         sendEffect(HomeUiEffect.NavigateToScriptEditor(intent.scriptId))
       }
       is HomeUiIntent.ViewScriptLogsClicked -> {
-        if (!entitlementRepository.canUseFeature(ProFeatureGate.FULL_EXECUTION_LOGS)) {
-          sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.FULL_EXECUTION_LOGS.displayName))
-          return
-        }
         sendEffect(HomeUiEffect.NavigateToScriptLog(intent.scriptId))
       }
       is HomeUiIntent.RequestDeleteScript -> {
@@ -406,14 +386,6 @@ class HomeViewModel @Inject constructor(
 
       // Pipelines Tab
       HomeUiIntent.AddPipelineClicked -> {
-        if (!entitlementRepository.canCreatePipeline(_uiState.value.totalPipelinesCount)) {
-          sendEffect(
-            HomeUiEffect.NavigateToPaywall(
-              "${ProFeatureGate.UNLIMITED_PIPELINES.displayName} (Free limit: ${EntitlementValidator.FREE_MAX_PIPELINES})",
-            ),
-          )
-          return
-        }
         sendEffect(HomeUiEffect.NavigateToPipelineEditor(null))
       }
       is HomeUiIntent.PlayPipelineClicked -> {
@@ -441,10 +413,6 @@ class HomeViewModel @Inject constructor(
         sendEffect(HomeUiEffect.NavigateToPipelineEditor(intent.pipelineId))
       }
       is HomeUiIntent.ViewPipelineLogsClicked -> {
-        if (!entitlementRepository.canUseFeature(ProFeatureGate.FULL_EXECUTION_LOGS)) {
-          sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.FULL_EXECUTION_LOGS.displayName))
-          return
-        }
         sendEffect(HomeUiEffect.NavigateToPipelineLog(intent.pipelineId))
       }
       is HomeUiIntent.RequestDeletePipeline -> {
@@ -550,8 +518,8 @@ class HomeViewModel @Inject constructor(
       }
       HomeUiIntent.LiveInspectClicked -> {
         _localState.update { it.copy(isInspectFabExpanded = false) }
-        if (!entitlementRepository.canUseFeature(ProFeatureGate.LIVE_IMAGE_INSPECTOR)) {
-          sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.LIVE_IMAGE_INSPECTOR.displayName))
+        if (!entitlementRepository.canUseFeature(ProFeatureGate.ADVANCED_VISION)) {
+          sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.ADVANCED_VISION.displayName))
           return
         }
         launchTargetWithVisionGuard(
@@ -561,10 +529,6 @@ class HomeViewModel @Inject constructor(
       }
       HomeUiIntent.ImportScreenshotClicked -> {
         _localState.update { it.copy(isInspectFabExpanded = false) }
-        if (!entitlementRepository.canUseFeature(ProFeatureGate.INSPECT_STUDIO_CROP)) {
-          sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.INSPECT_STUDIO_CROP.displayName))
-          return
-        }
         sendEffect(HomeUiEffect.LaunchPhotoPicker)
       }
       is HomeUiIntent.HandleImportedScreenshotUri -> {
@@ -971,8 +935,8 @@ class HomeViewModel @Inject constructor(
   ) {
     viewModelScope.launch {
       val prefs = preferencesRepository.getPreferencesOnce()
-      val isPro = entitlementRepository.isPro()
-      val shizukuReady = isPro && shizukuManager.isReadyNow()
+      val shizukuUnlocked = entitlementRepository.canUseFeature(ProFeatureGate.SHIZUKU_SUITE)
+      val shizukuReady = shizukuUnlocked && shizukuManager.isReadyNow()
 
       // 1) If Shizuku Silent Screenshots is enabled & ready -> skip MediaProjection completely.
       val shizukuSilentReady = shizukuReady && prefs.shizuku.silentScreenshots
@@ -1002,8 +966,8 @@ class HomeViewModel @Inject constructor(
   }
 
   private fun requireShizukuProAndReady(): Boolean {
-    if (!entitlementRepository.canUseFeature(ProFeatureGate.SHIZUKU_INTEGRATION)) {
-      sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.SHIZUKU_INTEGRATION.displayName))
+    if (!entitlementRepository.canUseFeature(ProFeatureGate.SHIZUKU_SUITE)) {
+      sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.SHIZUKU_SUITE.displayName))
       return false
     }
     if (!shizukuManager.isReadyNow()) {

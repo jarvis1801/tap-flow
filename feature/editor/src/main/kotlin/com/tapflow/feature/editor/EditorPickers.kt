@@ -88,7 +88,6 @@ import com.tapflow.core.model.common.DurationInput
 import com.tapflow.core.model.common.NumericInput
 import com.tapflow.core.model.common.VariableDefinition
 import com.tapflow.core.model.common.VariableType
-import com.tapflow.core.model.entitlement.ProFeatureGate
 import com.tapflow.core.model.inspect.InspectCrop
 import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.InspectPixel
@@ -193,25 +192,11 @@ fun NumericInputField(
           onClick = {
             if (isVar) {
               onValueChange(NumericInput.Literal(unsetValue))
-            } else if (!isPro) {
-              onProRequested(ProFeatureGate.DYNAMIC_VARIABLES.displayName)
             } else {
               val defaultKey = numberVars.firstOrNull()?.key.orEmpty()
               onValueChange(NumericInput.VariableRef(defaultKey))
             }
           },
-          leadingIcon =
-            if (!isVar && !isPro) {
-              {
-                Icon(
-                  imageVector = Icons.Rounded.Lock,
-                  contentDescription = "Pro feature",
-                  modifier = Modifier.size(14.dp),
-                )
-              }
-            } else {
-              null
-            },
           label = {
             Text(
               text = if (isVar) "Switch to Number" else "Use variable",
@@ -254,34 +239,17 @@ fun DurationInputField(
       }
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
       options.forEachIndexed { index, text ->
-        val locked = index > 0 && !isPro
         SegmentedButton(
           selected = selectedIdx == index,
           onClick = {
             when (index) {
               0 -> onValueChange(DurationInput.Fixed(50L))
-              1 ->
-                if (!isPro) {
-                  onProRequested(ProFeatureGate.RANDOM_DEVIATION_DELAY.displayName)
-                } else {
-                  onValueChange(DurationInput.RandomRange(40L, 120L))
-                }
-              2 ->
-                if (!isPro) {
-                  onProRequested(ProFeatureGate.DYNAMIC_VARIABLES.displayName)
-                } else {
-                  onValueChange(DurationInput.VariableRef(numberVars.firstOrNull()?.key.orEmpty()))
-                }
+              1 -> onValueChange(DurationInput.RandomRange(40L, 120L))
+              2 -> onValueChange(DurationInput.VariableRef(numberVars.firstOrNull()?.key.orEmpty()))
             }
           },
           shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-          icon = {
-            if (locked) {
-              Icon(Icons.Rounded.Lock, contentDescription = "Pro feature", modifier = Modifier.size(14.dp))
-            } else {
-              SegmentedButtonDefaults.Icon(active = selectedIdx == index)
-            }
-          },
+          icon = { SegmentedButtonDefaults.Icon(active = selectedIdx == index) },
         ) {
           Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }

@@ -266,6 +266,7 @@ fun PipelineLogContent(
               val isExpanded = pipelineLog.id in state.expandedPipelineIds
               OuterPipelineLogCard(
                 pipelineLog = pipelineLog,
+                isPro = state.isPro,
                 isExpanded = isExpanded,
                 expandedNestedKeys = state.expandedNestedRunKeys,
                 onToggleOuter = { onIntent(PipelineLogUiIntent.TogglePipelineExpanded(pipelineLog.id)) },
@@ -275,6 +276,7 @@ fun PipelineLogContent(
                 onOpenScreenshot = { path ->
                   onIntent(PipelineLogUiIntent.OpenScreenshotViewer(path))
                 },
+                onUpgradeClick = { onIntent(PipelineLogUiIntent.UpgradeForFullLogs) },
               )
             }
           }
@@ -354,11 +356,13 @@ fun PipelineLogContent(
 @Composable
 private fun OuterPipelineLogCard(
   pipelineLog: PipelineSessionLog,
+  isPro: Boolean,
   isExpanded: Boolean,
   expandedNestedKeys: Set<String>,
   onToggleOuter: () -> Unit,
   onToggleInnerRun: (String) -> Unit,
   onOpenScreenshot: (String) -> Unit,
+  onUpgradeClick: () -> Unit,
 ) {
   val borderColor =
     if (pipelineLog.status == ExecutionStatus.FAILED) {
@@ -405,7 +409,7 @@ private fun OuterPipelineLogCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
-          if (!pipelineLog.errorReason.isNullOrBlank()) {
+          if (isPro && !pipelineLog.errorReason.isNullOrBlank()) {
             Text(
               text = "Pipeline Error: ${pipelineLog.errorReason}",
               style = MaterialTheme.typography.bodySmall,
@@ -427,23 +431,32 @@ private fun OuterPipelineLogCard(
       }
 
       AnimatedVisibility(visible = isExpanded) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-          HorizontalDivider()
-          if (pipelineLog.stepRuns.isEmpty()) {
-            Text(
-              text = "No nested script runs executed.",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-          } else {
-            pipelineLog.stepRuns.forEachIndexed { idx, run ->
-              val runKey = "${pipelineLog.id}_${run.stepIndex}_${run.runNumber}_$idx"
-              InnerNestedScriptRunCard(
-                run = run,
-                isExpanded = runKey in expandedNestedKeys,
-                onToggle = { onToggleInnerRun(runKey) },
-                onOpenScreenshot = onOpenScreenshot,
+        if (!isPro) {
+          LockedFullLogsDetailCard(
+            detailsSummary =
+              "${pipelineLog.stepRuns.size} nested script run(s)" +
+                if (!pipelineLog.errorReason.isNullOrBlank()) " • Crash diagnostics recorded" else "",
+            onUpgradeClick = onUpgradeClick,
+          )
+        } else {
+          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            HorizontalDivider()
+            if (pipelineLog.stepRuns.isEmpty()) {
+              Text(
+                text = "No nested script runs executed.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
+            } else {
+              pipelineLog.stepRuns.forEachIndexed { idx, run ->
+                val runKey = "${pipelineLog.id}_${run.stepIndex}_${run.runNumber}_$idx"
+                InnerNestedScriptRunCard(
+                  run = run,
+                  isExpanded = runKey in expandedNestedKeys,
+                  onToggle = { onToggleInnerRun(runKey) },
+                  onOpenScreenshot = onOpenScreenshot,
+                )
+              }
             }
           }
         }

@@ -58,12 +58,11 @@ import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.PostActionDelay
 import com.tapflow.core.model.common.VariableDefinition
 import com.tapflow.core.model.common.VariableType
-import com.tapflow.core.model.entitlement.ProFeatureGate
 
-private enum class DelayModeTab(val label: String, val requiresPro: Boolean) {
-  FIXED("Exact Wait", false),
-  RANDOM_RANGE("Random Range", true),
-  DEVIATION("About (± Random)", true),
+private enum class DelayModeTab(val label: String) {
+  FIXED("Exact Wait"),
+  RANDOM_RANGE("Random Range"),
+  DEVIATION("About (± Random)"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -90,42 +89,31 @@ fun DelayConfigEditor(
     val tabs = DelayModeTab.entries
     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
       tabs.forEachIndexed { index, tab ->
-        val locked = tab.requiresPro && !isPro
         SegmentedButton(
           selected = mode == tab,
           onClick = {
-            if (locked) {
-              onProRequested(ProFeatureGate.RANDOM_DEVIATION_DELAY.displayName)
-            } else {
-              val baseMs =
-                when (config) {
-                  is DelayConfig.Fixed -> config.durationMs
-                  is DelayConfig.RandomRange -> config.minMs
-                  is DelayConfig.Deviation -> config.baseMs
-                }
-              when (tab) {
-                DelayModeTab.FIXED -> onConfigChange(DelayConfig.fixed(baseMs, minDelayMs))
-                DelayModeTab.RANDOM_RANGE ->
-                  onConfigChange(
-                    DelayConfig.randomRange(
-                      minMs = baseMs,
-                      maxMs = (baseMs + 150L).coerceAtLeast(baseMs),
-                      minFloorMs = minDelayMs,
-                    ),
-                  )
-                DelayModeTab.DEVIATION ->
-                  onConfigChange(DelayConfig.deviation(baseMs, 50L, minFloorMs = minDelayMs))
+            val baseMs =
+              when (config) {
+                is DelayConfig.Fixed -> config.durationMs
+                is DelayConfig.RandomRange -> config.minMs
+                is DelayConfig.Deviation -> config.baseMs
               }
+            when (tab) {
+              DelayModeTab.FIXED -> onConfigChange(DelayConfig.fixed(baseMs, minDelayMs))
+              DelayModeTab.RANDOM_RANGE ->
+                onConfigChange(
+                  DelayConfig.randomRange(
+                    minMs = baseMs,
+                    maxMs = (baseMs + 150L).coerceAtLeast(baseMs),
+                    minFloorMs = minDelayMs,
+                  ),
+                )
+              DelayModeTab.DEVIATION ->
+                onConfigChange(DelayConfig.deviation(baseMs, 50L, minFloorMs = minDelayMs))
             }
           },
           shape = SegmentedButtonDefaults.itemShape(index = index, count = tabs.size),
-          icon = {
-            if (locked) {
-              Icon(Icons.Rounded.Lock, contentDescription = "Pro feature", modifier = Modifier.size(16.dp))
-            } else {
-              SegmentedButtonDefaults.Icon(active = mode == tab)
-            }
-          },
+          icon = { SegmentedButtonDefaults.Icon(active = mode == tab) },
         ) {
           Text(tab.label, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }

@@ -144,18 +144,16 @@ class PipelineEditorViewModel @Inject constructor(
         _uiState.update { it.copy(showSettingsSheet = intent.visible) }
       }
       is PipelineEditorUiIntent.UpdateSettings -> {
-        if (intent.repeatMode is PipelineRepeatMode.Unlimited && !entitlementRepository.isPro()) {
-          sendEffect(
-            PipelineEditorUiEffect.NavigateToPaywall(ProFeatureGate.ADVANCED_LOOPS.displayName),
-          )
-          return
-        }
-        if (intent.errorStrategy == PipelineErrorStrategy.SKIP_AND_CONTINUE &&
-          !entitlementRepository.isPro()
+        val usesProAutomation =
+          intent.repeatMode is PipelineRepeatMode.Unlimited ||
+            (intent.repeatMode is PipelineRepeatMode.Count && intent.repeatMode.iterations > 1) ||
+            intent.errorStrategy == PipelineErrorStrategy.SKIP_AND_CONTINUE
+        if (usesProAutomation &&
+          !entitlementRepository.canUseFeature(ProFeatureGate.PIPELINE_AUTOMATION)
         ) {
           sendEffect(
             PipelineEditorUiEffect.NavigateToPaywall(
-              ProFeatureGate.PIPELINE_SKIP_CONTINUE.displayName,
+              ProFeatureGate.PIPELINE_AUTOMATION.displayName,
             ),
           )
           return

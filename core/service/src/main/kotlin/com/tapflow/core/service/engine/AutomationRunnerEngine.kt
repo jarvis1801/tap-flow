@@ -29,6 +29,7 @@ import com.tapflow.core.model.action.VibratePattern
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.VariableType
 import com.tapflow.core.model.condition.ConditionGroup
+import com.tapflow.core.model.entitlement.ProFeatureGate
 import com.tapflow.core.model.log.ActionLogEntry
 import com.tapflow.core.model.log.ConditionEvalTrace
 import com.tapflow.core.model.log.ExecutionSessionLog
@@ -683,15 +684,31 @@ class AutomationRunnerEngine @Inject constructor(
       }
 
       is ScriptAction.ForceStopApp -> {
-        if (!shizukuPrefs.rootlessForceStop || !shizukuManager.isReadyNow()) {
-          throw ScriptFailureException("ForceStopApp requires Seamless (Shizuku) enabled and active.")
+        val packageName = action.packageName.trim()
+        val label = action.appLabel.ifBlank { packageName }
+        val useShizuku =
+          entitlementRepository.canUseFeature(ProFeatureGate.SHIZUKU_SUITE) &&
+            shizukuPrefs.rootlessForceStop &&
+            shizukuManager.isReadyNow()
+        val shizukuOk =
+          if (useShizuku) {
+            shizukuManager.forceStopApp(packageName).isSuccess
+          } else {
+            false
+          }
+        if (shizukuOk) {
+          summary = "ForceStop $label"
+        } else {
+          val wentHome = accessibilityBridge.performGlobalAction(SystemKeyType.HOME)
+          val activityManager =
+            context.getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager
+          @Suppress("DEPRECATION")
+          runCatching { activityManager?.killBackgroundProcesses(packageName) }
+          if (!wentHome && activityManager == null) {
+            throw ScriptFailureException("Failed to stop $packageName.")
+          }
+          summary = "Stop $label (Home + Background Kill)"
         }
-        val forceStopResult = shizukuManager.forceStopApp(action.packageName)
-        if (forceStopResult.isFailure) {
-          val reason = forceStopResult.exceptionOrNull()?.message?.let { " ($it)" }.orEmpty()
-          throw ScriptFailureException("Failed to force-stop ${action.packageName}$reason.")
-        }
-        summary = "ForceStop ${action.appLabel.ifBlank { action.packageName }}"
         onCountExecuted()
       }
 

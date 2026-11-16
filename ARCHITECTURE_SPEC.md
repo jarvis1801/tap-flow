@@ -16,30 +16,29 @@ Google Play Billing Lifecycle (PBL 9.1.0):
   - Note: Do NOT use removed PBL 7 APIs (`querySkuDetailsAsync`, `queryPurchaseHistoryAsync`, parameterless `enablePendingPurchases`).
 
 Entitlement Matrix (Free vs. TapFlow Pro):
-  - Free Tier (Available permanently after trial expires):
-      - Max 3 Scripts (up to 15 actions per Script) and max 1 Pipeline.
-      - Basic Gestures: Tap, Double Tap, Long Press (Standard), Linear Swipe/Drag, Input Text.
-      - Fixed Delay (`DelayConfig.Fixed`) and Count Loop (`LoopMode.Count`).
-      - Single-Point `ColorMatch`, `AppMatch`, Mode 2 Gesture Picker, Mode 3 Basic Recording.
-  - TapFlow Pro (Unlocked during 7-Day Trial OR via `tapflow_pro_lifetime` Purchase):
-      - Unlimited Scripts, Actions, and Pipelines.
-      - Advanced Vision: `ImageMatch` (32-pixel / Fast Template Matching), Multi-Point / Region `ColorMatch`, and full `Inspect Studio` + Mode 4 Live Image Inspector.
-      - Advanced Logic & Variables: `IfBlock` (Card-in-Card nested groups), `While / Until / Unlimited` Loops, and all `Dynamic Variables` & Variable Operations.
-      - Anti-Ban Humanization Suite: `Jitter` dispersion radius, `Micro-movement Jitter`, `Bezier Curve` trajectories, `RandomRange` & `Deviation` delays.
-      - Seamless (Shizuku) Integration: Shell input injection, rootless `am force-stop` crash recovery, enhanced key events, silent screenshots, and MacroDroid / Tasker Broadcast Integration (`ProFeatureGate.EXTERNAL_BROADCAST`).
-      - Pipeline Watchdog & Logs: Pipeline `Skip & Continue` crash recovery, full Execution History & Crash Screenshots.
-      - AMOLED Pure Black Theme (`Settings Tab`, `ProFeatureGate.AMOLED_THEME`).
-  - TapFlow Lifetime Pro Exclusive (`EntitlementState.ProLifetime` ONLY — Excluded from 7-Day Trial):
-      - Desktop Studio Bridge: Ktor WebSocket Server (`Console Tab`, `ProFeatureGate.DESKTOP_CONSOLE`).
-      - Data Backup & Transfer: `.tapflow` Export/Import (`Settings Tab`, `ProFeatureGate.DATA_BACKUP`).
+  - Free Tier (100% Free Forever — Available permanently after trial expires):
+      - Unlimited Scripts, Unlimited Actions per Script, and Unlimited Pipelines (`RunOnce` + `Abort` error handling).
+      - ALL Script Actions Unlocked: Tap, Double Tap, Long Press (`Standard`, `Press Down Only`, `Release Only`, `Hold Until`), Multi-Touch, Swipe & Drag (`Linear`, `Bezier Curve`, `Multi-Point Path`), Anti-Ban Jitter (`jitterPx` & `microMovementJitter`), Input Text (`Accessibility SetText`, `Clipboard Paste`, `Human-like Typing`), Delay (`Fixed`, `RandomRange`, `Deviation`), `IfBlock` / `ElseIfBranch` / `Else`, `LoopBlock` (`Count`, `While`, `Until`, `Unlimited`), `Dynamic Variables` & ALL `VariableOp` actions, `KeyEvent`, `LaunchApp`, `ForceStopApp` (falls back safely to Accessibility `HOME` + `killBackgroundProcesses` without Shizuku), `ClipboardOp`, `Vibrate`, `PlayAlertSound`.
+      - Basic Conditions & Vision: Single-Point `ColorMatch`, `AppMatch`, `VariableCompare`, Mode 2 Gesture Picker, Mode 3 Live Recording, and Inspect Tab + `Inspect Studio` Single-Pixel Picker + Screenshot Import.
+      - Basic Execution Status in Logs (run outcome badges `SUCCESS`/`FAILED`/`STOPPED`, title, timestamp, duration, total steps).
+  - TapFlow Pro (Unlocked during 7-Day Trial OR via `tapflow_pro_lifetime` Purchase — 6 Gates):
+      - `EXTERNAL_BROADCAST`: MacroDroid / Tasker Broadcast Integration (`TapFlowExternalTriggerReceiver` + `ACTION_EXECUTION_FINISHED` callbacks).
+      - `SHIZUKU_SUITE`: Seamless (Shizuku) Suite (shell input, rootless `am force-stop`, shell key events, silent screenshots, auto-grant `PROJECT_MEDIA`).
+      - `ADVANCED_VISION`: `ImageMatch` (32-pixel / Fast Template Matching), Multi-Point & Region `ColorMatch`, `Inspect Studio` Crop Region Mode, and Mode 4 Live Image Inspector.
+      - `PIPELINE_AUTOMATION`: Pipeline `Loop N` (`iterations > 1`) / `Unlimited` looping and `Skip & Continue` crash recovery.
+      - `FULL_LOGS`: Full Execution Logs & Export (JSON/Text log export, expanded per-step traces, condition breakdowns, crash screenshots).
+      - `AMOLED_THEME`: AMOLED Pure Black Theme (`Settings Tab`).
+  - TapFlow Lifetime Pro Exclusive (`EntitlementState.ProLifetime` ONLY — Excluded from 7-Day Trial — 2 Gates):
+      - `DESKTOP_CONSOLE`: Desktop Studio Bridge (`Console Tab` Ktor WebSocket Server).
+      - `DATA_BACKUP`: Data Backup & Transfer (`Settings Tab` `.tapflow` Export/Import).
 
 Paywall & Guard Behavior:
   - Paywall Screen / Sheet (`Route.Paywall`):
-      - Displays remaining Trial countdown (`"7-Day Trial Active (Xd Xh left)"`) OR expired banner, feature comparison checklist distinguishing `[7-Day Trial + Lifetime]` vs `[Lifetime Only]`, localized One-Time Price fetched from `ProductDetails` (handling both `oneTimePurchaseOfferDetailsList` and legacy fallback), `[Activate 7-Day Free Trial]` (hidden once trial is active/used), `[Unlock Lifetime Pro]` CTA, and `[Restore Purchase]`.
+      - Highlights `"All Actions, Unlimited Scripts & Flows — Forever Free"` alongside remaining Trial countdown (`"7-Day Trial Active (Xd Xh left)"`) OR expired banner, feature comparison checklist distinguishing `[Free]` vs `[7-Day Trial + Lifetime]` vs `[Lifetime Only]`, localized One-Time Price fetched from `ProductDetails` (handling both `oneTimePurchaseOfferDetailsList` and legacy fallback), `[Activate 7-Day Free Trial]` (hidden once trial is active/used), `[Unlock Lifetime Pro]` CTA, and `[Restore Purchase]`.
       - When an active `ProTrial` user opens `Route.Paywall`, highlights `"Upgrade to Lifetime Pro to unlock Desktop Console & Data Backup"`.
   - Soft Feature Guard:
       - Tapping any Pro-locked feature (or tapping Desktop Console or Data Backup without `ProLifetime`) opens `Route.Paywall`.
-      - Attempting to Run (`▶`) an imported/existing Script or Pipeline that contains Pro actions after trial expiration blocks execution and prompts `Route.Paywall` (identifying which Pro features are used).
+      - Attempting to Run (`▶`) an imported/existing Script or Pipeline that uses Pro-only features (`ADVANCED_VISION` in Scripts, `PIPELINE_AUTOMATION` or Pro child scripts in Pipelines) after trial expiration blocks execution and prompts `Route.Paywall` (identifying which Pro gates are used).
 
 ---
 
@@ -118,17 +117,17 @@ Tabs:
         - Content: Title, Description, Tag Chips, Total Top-Level Action Count, Updated Timestamp.
         - Quick Action Icons:
             - Play Icon (▶):
-                Entitlement Guard: Checks if script contains any Pro-gated actions/settings while user is on Free tier; if so, opens `Route.Paywall`.
+                Entitlement Guard: Checks `detectScriptProBlockers(script)` (only gates `ADVANCED_VISION` — `ImageMatch` or Multi-Point/Region `ColorMatch`); standard Actions, Delays, Variables, Loops, Jitter, and Bezier swipes run cleanly on Free tier. If blocked, opens `Route.Paywall`.
                 Vision Guard: Scans script action tree recursively for Vision requirements (`ColorMatch` or `ImageMatch`).
                   - If Vision required AND Shizuku Silent Screenshot is disabled: Prompts for `MediaProjection` consent (with user hint to select "Entire screen") before starting `MediaProjectionService`.
                   - If Vision not required (or Shizuku Silent Screenshot enabled): Skips MediaProjection immediately.
                 Launch: Minimizes app to background and launches Floating Window Runner (`OverlayService` with `specialUse`).
             - Edit Icon (✏️): Navigates to `Route.ScriptEditor(scriptId = item.id)`.
-            - Log Icon (📋): Navigates to `Route.ScriptLog(scriptId = item.id)` (Pro-gated full history).
+            - Log Icon (📋): Navigates to `Route.ScriptLog(scriptId = item.id)` (basic run status cards Free; log export & detailed traces gated by `FULL_LOGS`).
             - Delete Icon (🗑️): Checks if any Pipeline references this Script; warns user ("Used by N pipeline(s)") in confirmation dialog before removing from Room DB (remaining pipeline references render gracefully as `[Missing Script]`).
       Floating Action Button (FAB):
         - Expandable Speed-Dial FAB [➕ Add Script]:
-            - Entitlement Guard: Enforces Free tier limit (max 3 scripts); opens `Route.Paywall` if reached.
+            - Unlimited Scripts Free: No Free script-count cap.
             - Option 1 (Manual): Navigates to `Route.ScriptEditor(scriptId = null)`.
             - Option 2 (Recording):
                 Execution Guard: Prompts for `MediaProjection` consent first (unless Shizuku Silent Screenshot is enabled) when Auto-Inspect capture is active.
@@ -144,14 +143,14 @@ Tabs:
         - Content: Title, Description, Tag Chips, Included Scripts Summary (e.g., "3 Scripts • 8 Total Runs"), warning badge if any step references a `[Missing Script]`.
         - Quick Action Icons:
             - Play Icon (▶):
-                Entitlement Guard: Verifies Pro entitlement if pipeline uses Pro scripts or `Skip & Continue` recovery.
+                Entitlement Guard: Verifies Pro entitlement (`PIPELINE_AUTOMATION` / `ADVANCED_VISION`) ONLY if pipeline uses multi-repeat/unlimited looping, `Skip & Continue` recovery, or child scripts requiring `ADVANCED_VISION`.
                 Vision Guard: Scans all child scripts in the pipeline for Vision requirements; prompts `MediaProjection` consent if needed (unless Shizuku Silent Screenshot is enabled).
                 Launch: Minimizes app and launches Floating Window Runner in Pipeline Mode.
             - Edit Icon (✏️): Navigates to `Route.PipelineEditor(pipelineId = item.id)`.
-            - Log Icon (📋): Navigates to `Route.PipelineLog(pipelineId = item.id)`.
+            - Log Icon (📋): Navigates to `Route.PipelineLog(pipelineId = item.id)` (basic run status cards Free; log export & detailed traces gated by `FULL_LOGS`).
             - Delete Icon (🗑️): Shows confirmation dialog before removing from Room DB.
       Floating Action Button (FAB):
-        - Single Action FAB [➕ Add Pipeline]: Enforces Free tier limit (max 1 pipeline); navigates to `Route.PipelineEditor(pipelineId = null)`.
+        - Single Action FAB [➕ Add Pipeline]: Unlimited Pipelines Free; navigates to `Route.PipelineEditor(pipelineId = null)`.
 
   # -------------------------------------------------------------
   # TAB 3: INSPECT
@@ -178,13 +177,13 @@ Tabs:
                     - Displays list of cropped template thumbnails with dimensions (W × H px), or `"Image Deleted"` placeholder when source PNG was cleared.
                     - Individual Delete Icon (🗑️) per crop entry.
             - Action Button:
-                - `[Open Studio]` Button: Navigates directly to `Route.InspectStudio(inspectItemId = item.id)` (Pro-gated for Image Crop mode; Free tier allowed basic single-pixel view); strictly disabled (`"Studio Unavailable (Image Deleted)"`) when the source PNG is missing.
+                - `[Open Studio]` Button: Navigates directly to `Route.InspectStudio(inspectItemId = item.id)` (Free tier allows Pixel Inspect Mode; Image Crop Mode gated by `ProFeatureGate.ADVANCED_VISION`); strictly disabled (`"Studio Unavailable (Image Deleted)"`) when the source PNG is missing.
       Floating Action Button (FAB):
         - Expandable Speed-Dial FAB [➕ New Inspect]:
             - Option 1 (Live Screen Inspect - Pro):
-                Entitlement Guard: Checks Pro entitlement.
+                Entitlement Guard: Checks `ProFeatureGate.ADVANCED_VISION`.
                 Execution Guard: Prompts for `MediaProjection` consent first (unless Shizuku Silent Screenshot is enabled), minimizes app, and launches Floating Window in Mode 4 (Inspect Image Mode).
-            - Option 2 (Import Screenshot - Pro): Opens system Photo/File Picker (`GetContent("image/*")`) to import an existing image into a new Inspect Group/Item (converted to lossless PNG).
+            - Option 2 (Import Screenshot - Free): Opens system Photo/File Picker (`GetContent("image/*")`) to import an existing image into a new Inspect Group/Item (converted to lossless PNG; Free users can pick single pixels in Inspect Studio).
 
   # -------------------------------------------------------------
   # TAB 4: CONSOLE (Desktop ADB / WebSocket Bridge - Lifetime Pro Only)
@@ -274,8 +273,8 @@ Page Architecture & Navigation Flow:
     Center:
       - Script Metadata: Editable Script Title (single-line text field) & Script Description (multi-line expandable).
     Right Action Icons:
-      - Global Delay Trigger: Opens a Modal BottomSheet to configure script-wide `DelayConfig` (Normal / Range [Pro] / Deviation [Pro]).
-      - Dynamic Variables Trigger (Pro): Opens a Modal BottomSheet to manage script variables (Key, Type: Text [STRING] / Number [NUMBER] / Yes-No [BOOLEAN], Default Value).
+      - Global Delay Trigger (Free): Opens a Modal BottomSheet to configure script-wide `DelayConfig` (`Fixed` / `RandomRange` / `Deviation`).
+      - Dynamic Variables Trigger (Free): Opens a Modal BottomSheet to manage script variables (Key, Type: Text [STRING] / Number [NUMBER] / Yes-No [BOOLEAN], Default Value).
       - Save Script Button: Validates inputs, persists Script and Action tree to Room DB, updates `updatedAt` timestamp, and pops the backstack.
 
   Action Tree Viewport (Inline Nested Architecture):
@@ -295,7 +294,7 @@ Page Architecture & Navigation Flow:
   Universal Action-Level Post Delay (Applied to all physical interaction actions):
     Configuration Modes:
       - Global (Default): Inherits the script-wide Global Delay setting.
-      - Override: Custom delay configured specifically for this step (`DelayConfig`: Fixed / RandomRange [Pro] / Deviation [Pro]).
+      - Override: Custom delay configured specifically for this step (`DelayConfig`: `Fixed` / `RandomRange` / `Deviation`).
       - Off (0ms): Bypasses delay; immediately triggers the subsequent action.
     Applicable Categories:
       - Touch & Gestures, Input Text, System & Hardware (Key Events, Launch App, Force Stop, Paste).
@@ -308,22 +307,22 @@ Page Architecture & Navigation Flow:
 
 ## 4. Action Catalog (Add Action BottomSheet)
 
-# Category 1: Touch & Gestures
+# Category 1: Touch & Gestures (100% Free)
 Touch & Gestures:
   - Tap:
       Parameters:
-        - Coordinates (X, Y): Raw Integer inputs or bound Number Variables [Pro].
-        - Jitter [Pro]: Random dispersion radius in pixels (Anti-ban protection).
-        - Press Duration: Fixed duration (ms) or Randomized Range [Min, Max] [Pro].
-        - Repeat Count: Number of consecutive taps (Default: 1) or Number Variable [Pro].
-        - Repeat Interval: Interval between consecutive taps (ms) or Randomized Range [Pro].
+        - Coordinates (X, Y): Raw Integer inputs or bound Number Variables.
+        - Jitter: Random dispersion radius in pixels (Anti-ban protection).
+        - Press Duration: Fixed duration (ms) or Randomized Range [Min, Max].
+        - Repeat Count: Number of consecutive taps (Default: 1) or Number Variable.
+        - Repeat Interval: Interval between consecutive taps (ms) or Randomized Range.
         - Floating Inspector: [Pick via Overlay] button launches Floating Gesture Picker to record (X, Y) on screen.
       Post-Action Delay: Supports Global / Override / Off.
 
   - Double Tap:
       Parameters:
-        - Coordinates (X, Y): Raw Integer inputs or bound Number Variables [Pro].
-        - Jitter [Pro]: Random dispersion radius in pixels.
+        - Coordinates (X, Y): Raw Integer inputs or bound Number Variables.
+        - Jitter: Random dispersion radius in pixels.
         - Press Duration: Duration of each individual tap (ms).
         - Tap Interval: Gap duration between the first and second tap (ms; typically 80~150ms).
         - Floating Inspector: [Pick via Overlay] button to capture coordinates directly.
@@ -331,17 +330,17 @@ Touch & Gestures:
 
   - Long Press:
       Parameters:
-        - Coordinates (X, Y): Raw Integer inputs or bound Number Variables [Pro].
-        - Jitter [Pro]: Initial touch-down radius offset in pixels.
+        - Coordinates (X, Y): Raw Integer inputs or bound Number Variables.
+        - Jitter: Initial touch-down radius offset in pixels.
         - Press Duration: Hold duration in milliseconds (ms).
-        - Micro-movement Jitter [Pro]: Toggle + Amplitude (px) simulating subtle human finger trembling during hold.
+        - Micro-movement Jitter: Toggle + Amplitude (px) simulating subtle human finger trembling during hold.
         - Operation Mode:
             - Standard: Holds for specified duration then releases.
-            - Press Down Only / Release Only / Hold Until [Pro]: Implemented via `AccessibilityManagerBridge` storing `activeStroke: StrokeDescription` with `willContinue = true` and chaining `continueStroke()` segments strictly `< 55,000ms` (to respect Android's 60s `GestureDescription.getMaxGestureDuration()` cap) until released or condition/timeout triggers.
+            - Press Down Only / Release Only / Hold Until: Implemented via `AccessibilityManagerBridge` storing `activeStroke: StrokeDescription` with `willContinue = true` and chaining `continueStroke()` segments strictly `< 55,000ms` (to respect Android's 60s `GestureDescription.getMaxGestureDuration()` cap) until released or condition/timeout triggers.
         - Floating Inspector: [Pick via Overlay] button to capture coordinates and hold duration.
       Post-Action Delay: Supports Global / Override / Off.
 
-  - Multi-touch [Pro]:
+  - Multi-touch:
       Parameters:
         - Multi-touch Mode:
             - Custom Points: Touch Points List (X, Y), Jitter, Press Duration, Stagger Delay (ms).
@@ -352,14 +351,14 @@ Touch & Gestures:
 
   - Swipe & Drag:
       Parameters:
-        - Start Point (X1, Y1) & End Point (X2, Y2): Raw values or bound Number Variables [Pro].
-        - Jitter [Pro]: Independent start/end randomized radius offset (px).
+        - Start Point (X1, Y1) & End Point (X2, Y2): Raw values or bound Number Variables.
+        - Jitter: Independent start/end randomized radius offset (px).
         - Duration: Traversal time from start to end (ms).
         - Hold Before Drag / Hold After Drag: Touch-down settle delays (ms).
         - Trajectory Mode:
-            - Linear: Uniform straight line path (Free).
-            - Bezier Curve (Humanized) [Pro]: Configurable curvature offset and randomized control points.
-            - Multi-point Path [Pro]: Array of consecutive path coordinates `[(X1, Y1), (X2, Y2), ...]`.
+            - Linear: Uniform straight line path.
+            - Bezier Curve (Humanized): Configurable curvature offset and randomized control points.
+            - Multi-point Path: Array of consecutive path coordinates `[(X1, Y1), (X2, Y2), ...]`.
         - Floating Inspector: [Pick via Overlay] button to draw and record drag paths interactively.
       Post-Action Delay: Supports Global / Override / Off.
 
@@ -370,13 +369,13 @@ Touch & Gestures:
         - Injection Engine:
             - Accessibility SetText: Instant (0ms) via `ACTION_SET_TEXT` (Native views only).
             - Clipboard Paste: Injects text via system clipboard and `ACTION_PASTE`.
-            - Human-like Typing [Pro]: Uses Shizuku `input text` shell if enabled; otherwise uses progressive `ACTION_SET_TEXT` fallback (appending characters incrementally with 50~120ms randomized delay per character).
+            - Human-like Typing: Uses Shizuku `input text` shell if enabled; otherwise uses progressive `ACTION_SET_TEXT` fallback (appending characters incrementally with 50~120ms randomized delay per character).
         - Pre/Post Execution Options: Clear Existing Text, Post Action Key (None / Enter / Search / Send / Done), Auto Hide Keyboard.
       Post-Action Delay: Supports Global / Override / Off.
 
-# Category 2: Flow Control
+# Category 2: Flow Control (Free Actions; Advanced Vision Conditions Gated)
 Flow Control:
-  - If Block [Pro]:
+  - If Block:
       Header Layout & Mechanics:
         - Line 1 (Header): Editable Block Name + Expand/Collapse toggle [▼].
         - Line 2 (Live Natural Language Preview): Positioned at the TOP (e.g., *"When [d] OR ([a] AND [b OR c])"*); doubles as subtitle when collapsed.
@@ -390,47 +389,47 @@ Flow Control:
         - AND ➔ Match ALL | OR ➔ Match ANY | NOT ➔ Inline `[IS / NOT]` or `Match NONE`.
       Supported Conditions:
         - Color Match:
-            - Single Point `(x, y)` [Free standalone / Pro inside IfBlock], Multi-point [Pro], Multi-point Region `(x1, y1, x2, y2)` [Pro].
+            - Single Point `(x, y)` [Free inside `IfBlock` and `HoldUntil`/`While`/`Until`], Multi-point [Pro: `ADVANCED_VISION`], Multi-point Region `(x1, y1, x2, y2)` [Pro: `ADVANCED_VISION`].
             - Rules: ALL / ANY / `% Match` threshold. Tolerance (RGB delta 0~255).
             - Inspect DAO Import: Auto-fills coordinates & HEX color.
-        - Image Match [Pro]:
+        - Image Match [Pro: `ADVANCED_VISION`]:
             - Algorithm: 32-pixel match / Fast Template Matching.
             - Search ROI: Bounds `(x1, y1, x2, y2)` or full screen.
             - Inspect DAO Import: Copies the cropped PNG file into a dedicated Script-owned asset directory (so deleting or cleaning items in the Inspect Tab never breaks saved scripts).
             - Tolerance / Similarity slider.
-        - App Match:
+        - App Match [Free]:
             - Target: Active foreground app Package Name (detected via `AccessibilityService` `TYPE_WINDOW_STATE_CHANGED`).
             - Picker: Modal BottomSheet with search filter, Coil App Icons, Labels, Package Names (requires `<queries>` in AndroidManifest), plus `[Select Current Foreground App]`.
-        - Variable Comparison [Pro]:
+        - Variable Comparison [Free]:
             - String (`eq`, `ne`, `contains`, `length gt/lt/eq`), Number (`gt`, `gte`, `lt`, `lte`, `eq`, `ne`), Boolean (`isTrue`, `isFalse`).
       Child Blocks:
         - `Then Branch` ("If Yes, do these:"), ordered `Else If Branches` ("Otherwise, if:"), and optional `Else Branch` ("Otherwise (if none above matched):"). Mutually exclusive evaluation exits on the first matching branch.
 
   - Delay:
       Parameters:
-        - Standalone blocking wait step using `DelayConfig`: Fixed [Free] / RandomRange [Pro] / Deviation [Pro] (Min threshold: 50ms).
+        - Standalone blocking wait step using `DelayConfig`: `Fixed` / `RandomRange` / `Deviation` [All Free] (Min threshold: 50ms).
 
   - End Script:
       Parameters: Instantly halts execution of the active script session and resets state.
 
   - Loop Block:
       Modes:
-        - Count (Fixed Iterations) [Free]: Raw integer or Number Variable [Pro] + optional Export Index Variable [Pro].
-        - While / Until (Condition Loop) [Pro]: Reuses full Nested IF Condition system.
-        - Unlimited (Infinite Loop) [Pro]: Runs until `Break` or manual user stop.
+        - Count (Fixed Iterations) [Free]: Raw integer or Number Variable + optional Export Index Variable.
+        - While / Until (Condition Loop) [Free]: Reuses Nested IF Condition system (`ADVANCED_VISION` applies only if an `ImageMatch` or Multi-Point/Region `ColorMatch` is used inside).
+        - Unlimited (Infinite Loop) [Free]: Runs until `Break` or manual user stop.
       Loop Safeguards:
         - Loop Interval Delay (`DelayConfig`), Max Timeout (e.g., 60s), Max Iterations ceiling (e.g., 500 cycles), On Timeout Action (`Break & Continue` / `Stop & Alert`).
       Child Actions & Dedicated Loop Control Actions:
         - Body Branch + `Break` + `Continue`.
 
-# Category 3: System & Hardware
+# Category 3: System & Hardware (100% Free)
 System & Hardware:
   - Key Events (Global Actions via Accessibility / Shizuku):
       - Home, Back, Recents, Power Dialog, Volume Up/Down, Notifications, Quick Settings, Take Screenshot.
       - Post-Action Delay: Global / Override / Off.
   - Application Lifecycle:
       - Launch App (Selected via BottomSheet Picker).
-      - Force Stop App [Pro] (Rootless via Shizuku `am force-stop`).
+      - Force Stop App: Executes rootless `am force-stop` when `ProFeatureGate.SHIZUKU_SUITE` + Shizuku enabled & permitted, and falls back safely on Free/non-Shizuku devices to Accessibility `HOME` + `ActivityManager.killBackgroundProcesses()`.
       - Post-Action Delay: Global / Override / Off.
   - Clipboard Operations:
       - Copy to Clipboard, Paste from Clipboard, Clear Clipboard.
@@ -439,7 +438,7 @@ System & Hardware:
   - Device Feedback & Alerts:
       - Vibrate (Short / Long / Custom ms pattern), Play Alert Sound. Post-Action Delay: Off (0ms).
 
-# Category 4: Variable Operations [Pro]
+# Category 4: Variable Operations (100% Free)
 Variable Operations:
   - Lifecycle & Scope: Strictly in-memory per execution session (non-resetting across steps/repeats within a single Pipeline run).
   - Operations: Set Variable, Math (+, -, *, /, %, Round, Floor, Ceil, Abs), Random Value Generator (Int, Float, Boolean), String Operations (Concatenate, Trim, Replace/Regex, Substring), Boolean Operations (Toggle, AND, OR), Type Casting (Text ⇄ Number, Boolean ➔ Text/Number).
@@ -450,8 +449,8 @@ Variable Operations:
 ## 5. Pipeline Edit & Add Page Specification
 Top App Bar: Back (Navigation Guard if `isDirty`), Title & Description fields, Pipeline Settings Trigger, Save Pipeline Button.
 Pipeline-Level Execution Settings (BottomSheet):
-  - Pipeline Repeat Mode: Run Once / Loop Pipeline (N times or Unlimited [Pro]).
-  - Error Handling Strategy: Abort Pipeline (Default) / Skip & Continue [Pro] (logs failure, captures error screenshot, optionally runs Crash Recovery, proceeds to next step).
+  - Pipeline Repeat Mode: Run Once [Free] / Loop Pipeline (Multi-repeat `N > 1` or `Unlimited` [Pro: `PIPELINE_AUTOMATION`]).
+  - Error Handling Strategy: Abort Pipeline (Default, Free) / Skip & Continue [Pro: `PIPELINE_AUTOMATION`] (logs failure, captures error screenshot, optionally runs Crash Recovery, proceeds to next step).
 Pipeline Step List Viewport:
   - `LazyColumn` with `[+ Add Script]` insertion points at Head, Between Steps, and Tail.
   - Step Card: `STEP #01`, Script Title & Tags (or `[Missing Script]` warning if deleted), Action Count, Repeat Count Stepper `[ - ] [ N ] [ + ]`, Reorder (`▲`/`▼`), Delete (`🗑️`).
@@ -466,11 +465,11 @@ Pipeline Execution & Variable Lifecycle Rules:
 
 ## 6. Log Pages & Inspect Studio Specification
 Script Log Page:
-  - Top Bar: Back, Title ("Script Execution History"), Status Filter (All / Success / Failed / Stopped), Search Bar, Export JSON/Text [Pro], Clear All.
-  - Session Card List: Header (Status badge, Title, Timestamp, Duration, Total Steps, Expand toggle) + Detailed Body (Control events, Action steps, Card-in-Card Nested IF Condition Inspector with ✓/✗ and Actual vs Expected, Crash Error Reason + Zoomable Fullscreen Error Screenshot).
+  - Top Bar: Back, Title ("Script Execution History"), Status Filter (All / Success / Failed / Stopped), Search Bar, Export JSON/Text [Pro: `FULL_LOGS`], Clear All.
+  - Session Card List: Header (Status badge, Title, Timestamp, Duration, Total Steps, Expand toggle — visible to Free & Pro users) + Detailed Body [Pro: `FULL_LOGS`] (Control events, Action steps, Card-in-Card Nested IF Condition Inspector with ✓/✗ and Actual vs Expected, Crash Error Reason + Zoomable Fullscreen Error Screenshot). Free users see a compact upgrade prompt inside expanded log details.
   - Retention Guardrails: Keep latest 50 sessions or auto-purge > 7 days; delete associated orphan screenshot PNGs automatically.
 Pipeline Log Page:
-  - Outer Pipeline Card + Inner Nested Script Log Cards with run badges (`Run #1`, `Run #2`).
+  - Outer Pipeline Card (basic run summary Free) + Export & Inner Nested Script Log Cards with run badges (`Run #1`, `Run #2`) gated by `FULL_LOGS`.
 Inspect Studio Page:
   - Fullscreen Interactive Canvas loading the full-screen 100% Lossless PNG via Coil (`Size.ORIGINAL`); 100%–1000% Pinch-to-Zoom with Pixel Grid at high zoom, two-finger Pan, single-finger Inspect Drag.
   - Top Bar: Back (unsaved check), Title (`Group / Item`), Saved Markers On/Off toggle (`Icons.Rounded.Visibility` / `VisibilityOff`, default ON), Mode Switcher (`Pixel Inspect` / `Image Crop [Pro]`).
@@ -519,10 +518,10 @@ Core Domain Models (:core:model - Zero Android Dependencies):
     - PendingPurchase
 
   DelayConfig (Sealed Interface):
-    # UI exposes Hours, Minutes, Seconds, Milliseconds; strictly clamped >= 50ms.
+    # UI exposes Hours, Minutes, Seconds, Milliseconds; strictly clamped >= 50ms. All modes Free.
     - Fixed(durationMs: Long)
-    - RandomRange(minMs: Long, maxMs: Long) # Pro
-    - Deviation(baseMs: Long, deltaMs: Long) # Pro
+    - RandomRange(minMs: Long, maxMs: Long)
+    - Deviation(baseMs: Long, deltaMs: Long)
 
   PostActionDelay (Sealed Interface):
     - Global | Override(config: DelayConfig) | Off

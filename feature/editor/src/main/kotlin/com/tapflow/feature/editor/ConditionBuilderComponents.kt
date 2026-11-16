@@ -299,7 +299,7 @@ fun ConditionGroupCardEditor(
                 onClick = {
                   if (!isPro) {
                     onIntent(
-                      ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.IMAGE_MATCH.displayName),
+                      ScriptEditorUiIntent.RequestProUpgrade(ProFeatureGate.ADVANCED_VISION.displayName),
                     )
                   } else {
                     showAddRuleCards = false
@@ -331,42 +331,34 @@ fun ConditionGroupCardEditor(
                 icon = Icons.Rounded.Pin,
                 title = "Check Variable",
                 subtitle = "Compare a saved number or text",
-                locked = !isPro,
+                locked = false,
                 onClick = {
-                  if (!isPro) {
-                    onIntent(
-                      ScriptEditorUiIntent.RequestProUpgrade(
-                        ProFeatureGate.DYNAMIC_VARIABLES.displayName,
-                      ),
+                  showAddRuleCards = false
+                  val firstVar = variables.firstOrNull()
+                  val leaf =
+                    ConditionLeaf(
+                      id = UUID.randomUUID().toString(),
+                      predicate =
+                        ConditionPredicate.VariableCompare(
+                          variableKey = firstVar?.key.orEmpty(),
+                          variableType = firstVar?.type ?: VariableType.NUMBER,
+                          numberOp =
+                            if (firstVar?.type == VariableType.NUMBER || firstVar == null) {
+                              NumberCompareOp.GT
+                            } else {
+                              null
+                            },
+                          stringOp = if (firstVar?.type == VariableType.STRING) StringCompareOp.EQ else null,
+                          booleanOp =
+                            if (firstVar?.type == VariableType.BOOLEAN) {
+                              BooleanCompareOp.IS_TRUE
+                            } else {
+                              null
+                            },
+                          expectedValue = "",
+                        ),
                     )
-                  } else {
-                    showAddRuleCards = false
-                    val firstVar = variables.firstOrNull()
-                    val leaf =
-                      ConditionLeaf(
-                        id = UUID.randomUUID().toString(),
-                        predicate =
-                          ConditionPredicate.VariableCompare(
-                            variableKey = firstVar?.key.orEmpty(),
-                            variableType = firstVar?.type ?: VariableType.NUMBER,
-                            numberOp =
-                              if (firstVar?.type == VariableType.NUMBER || firstVar == null) {
-                                NumberCompareOp.GT
-                              } else {
-                                null
-                              },
-                            stringOp = if (firstVar?.type == VariableType.STRING) StringCompareOp.EQ else null,
-                            booleanOp =
-                              if (firstVar?.type == VariableType.BOOLEAN) {
-                                BooleanCompareOp.IS_TRUE
-                              } else {
-                                null
-                              },
-                            expectedValue = "",
-                          ),
-                      )
-                    onRootChange(ConditionTreeUtils.addNodeToGroup(root, currentGroup.id, leaf))
-                  }
+                  onRootChange(ConditionTreeUtils.addNodeToGroup(root, currentGroup.id, leaf))
                 },
               )
             }
@@ -933,7 +925,7 @@ private fun ColorMatchRuleBody(
               if (proLocked) {
                 onIntent(
                   ScriptEditorUiIntent.RequestProUpgrade(
-                    ProFeatureGate.MULTI_POINT_COLOR_MATCH.displayName,
+                    ProFeatureGate.ADVANCED_VISION.displayName,
                   ),
                 )
               } else {

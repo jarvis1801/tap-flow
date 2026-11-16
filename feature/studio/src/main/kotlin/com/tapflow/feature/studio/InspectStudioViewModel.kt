@@ -168,10 +168,10 @@ class InspectStudioViewModel @Inject constructor(
 
       is InspectStudioUiIntent.SwitchMode -> {
         if (intent.mode == StudioMode.IMAGE_CROP &&
-          !entitlementRepository.canUseFeature(ProFeatureGate.INSPECT_STUDIO_CROP)
+          !entitlementRepository.canUseFeature(ProFeatureGate.ADVANCED_VISION)
         ) {
           sendEffect(
-            InspectStudioUiEffect.NavigateToPaywall(ProFeatureGate.INSPECT_STUDIO_CROP.displayName),
+            InspectStudioUiEffect.NavigateToPaywall(ProFeatureGate.ADVANCED_VISION.displayName),
           )
           return
         }
@@ -244,9 +244,9 @@ class InspectStudioViewModel @Inject constructor(
       }
 
       is InspectStudioUiIntent.SelectCropMarker -> {
-        if (!entitlementRepository.canUseFeature(ProFeatureGate.INSPECT_STUDIO_CROP)) {
+        if (!entitlementRepository.canUseFeature(ProFeatureGate.ADVANCED_VISION)) {
           sendEffect(
-            InspectStudioUiEffect.NavigateToPaywall(ProFeatureGate.INSPECT_STUDIO_CROP.displayName),
+            InspectStudioUiEffect.NavigateToPaywall(ProFeatureGate.ADVANCED_VISION.displayName),
           )
           return
         }
@@ -323,10 +323,10 @@ class InspectStudioViewModel @Inject constructor(
 
       InspectStudioUiIntent.OpenSaveSheet -> {
         if (_uiState.value.mode == StudioMode.IMAGE_CROP &&
-          !entitlementRepository.canUseFeature(ProFeatureGate.INSPECT_STUDIO_CROP)
+          !entitlementRepository.canUseFeature(ProFeatureGate.ADVANCED_VISION)
         ) {
           sendEffect(
-            InspectStudioUiEffect.NavigateToPaywall(ProFeatureGate.INSPECT_STUDIO_CROP.displayName),
+            InspectStudioUiEffect.NavigateToPaywall(ProFeatureGate.ADVANCED_VISION.displayName),
           )
           return
         }
