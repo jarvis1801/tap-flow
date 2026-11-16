@@ -59,6 +59,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -98,20 +99,70 @@ class AutomationRunnerEngine @Inject constructor(
   @Volatile
   private var activeJob: Job? = null
 
-  fun startScript(script: Script): Job {
+  @Volatile
+  private var standbyScript: Script? = null
+
+  @Volatile
+  private var standbyVariables: VariableRuntimeStore? = null
+
+  suspend fun prepareStandbyScript(script: Script) {
+    val prevJob = activeJob
+    controlHub.stopExecution()
+    prevJob?.cancelAndJoin()
+    activeJob = null
+    standbyScript = script
+    standbyVariables =
+      VariableRuntimeStore(clipboardReader = { backgroundClipboardManager.readClipboardText() }).apply {
+        seedIfAbsent(script.variables)
+      }
+    controlHub.registerStandby(
+      snapshot =
+        RunnerExecutionSnapshot(
+          phase = RunnerPhase.IDLE,
+          title = script.title,
+          isPipeline = false,
+          currentTopLevelAction = 0,
+          totalTopLevelActions = script.actions.size,
+        ),
+      onPlay = { startScript(script, startPaused = false, initialSingleStep = false) },
+      onPreviousStep = { startScript(script, startPaused = true, initialSingleStep = false) },
+      onNextStep = { startScript(script, startPaused = false, initialSingleStep = true) },
+    )
+  }
+
+  fun startScript(script: Script): Job =
+    startScript(script = script, startPaused = false, initialSingleStep = false)
+
+  fun startScript(
+    script: Script,
+    startPaused: Boolean = false,
+    initialSingleStep: Boolean = false,
+  ): Job {
+    val prevJob = activeJob
     controlHub.stopExecution()
     val job =
       engineScope.launch {
-        executeStandaloneScript(script)
+        prevJob?.cancelAndJoin()
+        executeStandaloneScript(
+          script = script,
+          startPaused = startPaused,
+          initialSingleStep = initialSingleStep,
+        )
       }
     activeJob = job
     return job
   }
 
-  private suspend fun executeStandaloneScript(script: Script) {
+  private suspend fun executeStandaloneScript(
+    script: Script,
+    startPaused: Boolean = false,
+    initialSingleStep: Boolean = false,
+  ) {
     val wasTriggeredExternally = controlHub.consumeExternalTriggerPending()
     val blockers = entitlementRepository.detectScriptProBlockers(script)
     if (blockers.isNotEmpty()) {
+      standbyScript = null
+      standbyVariables = null
       controlHub.clearSession(
         RunnerExecutionSnapshot(
           phase = RunnerPhase.PAYWALL_BLOCKED,
@@ -140,11 +191,20 @@ class AutomationRunnerEngine @Inject constructor(
       return
     }
 
-    val variables = VariableRuntimeStore(clipboardReader = { backgroundClipboardManager.readClipboardText() })
-    variables.seedIfAbsent(script.variables)
+    val preparedVars =
+      if (standbyScript?.id == script.id) {
+        standbyVariables
+      } else {
+        null
+      }
+    standbyScript = null
+    standbyVariables = null
+    val variables =
+      (preparedVars ?: VariableRuntimeStore(clipboardReader = { backgroundClipboardManager.readClipboardText() }))
+        .apply { seedIfAbsent(script.variables) }
 
     val currentJob = coroutineContext[Job]!!
-    controlHub.registerSession(currentJob) {
+    controlHub.registerSession(currentJob, startPaused = startPaused) {
       engineScope.launch { accessibilityBridge.releaseActivePress() }
     }
 
@@ -154,6 +214,7 @@ class AutomationRunnerEngine @Inject constructor(
         variables = variables,
         isPipelineChild = false,
         recordStandaloneLog = true,
+        initialSingleStep = initialSingleStep,
       )
 
     val finalPhase =
@@ -211,6 +272,7 @@ class AutomationRunnerEngine @Inject constructor(
     variables: VariableRuntimeStore,
     isPipelineChild: Boolean,
     recordStandaloneLog: Boolean,
+    initialSingleStep: Boolean = false,
   ): ExecutionSessionLog = coroutineScope {
     variables.seedIfAbsent(script.variables)
 
@@ -221,7 +283,7 @@ class AutomationRunnerEngine @Inject constructor(
     val totalActions = script.actions.size
     var stepsExecuted = 0
     var cursor = 0
-    var singleStepPending = false
+    var singleStepPending = initialSingleStep
     var status = ExecutionStatus.SUCCESS
     var errorReason: String? = null
     var errorScreenshotPath: String? = null
@@ -258,7 +320,7 @@ class AutomationRunnerEngine @Inject constructor(
           controlHub.updateSnapshot {
             it.copy(
               phase = RunnerPhase.PAUSED,
-              title = script.title,
+              title = if (isPipelineChild) it.title else script.title,
               currentTopLevelAction = (cursor + 1).coerceAtMost(totalActions),
               totalTopLevelActions = totalActions,
             )
@@ -280,7 +342,7 @@ class AutomationRunnerEngine @Inject constructor(
         controlHub.updateSnapshot {
           it.copy(
             phase = RunnerPhase.RUNNING,
-            title = script.title,
+            title = if (isPipelineChild) it.title else script.title,
             currentTopLevelAction = cursor + 1,
             totalTopLevelActions = totalActions,
           )
@@ -311,7 +373,7 @@ class AutomationRunnerEngine @Inject constructor(
         cursor++
         if (singleStepPending) {
           singleStepPending = false
-          if (cursor < totalActions) {
+          if (cursor < totalActions || isPipelineChild) {
             controlHub.pause()
           }
         }

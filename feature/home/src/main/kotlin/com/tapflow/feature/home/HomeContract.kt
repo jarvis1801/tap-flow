@@ -11,6 +11,7 @@ import java.util.Locale
 import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.ThemePaletteOption
 import com.tapflow.core.model.common.OverlaySizeOption
+import com.tapflow.core.model.common.RunnerLaunchMode
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.TrialStatus
 import com.tapflow.core.model.pipeline.Pipeline
@@ -52,10 +53,16 @@ data class PipelineCardUi(
 @Immutable
 sealed interface PendingMediaProjectionTarget {
   @Immutable
-  data class RunScript(val scriptId: String) : PendingMediaProjectionTarget
+  data class RunScript(
+    val scriptId: String,
+    val autoStart: Boolean = true,
+  ) : PendingMediaProjectionTarget
 
   @Immutable
-  data class RunPipeline(val pipelineId: String) : PendingMediaProjectionTarget
+  data class RunPipeline(
+    val pipelineId: String,
+    val autoStart: Boolean = true,
+  ) : PendingMediaProjectionTarget
 
   @Immutable
   data object LiveRecorder : PendingMediaProjectionTarget
@@ -63,6 +70,32 @@ sealed interface PendingMediaProjectionTarget {
   @Immutable
   data object LiveInspector : PendingMediaProjectionTarget
 }
+
+@Immutable
+sealed interface RunnerLaunchTarget {
+  val title: String
+  val requiresVision: Boolean
+
+  @Immutable
+  data class ScriptTarget(
+    val scriptId: String,
+    override val title: String,
+    override val requiresVision: Boolean,
+  ) : RunnerLaunchTarget
+
+  @Immutable
+  data class PipelineTarget(
+    val pipelineId: String,
+    override val title: String,
+    override val requiresVision: Boolean,
+  ) : RunnerLaunchTarget
+}
+
+@Immutable
+data class RunnerLaunchChoicePrompt(
+  val target: RunnerLaunchTarget,
+  val rememberChoice: Boolean = false,
+)
 
 @Immutable
 data class DeleteScriptPrompt(
@@ -110,6 +143,7 @@ data class HomeUiState(
   val shizukuStatus: ShizukuDiagnosticState = ShizukuDiagnosticState(),
   val isScriptFabExpanded: Boolean = false,
   val isInspectFabExpanded: Boolean = false,
+  val runnerLaunchChoicePrompt: RunnerLaunchChoicePrompt? = null,
   val pendingProjectionTarget: PendingMediaProjectionTarget? = null,
   val deleteScriptPrompt: DeleteScriptPrompt? = null,
   val deletePipelinePrompt: DeletePipelinePrompt? = null,
@@ -249,6 +283,14 @@ sealed interface HomeUiIntent {
   data class SetThemePalette(val palette: ThemePaletteOption) : HomeUiIntent
 
   data class SetOverlaySize(val option: OverlaySizeOption) : HomeUiIntent
+
+  data class SetRunnerLaunchMode(val mode: RunnerLaunchMode) : HomeUiIntent
+
+  data class SetRunnerLaunchRememberChoice(val remember: Boolean) : HomeUiIntent
+
+  data class ConfirmRunnerLaunchChoice(val autoStart: Boolean) : HomeUiIntent
+
+  data object DismissRunnerLaunchChoice : HomeUiIntent
 
   data class SelectLocale(
     val locale: AppLocaleOption,

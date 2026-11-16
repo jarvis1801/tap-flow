@@ -17,6 +17,7 @@ import com.tapflow.core.datastore.AppPreferences
 import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
 import com.tapflow.core.datastore.ThemePaletteOption
+import com.tapflow.core.model.common.RunnerLaunchMode
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.entitlement.ProFeatureGate
@@ -28,6 +29,7 @@ import com.tapflow.core.model.pipeline.PipelineRepeatMode
 import com.tapflow.core.model.script.Script
 import com.tapflow.core.server.ServerUiStatus
 import com.tapflow.core.server.TapFlowLocalServer
+import com.tapflow.core.service.overlay.OverlayStateBridge
 import com.tapflow.core.service.projection.MediaProjectionBridge
 import com.tapflow.core.service.projection.ScreenCaptureState
 import com.tapflow.core.service.shizuku.ShizukuDiagnosticState
@@ -58,6 +60,7 @@ class HomeViewModel @Inject constructor(
   private val localServer: TapFlowLocalServer,
   private val shizukuManager: ShizukuManager,
   private val mediaProjectionBridge: MediaProjectionBridge,
+  private val overlayStateBridge: OverlayStateBridge,
   private val backupManager: TapFlowBackupManager,
   private val inspectImageImporter: InspectImageImporter,
 ) : ViewModel() {
@@ -76,6 +79,7 @@ class HomeViewModel @Inject constructor(
     val expandedInspectItemIds: Set<String> = emptySet(),
     val isScriptFabExpanded: Boolean = false,
     val isInspectFabExpanded: Boolean = false,
+    val runnerLaunchChoicePrompt: RunnerLaunchChoicePrompt? = null,
     val pendingProjectionTarget: PendingMediaProjectionTarget? = null,
     val deleteScriptPrompt: DeleteScriptPrompt? = null,
     val deletePipelinePrompt: DeletePipelinePrompt? = null,
@@ -252,6 +256,7 @@ class HomeViewModel @Inject constructor(
           shizukuStatus = system.shizukuStatus,
           isScriptFabExpanded = local.isScriptFabExpanded,
           isInspectFabExpanded = local.isInspectFabExpanded,
+          runnerLaunchChoicePrompt = local.runnerLaunchChoicePrompt,
           pendingProjectionTarget = local.pendingProjectionTarget,
           deleteScriptPrompt = local.deleteScriptPrompt,
           deletePipelinePrompt = local.deletePipelinePrompt,
@@ -344,10 +349,36 @@ class HomeViewModel @Inject constructor(
             )
             return@launch
           }
-          launchTargetWithVisionGuard(
-            target = PendingMediaProjectionTarget.RunScript(script.id),
-            requiresVision = script.requiresVision(),
-          )
+          val requiresVision = script.requiresVision()
+          when (preferencesRepository.getPreferencesOnce().runnerLaunchMode) {
+            RunnerLaunchMode.STANDBY -> {
+              launchTargetWithVisionGuard(
+                target = PendingMediaProjectionTarget.RunScript(script.id, autoStart = false),
+                requiresVision = requiresVision,
+              )
+            }
+            RunnerLaunchMode.AUTO_START -> {
+              launchTargetWithVisionGuard(
+                target = PendingMediaProjectionTarget.RunScript(script.id, autoStart = true),
+                requiresVision = requiresVision,
+              )
+            }
+            RunnerLaunchMode.ASK_EVERY_TIME -> {
+              _localState.update {
+                it.copy(
+                  runnerLaunchChoicePrompt =
+                    RunnerLaunchChoicePrompt(
+                      target =
+                        RunnerLaunchTarget.ScriptTarget(
+                          scriptId = script.id,
+                          title = script.title,
+                          requiresVision = requiresVision,
+                        ),
+                    ),
+                )
+              }
+            }
+          }
         }
       }
       is HomeUiIntent.EditScriptClicked -> {
@@ -403,10 +434,35 @@ class HomeViewModel @Inject constructor(
           }
           val requiresVision =
             pipeline.steps.any { step -> scriptsById[step.scriptId]?.requiresVision() == true }
-          launchTargetWithVisionGuard(
-            target = PendingMediaProjectionTarget.RunPipeline(pipeline.id),
-            requiresVision = requiresVision,
-          )
+          when (preferencesRepository.getPreferencesOnce().runnerLaunchMode) {
+            RunnerLaunchMode.STANDBY -> {
+              launchTargetWithVisionGuard(
+                target = PendingMediaProjectionTarget.RunPipeline(pipeline.id, autoStart = false),
+                requiresVision = requiresVision,
+              )
+            }
+            RunnerLaunchMode.AUTO_START -> {
+              launchTargetWithVisionGuard(
+                target = PendingMediaProjectionTarget.RunPipeline(pipeline.id, autoStart = true),
+                requiresVision = requiresVision,
+              )
+            }
+            RunnerLaunchMode.ASK_EVERY_TIME -> {
+              _localState.update {
+                it.copy(
+                  runnerLaunchChoicePrompt =
+                    RunnerLaunchChoicePrompt(
+                      target =
+                        RunnerLaunchTarget.PipelineTarget(
+                          pipelineId = pipeline.id,
+                          title = pipeline.title,
+                          requiresVision = requiresVision,
+                        ),
+                    ),
+                )
+              }
+            }
+          }
         }
       }
       is HomeUiIntent.EditPipelineClicked -> {
@@ -738,6 +794,51 @@ class HomeViewModel @Inject constructor(
       is HomeUiIntent.SetOverlaySize -> {
         viewModelScope.launch { preferencesRepository.setOverlaySize(intent.option) }
       }
+      is HomeUiIntent.SetRunnerLaunchMode -> {
+        viewModelScope.launch { preferencesRepository.setRunnerLaunchMode(intent.mode) }
+      }
+      is HomeUiIntent.SetRunnerLaunchRememberChoice -> {
+        _localState.update { state ->
+          val current = state.runnerLaunchChoicePrompt ?: return@update state
+          state.copy(runnerLaunchChoicePrompt = current.copy(rememberChoice = intent.remember))
+        }
+      }
+      is HomeUiIntent.ConfirmRunnerLaunchChoice -> {
+        val prompt = _localState.value.runnerLaunchChoicePrompt ?: return
+        _localState.update { it.copy(runnerLaunchChoicePrompt = null) }
+        viewModelScope.launch {
+          if (prompt.rememberChoice) {
+            val mode =
+              if (intent.autoStart) RunnerLaunchMode.AUTO_START else RunnerLaunchMode.STANDBY
+            preferencesRepository.setRunnerLaunchMode(mode)
+          }
+          when (val target = prompt.target) {
+            is RunnerLaunchTarget.ScriptTarget -> {
+              launchTargetWithVisionGuard(
+                target =
+                  PendingMediaProjectionTarget.RunScript(
+                    scriptId = target.scriptId,
+                    autoStart = intent.autoStart,
+                  ),
+                requiresVision = target.requiresVision,
+              )
+            }
+            is RunnerLaunchTarget.PipelineTarget -> {
+              launchTargetWithVisionGuard(
+                target =
+                  PendingMediaProjectionTarget.RunPipeline(
+                    pipelineId = target.pipelineId,
+                    autoStart = intent.autoStart,
+                  ),
+                requiresVision = target.requiresVision,
+              )
+            }
+          }
+        }
+      }
+      HomeUiIntent.DismissRunnerLaunchChoice -> {
+        _localState.update { it.copy(runnerLaunchChoicePrompt = null) }
+      }
       is HomeUiIntent.SelectLocale -> {
         if (!AppLocaleHelper.isLocaleAlreadyActive(
             intent.currentLanguageTags,
@@ -927,6 +1028,10 @@ class HomeViewModel @Inject constructor(
         )
       }
     }
+  }
+
+  fun suppressOverlayAutoCloseBriefly() {
+    overlayStateBridge.suppressAutoCloseBriefly()
   }
 
   private fun launchTargetWithVisionGuard(

@@ -123,6 +123,7 @@ fun ScriptEditorScreen(
               requestId = effect.requestId,
               targetType = effect.targetType,
             )
+          viewModel.suppressOverlayAutoCloseBriefly()
           ContextCompat.startForegroundService(context, intent)
           context.findActivity()?.moveTaskToBack(true)
         }

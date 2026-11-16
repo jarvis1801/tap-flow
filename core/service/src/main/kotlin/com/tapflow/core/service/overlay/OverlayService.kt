@@ -125,6 +125,8 @@ import kotlin.math.hypot
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -134,6 +136,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class OverlayService :
@@ -151,6 +154,7 @@ class OverlayService :
     const val ACTION_CLOSE = "com.tapflow.core.service.overlay.ACTION_CLOSE"
 
     const val EXTRA_TARGET_ID = "extra_target_id"
+    const val EXTRA_AUTO_START = "extra_auto_start"
     const val EXTRA_PICKER_REQUEST_ID = "extra_picker_request_id"
     const val EXTRA_PICKER_TYPE = "extra_picker_type"
 
@@ -177,6 +181,7 @@ class OverlayService :
   @Inject lateinit var automationRunnerEngine: AutomationRunnerEngine
   @Inject lateinit var pipelineExecutionEngine: PipelineExecutionEngine
   @Inject lateinit var gesturePickerBridge: GesturePickerBridge
+  @Inject lateinit var overlayStateBridge: OverlayStateBridge
   @Inject lateinit var mediaProjectionBridge: MediaProjectionBridge
   @Inject lateinit var optionalContentProvider: Optional<OverlayContentProvider>
 
@@ -211,6 +216,7 @@ class OverlayService :
 
   // Active runner target & Recording / Inspect session accumulators
   private var activeRunnerTargetId: String? = null
+  private var runnerSetupJob: Job? = null
   private var activeInspectGroupId: String? = null
   private var activeInspectGroupTitle: String? = null
   private var activeInspectGroupTags: List<String> = emptyList()
@@ -219,21 +225,31 @@ class OverlayService :
   private var lastRecordedActionCompletedAtMs: Long? = null
   private var recorderPauseStartedAtMs: Long? = null
   private var isProcessingGesture = false
+  @Volatile private var isClosingService = false
 
   private val callbacks =
     object : OverlayCallbacks {
       override fun onPlayPause() {
         val snap = uiState.value.runnerSnapshot
         val targetId = activeRunnerTargetId
-        if (targetId != null &&
+        if (snap.phase == RunnerPhase.IDLE) {
+          if (runnerSetupJob?.isActive == true && targetId != null) {
+            when (uiState.value.mode) {
+              OverlayMode.RUNNER_SCRIPT -> startScriptRunnerMode(targetId, autoStart = true)
+              OverlayMode.RUNNER_PIPELINE -> startPipelineRunnerMode(targetId, autoStart = true)
+              else -> Unit
+            }
+          } else {
+            runnerControlHub.play()
+          }
+        } else if (targetId != null &&
           (snap.phase == RunnerPhase.COMPLETED ||
             snap.phase == RunnerPhase.FAILED ||
-            snap.phase == RunnerPhase.STOPPED ||
-            snap.phase == RunnerPhase.IDLE)
+            snap.phase == RunnerPhase.STOPPED)
         ) {
           when (uiState.value.mode) {
-            OverlayMode.RUNNER_SCRIPT -> startScriptRunnerMode(targetId)
-            OverlayMode.RUNNER_PIPELINE -> startPipelineRunnerMode(targetId)
+            OverlayMode.RUNNER_SCRIPT -> startScriptRunnerMode(targetId, autoStart = true)
+            OverlayMode.RUNNER_PIPELINE -> startPipelineRunnerMode(targetId, autoStart = true)
             else -> Unit
           }
         } else {
@@ -242,11 +258,45 @@ class OverlayService :
       }
 
       override fun onPreviousStep() {
-        runnerControlHub.requestPreviousStep()
+        val snap = uiState.value.runnerSnapshot
+        val targetId = activeRunnerTargetId
+        if (targetId != null &&
+          ((snap.phase == RunnerPhase.IDLE && runnerSetupJob?.isActive == true) ||
+            snap.phase == RunnerPhase.COMPLETED ||
+            snap.phase == RunnerPhase.FAILED ||
+            snap.phase == RunnerPhase.STOPPED)
+        ) {
+          when (uiState.value.mode) {
+            OverlayMode.RUNNER_SCRIPT ->
+              startScriptRunnerMode(targetId, autoStart = true, startPaused = true)
+            OverlayMode.RUNNER_PIPELINE ->
+              startPipelineRunnerMode(targetId, autoStart = true, startPaused = true)
+            else -> Unit
+          }
+        } else {
+          runnerControlHub.requestPreviousStep()
+        }
       }
 
       override fun onNextStep() {
-        runnerControlHub.requestNextStep()
+        val snap = uiState.value.runnerSnapshot
+        val targetId = activeRunnerTargetId
+        if (targetId != null &&
+          ((snap.phase == RunnerPhase.IDLE && runnerSetupJob?.isActive == true) ||
+            snap.phase == RunnerPhase.COMPLETED ||
+            snap.phase == RunnerPhase.FAILED ||
+            snap.phase == RunnerPhase.STOPPED)
+        ) {
+          when (uiState.value.mode) {
+            OverlayMode.RUNNER_SCRIPT ->
+              startScriptRunnerMode(targetId, autoStart = true, initialSingleStep = true)
+            OverlayMode.RUNNER_PIPELINE ->
+              startPipelineRunnerMode(targetId, autoStart = true, initialSingleStep = true)
+            else -> Unit
+          }
+        } else {
+          runnerControlHub.requestNextStep()
+        }
       }
 
       override fun onStopExecution() {
@@ -364,6 +414,7 @@ class OverlayService :
           }
           OverlayMode.GESTURE_PICKER -> cancelPickerAndReturnToApp()
           else -> {
+            runnerSetupJob?.cancel()
             runnerControlHub.stopExecution()
             closeOverlayService()
           }
@@ -393,7 +444,9 @@ class OverlayService :
 
   override fun onCreate() {
     super.onCreate()
+    isClosingService = false
     isServiceRunning = true
+    overlayStateBridge.setOverlayRunning(true)
     savedStateController.performRestore(Bundle())
     lifecycleRegistry.currentState = Lifecycle.State.CREATED
     lifecycleRegistry.currentState = Lifecycle.State.STARTED
@@ -452,22 +505,21 @@ class OverlayService :
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     when (intent?.action) {
-      ACTION_CLOSE -> {
-        runnerControlHub.stopExecution()
-        closeOverlayService()
-      }
+      ACTION_CLOSE -> handleExternalOrSystemClose()
 
       ACTION_START_SCRIPT -> {
         val scriptId = intent.getStringExtra(EXTRA_TARGET_ID)
         if (!scriptId.isNullOrBlank()) {
-          startScriptRunnerMode(scriptId)
+          val autoStart = intent.getBooleanExtra(EXTRA_AUTO_START, true)
+          startScriptRunnerMode(scriptId, autoStart = autoStart)
         }
       }
 
       ACTION_START_PIPELINE -> {
         val pipelineId = intent.getStringExtra(EXTRA_TARGET_ID)
         if (!pipelineId.isNullOrBlank()) {
-          startPipelineRunnerMode(pipelineId)
+          val autoStart = intent.getBooleanExtra(EXTRA_AUTO_START, true)
+          startPipelineRunnerMode(pipelineId, autoStart = autoStart)
         }
       }
 
@@ -493,6 +545,8 @@ class OverlayService :
 
   override fun onDestroy() {
     isServiceRunning = false
+    overlayStateBridge.setOverlayRunning(false)
+    runnerSetupJob?.cancel()
     runnerControlHub.stopExecution()
     accessibilityBridge.forceReleaseActiveStroke()
     stopMediaProjectionIfNotStreamingToDesktop()
@@ -664,8 +718,15 @@ class OverlayService :
     runCatching { windowManager.updateViewLayout(view, params) }
   }
 
-  private fun startScriptRunnerMode(scriptId: String) {
+  private fun startScriptRunnerMode(
+    scriptId: String,
+    autoStart: Boolean = true,
+    startPaused: Boolean = false,
+    initialSingleStep: Boolean = false,
+  ) {
+    runnerSetupJob?.cancel()
     activeRunnerTargetId = scriptId
+    runnerControlHub.clearToIdle(isPipeline = false)
     setCaptureLayerInterceptable(visible = false, interceptable = false)
     uiState.update {
       it.copy(
@@ -678,18 +739,34 @@ class OverlayService :
         statusHint = null,
       )
     }
-    serviceScope.launch {
-      val script = scriptRepository.getScriptById(scriptId)
-      if (script == null) {
-        uiState.update { it.copy(statusHint = "Script not found") }
-        return@launch
+    runnerSetupJob =
+      serviceScope.launch {
+        val script = scriptRepository.getScriptById(scriptId)
+        if (script == null) {
+          uiState.update { it.copy(statusHint = "Script not found") }
+          return@launch
+        }
+        if (autoStart) {
+          automationRunnerEngine.startScript(
+            script = script,
+            startPaused = startPaused,
+            initialSingleStep = initialSingleStep,
+          )
+        } else {
+          automationRunnerEngine.prepareStandbyScript(script)
+        }
       }
-      automationRunnerEngine.startScript(script)
-    }
   }
 
-  private fun startPipelineRunnerMode(pipelineId: String) {
+  private fun startPipelineRunnerMode(
+    pipelineId: String,
+    autoStart: Boolean = true,
+    startPaused: Boolean = false,
+    initialSingleStep: Boolean = false,
+  ) {
+    runnerSetupJob?.cancel()
     activeRunnerTargetId = pipelineId
+    runnerControlHub.clearToIdle(isPipeline = true)
     setCaptureLayerInterceptable(visible = false, interceptable = false)
     uiState.update {
       it.copy(
@@ -702,14 +779,23 @@ class OverlayService :
         statusHint = null,
       )
     }
-    serviceScope.launch {
-      val pipeline = pipelineRepository.getPipelineById(pipelineId)
-      if (pipeline == null) {
-        uiState.update { it.copy(statusHint = "Pipeline not found") }
-        return@launch
+    runnerSetupJob =
+      serviceScope.launch {
+        val pipeline = pipelineRepository.getPipelineById(pipelineId)
+        if (pipeline == null) {
+          uiState.update { it.copy(statusHint = "Pipeline not found") }
+          return@launch
+        }
+        if (autoStart) {
+          pipelineExecutionEngine.startPipeline(
+            pipeline = pipeline,
+            startPaused = startPaused,
+            initialSingleStep = initialSingleStep,
+          )
+        } else {
+          pipelineExecutionEngine.prepareStandbyPipeline(pipeline)
+        }
       }
-      pipelineExecutionEngine.startPipeline(pipeline)
-    }
   }
 
   private fun startGesturePickerMode(requestId: String, targetType: GesturePickerTargetType) {
@@ -1462,20 +1548,34 @@ class OverlayService :
       )
     }
 
+    if (closeAfter && captured.isEmpty()) {
+      closeOverlayService()
+      return
+    }
+
+    if (closeAfter) {
+      isClosingService = true
+      isServiceRunning = false
+      overlayStateBridge.setOverlayRunning(false)
+      detachOverlayWindowsAndListeners()
+    }
+
     serviceScope.launch {
       var savedTitle: String? = null
       if (captured.isNotEmpty()) {
-        val stamp = SimpleDateFormat("MMM dd HH:mm", Locale.US).format(Date())
-        savedTitle = "Recorded Script $stamp"
-        scriptRepository.saveScript(
-          Script(
-            id = UUID.randomUUID().toString(),
-            title = savedTitle,
-            description = "Captured via Floating Recorder",
-            tags = listOf("recorded"),
-            actions = captured,
-          ),
-        )
+        withContext(NonCancellable) {
+          val stamp = SimpleDateFormat("MMM dd HH:mm", Locale.US).format(Date())
+          savedTitle = "Recorded Script $stamp"
+          scriptRepository.saveScript(
+            Script(
+              id = UUID.randomUUID().toString(),
+              title = savedTitle!!,
+              description = "Captured via Floating Recorder",
+              tags = listOf("recorded"),
+              actions = captured,
+            ),
+          )
+        }
       }
       if (closeAfter) {
         closeOverlayService()
@@ -1493,13 +1593,56 @@ class OverlayService :
   }
 
   private fun cancelPickerAndReturnToApp() {
-    gesturePickerBridge.cancelPendingPick()
+    if (gesturePickerBridge.pickedResult.value == null) {
+      gesturePickerBridge.cancelPendingPick()
+    }
     setCaptureLayerInterceptable(visible = false, interceptable = false)
     bringMainActivityToFrontPreservingState()
     closeOverlayService()
   }
 
+  private fun handleExternalOrSystemClose() {
+    if (isClosingService) return
+    isClosingService = true
+    runnerSetupJob?.cancel()
+    runnerControlHub.stopExecution()
+    accessibilityBridge.forceReleaseActiveStroke()
+    stopMediaProjectionIfNotStreamingToDesktop()
+    when (uiState.value.mode) {
+      OverlayMode.LIVE_RECORDER -> {
+        if (recordedActions.isNotEmpty()) {
+          isServiceRunning = false
+          overlayStateBridge.setOverlayRunning(false)
+          detachOverlayWindowsAndListeners()
+          stopRecorderAndSaveSession(closeAfter = true)
+        } else {
+          closeOverlayService()
+        }
+      }
+
+      OverlayMode.GESTURE_PICKER -> {
+        if (gesturePickerBridge.pickedResult.value == null) {
+          gesturePickerBridge.cancelPendingPick()
+        }
+        closeOverlayService()
+      }
+
+      OverlayMode.LIVE_INSPECTOR -> {
+        activeInspectGroupId = null
+        activeInspectGroupTitle = null
+        inspectGroupPersisted = false
+        closeOverlayService()
+      }
+
+      else -> closeOverlayService()
+    }
+  }
+
   private fun closeOverlayService() {
+    isClosingService = true
+    isServiceRunning = false
+    overlayStateBridge.setOverlayRunning(false)
+    runnerSetupJob?.cancel()
     runnerControlHub.stopExecution()
     accessibilityBridge.forceReleaseActiveStroke()
     stopMediaProjectionIfNotStreamingToDesktop()

@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.ThemePaletteOption
 import com.tapflow.core.model.common.OverlaySizeOption
+import com.tapflow.core.model.common.RunnerLaunchMode
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.TrialStatus
 
@@ -201,8 +202,34 @@ fun SettingsTabContent(
                 )
               }
             }
+          }
+        }
+      }
 
-            HorizontalDivider()
+      item(key = "floating_overlay_card") {
+        Card(
+          modifier = Modifier.fillMaxWidth().testTag("settings_floating_overlay_card"),
+          colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        ) {
+          Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              Icon(
+                imageVector = Icons.Filled.TouchApp,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+              )
+              Text(
+                text = "Floating Overlay",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+              )
+            }
 
             Text(
               text = "Overlay Size",
@@ -282,6 +309,48 @@ fun SettingsTabContent(
                 }
               }
             }
+
+            HorizontalDivider()
+
+            Text(
+              text = "Runner Launch Behavior",
+              style = MaterialTheme.typography.labelLarge,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+              verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+              RunnerLaunchMode.entries.forEach { mode ->
+                FilterChip(
+                  selected = state.preferences.runnerLaunchMode == mode,
+                  onClick = { onIntent(HomeUiIntent.SetRunnerLaunchMode(mode)) },
+                  label = {
+                    Text(
+                      when (mode) {
+                        RunnerLaunchMode.ASK_EVERY_TIME -> "Ask Every Time"
+                        RunnerLaunchMode.STANDBY -> "Standby"
+                        RunnerLaunchMode.AUTO_START -> "Auto-Start"
+                      },
+                    )
+                  },
+                  modifier = Modifier.testTag("runner_launch_mode_${mode.name.lowercase()}"),
+                )
+              }
+            }
+            Text(
+              text =
+                when (state.preferences.runnerLaunchMode) {
+                  RunnerLaunchMode.ASK_EVERY_TIME ->
+                    "Prompts to choose Standby or Start Immediately whenever you tap ▶."
+                  RunnerLaunchMode.STANDBY ->
+                    "Opens floating controls paused so you can navigate to your target app first."
+                  RunnerLaunchMode.AUTO_START ->
+                    "Begins executing actions immediately upon opening the floating runner."
+                },
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
           }
         }
       }

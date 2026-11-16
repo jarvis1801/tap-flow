@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.tapflow.core.model.common.OverlaySizeOption
+import com.tapflow.core.model.common.RunnerLaunchMode
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -26,6 +27,7 @@ class TapFlowPreferencesRepository @Inject constructor(
     val DARK_MODE = stringPreferencesKey("dark_mode_option")
     val THEME_PALETTE = stringPreferencesKey("theme_palette_option")
     val OVERLAY_SIZE = stringPreferencesKey("overlay_size_option")
+    val RUNNER_LAUNCH_MODE = stringPreferencesKey("runner_launch_mode")
     val KTOR_PORT = intPreferencesKey("ktor_server_port")
 
     val SHIZUKU_SHELL_INPUT = booleanPreferencesKey("shizuku_shell_input_injection")
@@ -74,11 +76,16 @@ class TapFlowPreferencesRepository @Inject constructor(
       val overlaySize =
         OverlaySizeOption.entries.firstOrNull { it.name == rawOverlaySize }
           ?: OverlaySizeOption.COMPACT
+      val rawRunnerLaunchMode = prefs[Keys.RUNNER_LAUNCH_MODE]
+      val runnerLaunchMode =
+        RunnerLaunchMode.entries.firstOrNull { it.name == rawRunnerLaunchMode }
+          ?: RunnerLaunchMode.ASK_EVERY_TIME
       AppPreferences(
         hasCompletedPermissionOnboarding = prefs[Keys.HAS_COMPLETED_ONBOARDING] ?: false,
         darkMode = darkMode,
         themePalette = themePalette,
         overlaySize = overlaySize,
+        runnerLaunchMode = runnerLaunchMode,
         ktorPort = (prefs[Keys.KTOR_PORT] ?: AppPreferences.DEFAULT_KTOR_PORT).coerceIn(1024, 65535),
         shizuku =
           ShizukuPreferences(
@@ -134,6 +141,10 @@ class TapFlowPreferencesRepository @Inject constructor(
 
   suspend fun setOverlaySize(option: OverlaySizeOption) {
     dataStore.edit { prefs -> prefs[Keys.OVERLAY_SIZE] = option.name }
+  }
+
+  suspend fun setRunnerLaunchMode(mode: RunnerLaunchMode) {
+    dataStore.edit { prefs -> prefs[Keys.RUNNER_LAUNCH_MODE] = mode.name }
   }
 
   suspend fun setKtorPort(port: Int) {

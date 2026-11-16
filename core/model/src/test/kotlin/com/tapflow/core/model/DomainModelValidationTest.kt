@@ -4,6 +4,7 @@ import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
 import com.tapflow.core.model.common.OverlaySizeOption
+import com.tapflow.core.model.common.RunnerLaunchMode
 import com.tapflow.core.model.condition.ColorMatchMode
 import com.tapflow.core.model.condition.ColorTarget
 import com.tapflow.core.model.condition.ConditionGroup
@@ -334,5 +335,22 @@ class DomainModelValidationTest {
 
     val proGates = EntitlementValidator.detectProFeaturesInScript(script)
     assertEquals(setOf(ProFeatureGate.ADVANCED_VISION), proGates)
+  }
+
+  @Test
+  fun runnerLaunchModeEntriesAndSerialization() {
+    assertEquals(
+      listOf(
+        RunnerLaunchMode.ASK_EVERY_TIME,
+        RunnerLaunchMode.STANDBY,
+        RunnerLaunchMode.AUTO_START,
+      ),
+      RunnerLaunchMode.entries,
+    )
+    RunnerLaunchMode.entries.forEach { mode ->
+      val encoded = json.encodeToString(RunnerLaunchMode.serializer(), mode)
+      val decoded = json.decodeFromString(RunnerLaunchMode.serializer(), encoded)
+      assertEquals(mode, decoded)
+    }
   }
 }

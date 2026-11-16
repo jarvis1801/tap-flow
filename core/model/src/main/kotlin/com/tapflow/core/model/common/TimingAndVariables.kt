@@ -163,3 +163,11 @@ enum class OverlaySizeOption(
     paddingDp = 6,
   ),
 }
+
+@Serializable
+enum class RunnerLaunchMode {
+  ASK_EVERY_TIME,
+  STANDBY,
+  AUTO_START,
+}
+

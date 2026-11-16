@@ -31,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,20 +52,85 @@ class PipelineExecutionEngine @Inject constructor(
 ) {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-  fun startPipeline(pipeline: Pipeline): Job {
+  @Volatile
+  private var activeJob: Job? = null
+
+  @Volatile
+  private var standbyPipeline: Pipeline? = null
+
+  @Volatile
+  private var standbyVariables: VariableRuntimeStore? = null
+
+  suspend fun prepareStandbyPipeline(pipeline: Pipeline) {
+    val prevJob = activeJob
+    controlHub.stopExecution()
+    prevJob?.cancelAndJoin()
+    activeJob = null
+    standbyPipeline = pipeline
+    standbyVariables =
+      VariableRuntimeStore(
+        clipboardReader = { backgroundClipboardManager.readClipboardText() },
+      )
+    val firstStep = pipeline.steps.firstOrNull()
+    val firstScript = firstStep?.let { scriptRepository.getScriptById(it.scriptId) }
+    val totalSteps = pipeline.steps.size
+    val firstRepeatTotal = firstStep?.repeatCount?.coerceAtLeast(1) ?: 0
+    controlHub.registerStandby(
+      snapshot =
+        RunnerExecutionSnapshot(
+          phase = RunnerPhase.IDLE,
+          title =
+            if (firstScript != null) "${pipeline.title} • ${firstScript.title}"
+            else pipeline.title,
+          isPipeline = true,
+          currentTopLevelAction = 0,
+          totalTopLevelActions = firstScript?.actions?.size ?: 0,
+          currentPipelineStep = if (totalSteps > 0) 1 else 0,
+          totalPipelineSteps = totalSteps,
+          currentStepIteration = if (totalSteps > 0) 1 else 0,
+          totalStepIterations = firstRepeatTotal,
+          pipelineCycle = if (totalSteps > 0) 1 else 0,
+        ),
+      onPlay = { startPipeline(pipeline, startPaused = false, initialSingleStep = false) },
+      onPreviousStep = { startPipeline(pipeline, startPaused = true, initialSingleStep = false) },
+      onNextStep = { startPipeline(pipeline, startPaused = false, initialSingleStep = true) },
+    )
+  }
+
+  fun startPipeline(pipeline: Pipeline): Job =
+    startPipeline(pipeline = pipeline, startPaused = false, initialSingleStep = false)
+
+  fun startPipeline(
+    pipeline: Pipeline,
+    startPaused: Boolean = false,
+    initialSingleStep: Boolean = false,
+  ): Job {
+    val prevJob = activeJob
     controlHub.stopExecution()
     val job =
       scope.launch {
-        executePipelineSession(pipeline)
+        prevJob?.cancelAndJoin()
+        executePipelineSession(
+          pipeline = pipeline,
+          startPaused = startPaused,
+          initialSingleStep = initialSingleStep,
+        )
       }
+    activeJob = job
     return job
   }
 
-  private suspend fun executePipelineSession(pipeline: Pipeline) {
+  private suspend fun executePipelineSession(
+    pipeline: Pipeline,
+    startPaused: Boolean = false,
+    initialSingleStep: Boolean = false,
+  ) {
     val wasTriggeredExternally = controlHub.consumeExternalTriggerPending()
     val allScripts = scriptRepository.getAllScripts().associateBy { it.id }
     val blockers = entitlementRepository.detectPipelineProBlockers(pipeline, allScripts)
     if (blockers.isNotEmpty()) {
+      standbyPipeline = null
+      standbyVariables = null
       controlHub.clearSession(
         RunnerExecutionSnapshot(
           phase = RunnerPhase.PAYWALL_BLOCKED,
@@ -93,8 +159,17 @@ class PipelineExecutionEngine @Inject constructor(
       return
     }
 
+    val preparedVars =
+      if (standbyPipeline?.id == pipeline.id) {
+        standbyVariables
+      } else {
+        null
+      }
+    standbyPipeline = null
+    standbyVariables = null
+
     val currentJob = coroutineContext[Job]!!
-    controlHub.registerSession(currentJob) {
+    controlHub.registerSession(currentJob, startPaused = startPaused) {
       scope.launch { accessibilityBridge.releaseActivePress() }
     }
 
@@ -102,9 +177,12 @@ class PipelineExecutionEngine @Inject constructor(
     val prefs = preferencesRepository.getPreferencesOnce()
     // Single non-resetting VariableRuntimeStore retained for the entire pipeline session
     val sharedVariables =
-      VariableRuntimeStore(
-        clipboardReader = { backgroundClipboardManager.readClipboardText() },
-      )
+      preparedVars
+        ?: VariableRuntimeStore(
+          clipboardReader = { backgroundClipboardManager.readClipboardText() },
+        )
+
+    var pendingInitialSingleStep = initialSingleStep
 
     val stepRunLogs = mutableListOf<PipelineStepRunLog>()
     var pipelineStatus = ExecutionStatus.SUCCESS
@@ -170,12 +248,15 @@ class PipelineExecutionEngine @Inject constructor(
               )
             }
 
+            val useInitialSingleStep = pendingInitialSingleStep
+            pendingInitialSingleStep = false
             val stepLog =
               automationRunnerEngine.runScriptInternal(
                 script = script,
                 variables = sharedVariables,
                 isPipelineChild = true,
                 recordStandaloneLog = false,
+                initialSingleStep = useInitialSingleStep,
               )
 
             stepRunLogs +=

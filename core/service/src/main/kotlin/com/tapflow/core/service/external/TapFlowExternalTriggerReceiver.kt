@@ -181,7 +181,12 @@ class TapFlowExternalTriggerReceiver : BroadcastReceiver() {
         }
 
         runnerControlHub.markExternalTriggerPending()
-        val overlayIntent = OverlayLaunchIntents.createRunnerScriptIntent(context, script.id)
+        val overlayIntent =
+          OverlayLaunchIntents.createRunnerScriptIntent(
+            context = context,
+            scriptId = script.id,
+            autoStart = true,
+          )
         val launchResult = startOverlayServiceSafely(context, overlayIntent)
         if (launchResult.isFailure) {
           runnerControlHub.consumeExternalTriggerPending()
@@ -224,7 +229,12 @@ class TapFlowExternalTriggerReceiver : BroadcastReceiver() {
         }
 
         runnerControlHub.markExternalTriggerPending()
-        val overlayIntent = OverlayLaunchIntents.createRunnerPipelineIntent(context, pipeline.id)
+        val overlayIntent =
+          OverlayLaunchIntents.createRunnerPipelineIntent(
+            context = context,
+            pipelineId = pipeline.id,
+            autoStart = true,
+          )
         val launchResult = startOverlayServiceSafely(context, overlayIntent)
         if (launchResult.isFailure) {
           runnerControlHub.consumeExternalTriggerPending()

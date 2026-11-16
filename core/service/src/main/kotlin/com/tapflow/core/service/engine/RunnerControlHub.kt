@@ -72,6 +72,15 @@ class RunnerControlHub @Inject constructor() {
   private var stopCallback: (() -> Unit)? = null
 
   @Volatile
+  private var standbyPlayCallback: (() -> Unit)? = null
+
+  @Volatile
+  private var standbyPrevCallback: (() -> Unit)? = null
+
+  @Volatile
+  private var standbyNextCallback: (() -> Unit)? = null
+
+  @Volatile
   private var externalTriggerPending: Boolean = false
 
   private val commandChannel = Channel<RunnerStepCommand>(Channel.UNLIMITED)
@@ -88,14 +97,53 @@ class RunnerControlHub @Inject constructor() {
     return wasPending
   }
 
-  fun registerSession(job: Job, onStopRequested: () -> Unit) {
+  fun clearToIdle(isPipeline: Boolean = false) {
+    standbyPlayCallback = null
+    standbyPrevCallback = null
+    standbyNextCallback = null
+    stopCallback?.invoke()
+    activeSessionJob?.cancel()
+    activeSessionJob = null
+    stopCallback = null
+    _isPaused.value = false
+    drainCommands()
+    _snapshot.value = RunnerExecutionSnapshot(phase = RunnerPhase.IDLE, isPipeline = isPipeline)
+  }
+
+  fun registerStandby(
+    snapshot: RunnerExecutionSnapshot,
+    onPlay: () -> Unit,
+    onPreviousStep: () -> Unit,
+    onNextStep: () -> Unit,
+  ) {
+    activeSessionJob = null
+    stopCallback = null
+    _isPaused.value = false
+    drainCommands()
+    standbyPlayCallback = onPlay
+    standbyPrevCallback = onPreviousStep
+    standbyNextCallback = onNextStep
+    _snapshot.value = snapshot
+  }
+
+  fun registerSession(
+    job: Job,
+    startPaused: Boolean = false,
+    onStopRequested: () -> Unit,
+  ) {
+    standbyPlayCallback = null
+    standbyPrevCallback = null
+    standbyNextCallback = null
     activeSessionJob = job
     stopCallback = onStopRequested
-    _isPaused.value = false
+    _isPaused.value = startPaused
     drainCommands()
   }
 
   fun clearSession(finalSnapshot: RunnerExecutionSnapshot) {
+    standbyPlayCallback = null
+    standbyPrevCallback = null
+    standbyNextCallback = null
     activeSessionJob = null
     stopCallback = null
     _isPaused.value = false
@@ -111,6 +159,13 @@ class RunnerControlHub @Inject constructor() {
   }
 
   fun play() {
+    if (activeSessionJob == null && _snapshot.value.phase == RunnerPhase.IDLE) {
+      val cb = standbyPlayCallback
+      if (cb != null) {
+        cb.invoke()
+        return
+      }
+    }
     _isPaused.value = false
     _snapshot.update {
       if (it.phase == RunnerPhase.PAUSED) it.copy(phase = RunnerPhase.RUNNING, statusMessage = null)
@@ -130,20 +185,37 @@ class RunnerControlHub @Inject constructor() {
   }
 
   fun togglePlayPause() {
-    if (_isPaused.value) play() else pause()
+    if (_isPaused.value || (activeSessionJob == null && _snapshot.value.phase == RunnerPhase.IDLE)) {
+      play()
+    } else {
+      pause()
+    }
   }
 
   fun requestPreviousStep() {
-    if (activeSessionJob == null) return
+    if (activeSessionJob == null) {
+      if (_snapshot.value.phase == RunnerPhase.IDLE) {
+        standbyPrevCallback?.invoke()
+      }
+      return
+    }
     commandChannel.trySend(RunnerStepCommand.PreviousTopLevel)
   }
 
   fun requestNextStep() {
-    if (activeSessionJob == null) return
+    if (activeSessionJob == null) {
+      if (_snapshot.value.phase == RunnerPhase.IDLE) {
+        standbyNextCallback?.invoke()
+      }
+      return
+    }
     commandChannel.trySend(RunnerStepCommand.NextSingleStep)
   }
 
   fun stopExecution() {
+    standbyPlayCallback = null
+    standbyPrevCallback = null
+    standbyNextCallback = null
     stopCallback?.invoke()
     activeSessionJob?.cancel()
     _isPaused.value = false

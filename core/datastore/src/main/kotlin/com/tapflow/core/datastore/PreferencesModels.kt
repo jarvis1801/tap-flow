@@ -2,6 +2,7 @@ package com.tapflow.core.datastore
 
 import androidx.compose.runtime.Immutable
 import com.tapflow.core.model.common.OverlaySizeOption
+import com.tapflow.core.model.common.RunnerLaunchMode
 
 enum class DarkModeOption {
   SYSTEM,
@@ -46,6 +47,7 @@ data class AppPreferences(
   val darkMode: DarkModeOption = DarkModeOption.SYSTEM,
   val themePalette: ThemePaletteOption = ThemePaletteOption.DYNAMIC_MATERIAL_YOU,
   val overlaySize: OverlaySizeOption = OverlaySizeOption.COMPACT,
+  val runnerLaunchMode: RunnerLaunchMode = RunnerLaunchMode.ASK_EVERY_TIME,
   val ktorPort: Int = DEFAULT_KTOR_PORT,
   val shizuku: ShizukuPreferences = ShizukuPreferences(),
   val dockPosition: FloatingDockPosition = FloatingDockPosition(),

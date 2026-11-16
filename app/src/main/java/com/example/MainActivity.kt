@@ -53,6 +53,7 @@ import com.tapflow.core.service.accessibility.TapFlowAccessibilityService
 import com.tapflow.core.service.external.ExternalBroadcastContract
 import com.tapflow.core.service.overlay.GesturePickerBridge
 import com.tapflow.core.service.overlay.OverlayLaunchIntents
+import com.tapflow.core.service.overlay.OverlayStateBridge
 import com.tapflow.core.service.projection.MediaProjectionBridge
 import com.tapflow.feature.editor.PipelineEditorScreen
 import com.tapflow.feature.editor.ScriptEditorScreen
@@ -79,6 +80,7 @@ class MainActivity : AppCompatActivity() {
   @Inject lateinit var preferencesRepository: TapFlowPreferencesRepository
   @Inject lateinit var mediaProjectionBridge: MediaProjectionBridge
   @Inject lateinit var gesturePickerBridge: GesturePickerBridge
+  @Inject lateinit var overlayStateBridge: OverlayStateBridge
 
   private companion object {
     const val PREF_WINDOW_BG_CACHE = "tapflow_window_bg_cache"
@@ -90,6 +92,7 @@ class MainActivity : AppCompatActivity() {
 
   private var pendingProjectionTarget: PendingMediaProjectionTarget? = null
   private var pendingProjectionDeniedCallback: (() -> Unit)? = null
+  private var isAwaitingProjectionResult: Boolean = false
   private var deepLinkTabSeq = 0
   private val deepLinkTabRequest = MutableStateFlow<Pair<HomeTab, Int>?>(null)
 
@@ -99,6 +102,7 @@ class MainActivity : AppCompatActivity() {
       val onDenied = pendingProjectionDeniedCallback
       pendingProjectionTarget = null
       pendingProjectionDeniedCallback = null
+      isAwaitingProjectionResult = false
       val data = result.data
       if (result.resultCode == Activity.RESULT_OK && data != null && target != null) {
         val projectionIntent =
@@ -108,6 +112,7 @@ class MainActivity : AppCompatActivity() {
             resultData = data,
           )
         ContextCompat.startForegroundService(this, projectionIntent)
+        overlayStateBridge.suppressAutoCloseBriefly()
         launchOverlayForTarget(target)
         moveTaskToBack(true)
       } else {
@@ -260,6 +265,11 @@ class MainActivity : AppCompatActivity() {
     }
   }
 
+  override fun onStart() {
+    super.onStart()
+    autoCloseActiveOverlayIfReturningToApp()
+  }
+
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
@@ -274,6 +284,7 @@ class MainActivity : AppCompatActivity() {
     ) {
       gesturePickerBridge.cancelPendingPick()
     }
+    autoCloseActiveOverlayIfReturningToApp()
   }
 
   private fun extractRequestedHomeTab(intent: Intent?): HomeTab? {
@@ -292,6 +303,18 @@ class MainActivity : AppCompatActivity() {
     }
   }
 
+  override fun onStop() {
+    overlayStateBridge.clearAutoCloseSuppression()
+    super.onStop()
+  }
+
+  private fun autoCloseActiveOverlayIfReturningToApp() {
+    if (isAwaitingProjectionResult || pendingProjectionTarget != null) return
+    if (overlayStateBridge.shouldAutoCloseOnForeground()) {
+      runCatching { startService(OverlayLaunchIntents.createCloseIntent(this)) }
+    }
+  }
+
   private fun requestMediaProjectionForTarget(
     target: PendingMediaProjectionTarget,
     onDenied: () -> Unit,
@@ -303,6 +326,7 @@ class MainActivity : AppCompatActivity() {
     }
     pendingProjectionTarget = target
     pendingProjectionDeniedCallback = onDenied
+    isAwaitingProjectionResult = true
     mediaProjectionLauncher.launch(mediaProjectionBridge.createWholeScreenCaptureIntent(manager))
   }
 
@@ -310,9 +334,17 @@ class MainActivity : AppCompatActivity() {
     val overlayIntent =
       when (target) {
         is PendingMediaProjectionTarget.RunScript ->
-          OverlayLaunchIntents.createRunnerScriptIntent(this, target.scriptId)
+          OverlayLaunchIntents.createRunnerScriptIntent(
+            context = this,
+            scriptId = target.scriptId,
+            autoStart = target.autoStart,
+          )
         is PendingMediaProjectionTarget.RunPipeline ->
-          OverlayLaunchIntents.createRunnerPipelineIntent(this, target.pipelineId)
+          OverlayLaunchIntents.createRunnerPipelineIntent(
+            context = this,
+            pipelineId = target.pipelineId,
+            autoStart = target.autoStart,
+          )
         PendingMediaProjectionTarget.LiveRecorder ->
           OverlayLaunchIntents.createLiveRecorderIntent(this)
         PendingMediaProjectionTarget.LiveInspector ->

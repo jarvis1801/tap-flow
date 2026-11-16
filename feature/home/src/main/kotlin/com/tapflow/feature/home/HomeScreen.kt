@@ -146,6 +146,7 @@ fun HomeScreen(
       if (result.resultCode == Activity.RESULT_OK && data != null && target != null) {
         val projIntent = mediaProjectionBridge.createStartIntent(context, result.resultCode, data)
         ContextCompat.startForegroundService(context, projIntent)
+        viewModel.suppressOverlayAutoCloseBriefly()
         launchOverlayForTarget(context, target)
         (context as? Activity)?.moveTaskToBack(true)
       } else {
@@ -206,6 +207,7 @@ fun HomeScreen(
           }
         }
         is HomeUiEffect.LaunchOverlayAndMinimize -> {
+          viewModel.suppressOverlayAutoCloseBriefly()
           launchOverlayForTarget(context, effect.target)
           (context as? Activity)?.moveTaskToBack(true)
         }
@@ -547,9 +549,17 @@ private fun launchOverlayForTarget(
   val overlayIntent =
     when (target) {
       is PendingMediaProjectionTarget.RunScript ->
-        OverlayLaunchIntents.createRunnerScriptIntent(context, target.scriptId)
+        OverlayLaunchIntents.createRunnerScriptIntent(
+          context = context,
+          scriptId = target.scriptId,
+          autoStart = target.autoStart,
+        )
       is PendingMediaProjectionTarget.RunPipeline ->
-        OverlayLaunchIntents.createRunnerPipelineIntent(context, target.pipelineId)
+        OverlayLaunchIntents.createRunnerPipelineIntent(
+          context = context,
+          pipelineId = target.pipelineId,
+          autoStart = target.autoStart,
+        )
       PendingMediaProjectionTarget.LiveRecorder ->
         OverlayLaunchIntents.createLiveRecorderIntent(context)
       PendingMediaProjectionTarget.LiveInspector ->

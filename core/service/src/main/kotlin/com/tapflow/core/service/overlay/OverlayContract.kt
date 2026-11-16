@@ -108,16 +108,26 @@ abstract class OverlayOptionalModule {
 }
 
 object OverlayLaunchIntents {
-  fun createRunnerScriptIntent(context: Context, scriptId: String): Intent =
+  fun createRunnerScriptIntent(
+    context: Context,
+    scriptId: String,
+    autoStart: Boolean = true,
+  ): Intent =
     Intent(context, OverlayService::class.java).apply {
       action = OverlayService.ACTION_START_SCRIPT
       putExtra(OverlayService.EXTRA_TARGET_ID, scriptId)
+      putExtra(OverlayService.EXTRA_AUTO_START, autoStart)
     }
 
-  fun createRunnerPipelineIntent(context: Context, pipelineId: String): Intent =
+  fun createRunnerPipelineIntent(
+    context: Context,
+    pipelineId: String,
+    autoStart: Boolean = true,
+  ): Intent =
     Intent(context, OverlayService::class.java).apply {
       action = OverlayService.ACTION_START_PIPELINE
       putExtra(OverlayService.EXTRA_TARGET_ID, pipelineId)
+      putExtra(OverlayService.EXTRA_AUTO_START, autoStart)
     }
 
   fun createGesturePickerIntent(

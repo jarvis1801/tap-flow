@@ -24,6 +24,7 @@ import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.script.Script
 import com.tapflow.core.service.accessibility.AccessibilityManagerBridge
 import com.tapflow.core.service.overlay.GesturePickerBridge
+import com.tapflow.core.service.overlay.OverlayStateBridge
 import com.tapflow.core.service.overlay.PickedGestureResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.UUID
@@ -47,6 +48,7 @@ class ScriptEditorViewModel @Inject constructor(
   private val entitlementRepository: EntitlementRepository,
   private val accessibilityManagerBridge: AccessibilityManagerBridge,
   private val gesturePickerBridge: GesturePickerBridge,
+  private val overlayStateBridge: OverlayStateBridge,
   private val installedAppsProvider: InstalledAppsProvider,
   private val flowPreviewBridge: ScriptFlowPreviewBridge,
 ) : ViewModel() {
@@ -565,6 +567,7 @@ class ScriptEditorViewModel @Inject constructor(
               ),
           )
         }
+        overlayStateBridge.suppressAutoCloseBriefly()
         sendEffect(
           ScriptEditorUiEffect.LaunchOverlayGesturePicker(
             requestId = requestId,
@@ -962,6 +965,10 @@ class ScriptEditorViewModel @Inject constructor(
       is ScriptAction.BooleanOp -> action.copy(id = id)
       is ScriptAction.TypeCastOp -> action.copy(id = id)
     }
+
+  fun suppressOverlayAutoCloseBriefly() {
+    overlayStateBridge.suppressAutoCloseBriefly()
+  }
 
   private fun sendEffect(effect: ScriptEditorUiEffect) {
     viewModelScope.launch {
