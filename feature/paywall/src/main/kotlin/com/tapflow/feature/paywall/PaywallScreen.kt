@@ -3,7 +3,9 @@ package com.tapflow.feature.paywall
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -21,11 +23,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Verified
@@ -43,12 +50,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,13 +67,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tapflow.core.billing.DiscountReason
 import com.tapflow.core.billing.EntitlementRepository
+import com.tapflow.core.billing.PaywallPricingState
+import com.tapflow.core.billing.ProductOfferInfo
 import com.tapflow.core.model.entitlement.EntitlementState
+import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.entitlement.TrialStatus
 import kotlinx.coroutines.launch
 
@@ -154,10 +170,10 @@ fun PaywallScreen(
   LaunchedEffect(viewModel) {
     viewModel.effects.collect { effect ->
       when (effect) {
-        PaywallUiEffect.LaunchPlayBillingFlow -> {
+        is PaywallUiEffect.LaunchPlayBillingFlow -> {
           val activity = context.findActivity()
           if (activity != null) {
-            entitlementRepository.launchLifetimePurchase(activity)
+            entitlementRepository.launchLifetimePurchase(activity, effect.targetSku)
           } else {
             launch {
               snackbarHostState.currentSnackbarData?.dismiss()
@@ -269,6 +285,19 @@ fun PaywallContent(
           PaywallHeroCard(state = state)
         }
 
+        if (!state.isProOwned) {
+          item(key = "pricing_offer_card") {
+            PaywallPricingOfferCard(pricingState = state.pricingState)
+          }
+
+          item(key = "promo_redeem_card") {
+            PaywallPromoCodeCard(
+              state = state,
+              onIntent = onIntent,
+            )
+          }
+        }
+
         if (!state.statusMessage.isNullOrBlank()) {
           item(key = "status_message") {
             Surface(
@@ -306,6 +335,301 @@ fun PaywallContent(
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
           )
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun PaywallPricingOfferCard(pricingState: PaywallPricingState) {
+  val regularPrice = pricingState.regularProduct?.formattedPrice
+  val promoPrice = pricingState.promoProduct?.formattedPrice
+
+  if (pricingState.showPromoPricing && promoPrice != null) {
+    val badgeTitle =
+      if (pricingState.discountReason == DiscountReason.PROMO_CODE_ACTIVE) {
+        "Promo Active"
+      } else {
+        "Special Offer"
+      }
+    val windowLabel =
+      when (pricingState.discountReason) {
+        DiscountReason.PROMO_CODE_ACTIVE ->
+          "Promo Code Active: ${pricingState.promoRemainingDays}d ${pricingState.promoRemainingHours}h left"
+        DiscountReason.TRIAL_NOT_STARTED,
+        DiscountReason.TRIAL_ACTIVE -> "7-Day Trial Offer"
+        DiscountReason.NONE -> ""
+      }
+
+    Card(
+      colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+      border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary),
+      modifier = Modifier.fillMaxWidth().testTag("paywall_promo_pricing_card"),
+    ) {
+      Column(
+        modifier = Modifier.padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            Surface(
+              shape = MaterialTheme.shapes.small,
+              color = MaterialTheme.colorScheme.primary,
+              contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+              ) {
+                Icon(
+                  imageVector = Icons.Filled.LocalOffer,
+                  contentDescription = null,
+                  modifier = Modifier.size(14.dp),
+                )
+                Text(
+                  text = badgeTitle,
+                  style = MaterialTheme.typography.labelMedium,
+                  fontWeight = FontWeight.Bold,
+                )
+              }
+            }
+            if (windowLabel.isNotBlank()) {
+              Text(
+                text = windowLabel,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.testTag("paywall_promo_window_label"),
+              )
+            }
+          }
+
+          pricingState.discountPercentOff?.let { pctOff ->
+            Surface(
+              shape = MaterialTheme.shapes.small,
+              color = MaterialTheme.colorScheme.tertiary,
+              contentColor = MaterialTheme.colorScheme.onTertiary,
+              modifier = Modifier.testTag("paywall_discount_percent_badge"),
+            ) {
+              Text(
+                text = "$pctOff% OFF",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+              )
+            }
+          }
+        }
+
+        Row(
+          verticalAlignment = Alignment.Bottom,
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+          if (!regularPrice.isNullOrBlank()) {
+            Text(
+              text = regularPrice,
+              style = MaterialTheme.typography.titleMedium,
+              color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.65f),
+              textDecoration = TextDecoration.LineThrough,
+              modifier = Modifier.padding(bottom = 3.dp).testTag("paywall_regular_price_strikethrough"),
+            )
+          }
+          Text(
+            text = promoPrice,
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.ExtraBold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.testTag("paywall_promo_price"),
+          )
+          Text(
+            text = "One-time lifetime unlock",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
+            modifier = Modifier.padding(bottom = 4.dp),
+          )
+        }
+      }
+    }
+  } else {
+    Card(
+      colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+      border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+      modifier = Modifier.fillMaxWidth().testTag("paywall_regular_pricing_card"),
+    ) {
+      Row(
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+          Text(
+            text = "Lifetime Pro License",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+          )
+          Text(
+            text = "One-time purchase • Standard price",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        Text(
+          text = regularPrice ?: "Loading…",
+          style = MaterialTheme.typography.headlineSmall,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.testTag("paywall_regular_price"),
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun PaywallPromoCodeCard(
+  state: PaywallUiState,
+  onIntent: (PaywallUiIntent) -> Unit,
+) {
+  Card(
+    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f)),
+    modifier = Modifier.fillMaxWidth(),
+  ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+      Row(
+        modifier =
+          Modifier
+            .fillMaxWidth()
+            .minimumInteractiveComponentSize()
+            .clickable { onIntent(PaywallUiIntent.TogglePromoSection) }
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .testTag("promo_code_toggle_row"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+      ) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+          Icon(
+            imageVector = Icons.Filled.LocalOffer,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp),
+          )
+          Text(
+            text = "Have a Promo / Redeem Code?",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+          )
+        }
+        Icon(
+          imageVector =
+            if (state.isPromoSectionExpanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+          contentDescription =
+            if (state.isPromoSectionExpanded) "Collapse promo code section" else "Expand promo code section",
+        )
+      }
+
+      AnimatedVisibility(visible = state.isPromoSectionExpanded) {
+        Column(
+          modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
+          verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+          Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            OutlinedTextField(
+              value = state.promoCodeInput,
+              onValueChange = { onIntent(PaywallUiIntent.UpdatePromoCodeInput(it)) },
+              label = { Text("Enter promo code") },
+              placeholder = { Text("e.g. LAUNCH50") },
+              singleLine = true,
+              enabled = !state.isRedeemingCode,
+              isError = !state.promoErrorMessage.isNullOrBlank(),
+              keyboardOptions =
+                KeyboardOptions(
+                  capitalization = KeyboardCapitalization.Characters,
+                  imeAction = ImeAction.Done,
+                ),
+              keyboardActions =
+                KeyboardActions(
+                  onDone = { onIntent(PaywallUiIntent.ApplyPromoCodeClicked) },
+                ),
+              modifier = Modifier.weight(1f).testTag("promo_code_input"),
+            )
+
+            FilledTonalButton(
+              onClick = { onIntent(PaywallUiIntent.ApplyPromoCodeClicked) },
+              enabled = !state.isRedeemingCode && state.promoCodeInput.isNotBlank(),
+              modifier = Modifier.heightIn(min = 52.dp).testTag("apply_promo_code_button"),
+            ) {
+              if (state.isRedeemingCode) {
+                CircularProgressIndicator(
+                  modifier = Modifier.size(18.dp),
+                  strokeWidth = 2.dp,
+                )
+              } else {
+                Text("Apply Code")
+              }
+            }
+          }
+
+          if (!state.promoErrorMessage.isNullOrBlank()) {
+            Text(
+              text = state.promoErrorMessage,
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.error,
+              modifier = Modifier.testTag("promo_code_error"),
+            )
+          }
+
+          val confirmationBanner =
+            state.promoSuccessMessage
+              ?: if (state.pricingState.discountReason == DiscountReason.PROMO_CODE_ACTIVE) {
+                val codeLabel = state.pricingState.activePromoCode ?: "Promo"
+                "Code $codeLabel applied! Special price unlocked (${state.pricingState.promoRemainingDays}d ${state.pricingState.promoRemainingHours}h left)"
+              } else {
+                null
+              }
+
+          if (!confirmationBanner.isNullOrBlank()) {
+            Surface(
+              shape = MaterialTheme.shapes.small,
+              color = MaterialTheme.colorScheme.primaryContainer,
+              modifier = Modifier.fillMaxWidth().testTag("promo_code_success"),
+            ) {
+              Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+              ) {
+                Icon(
+                  imageVector = Icons.Filled.CheckCircle,
+                  contentDescription = null,
+                  tint = MaterialTheme.colorScheme.primary,
+                  modifier = Modifier.size(18.dp),
+                )
+                Text(
+                  text = confirmationBanner,
+                  style = MaterialTheme.typography.bodySmall,
+                  fontWeight = FontWeight.SemiBold,
+                  color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+              }
+            }
+          }
         }
       }
     }
@@ -662,7 +986,7 @@ private fun PaywallActionFooter(
       }
 
       if (!state.isProOwned) {
-        val priceSuffix = state.formattedPrice?.let { " • $it" }.orEmpty()
+        val priceSuffix = state.effectiveFormattedPrice?.let { " • $it" }.orEmpty()
         Button(
           onClick = { onIntent(PaywallUiIntent.PurchaseLifetimeClicked) },
           enabled = !state.isProcessingAction && !state.isPendingPurchase,
@@ -707,13 +1031,22 @@ private fun PaywallActionFooter(
 
 @Preview(showBackground = true)
 @Composable
-private fun PaywallFreePreview() {
+private fun PaywallFreePromoPreview() {
   MaterialTheme {
     PaywallContent(
       state =
         PaywallUiState(
           entitlementState = EntitlementState.Free(TrialStatus.NOT_STARTED, 7),
-          formattedPrice = "$14.99",
+          pricingState =
+            PaywallPricingState(
+              regularProduct = ProductOfferInfo(EntitlementValidator.SKU_PRO_LIFETIME, "$14.99", 14_990_000L, "USD"),
+              promoProduct = ProductOfferInfo(EntitlementValidator.SKU_PRO_LIFETIME_PROMO, "$7.49", 7_490_000L, "USD"),
+              isDiscountEligible = true,
+              discountReason = DiscountReason.TRIAL_NOT_STARTED,
+              activeSku = EntitlementValidator.SKU_PRO_LIFETIME_PROMO,
+              discountPercentOff = 50,
+            ),
+          formattedPrice = "$7.49",
           sourceFeature = "Image Template Matching",
         ),
       snackbarHostState = SnackbarHostState(),
@@ -724,13 +1057,23 @@ private fun PaywallFreePreview() {
 
 @Preview(showBackground = true)
 @Composable
-private fun PaywallTrialPreview() {
+private fun PaywallExpiredRegularWithPromoCodePreview() {
   MaterialTheme {
     PaywallContent(
       state =
         PaywallUiState(
-          entitlementState = EntitlementState.ProTrial(0L, remainingDays = 5, remainingHours = 14),
+          entitlementState = EntitlementState.Free(TrialStatus.EXPIRED, 0),
+          pricingState =
+            PaywallPricingState(
+              regularProduct = ProductOfferInfo(EntitlementValidator.SKU_PRO_LIFETIME, "$14.99", 14_990_000L, "USD"),
+              promoProduct = ProductOfferInfo(EntitlementValidator.SKU_PRO_LIFETIME_PROMO, "$7.49", 7_490_000L, "USD"),
+              isDiscountEligible = false,
+              discountReason = DiscountReason.NONE,
+              activeSku = EntitlementValidator.SKU_PRO_LIFETIME,
+            ),
           formattedPrice = "$14.99",
+          isPromoSectionExpanded = true,
+          promoCodeInput = "LAUNCH50",
         ),
       snackbarHostState = SnackbarHostState(),
       onIntent = {},
