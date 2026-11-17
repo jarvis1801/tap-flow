@@ -48,6 +48,7 @@ class MediaProjectionBridge @Inject constructor() {
 
   private val _isDesktopLiveStreamActive = MutableStateFlow(false)
   val isDesktopLiveStreamActive: StateFlow<Boolean> = _isDesktopLiveStreamActive.asStateFlow()
+  val isLiveStreamingFromConsole: StateFlow<Boolean> = _isDesktopLiveStreamActive.asStateFlow()
 
   val isCaptureActive: Boolean
     get() = _captureState.value is ScreenCaptureState.Active

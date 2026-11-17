@@ -55,6 +55,21 @@ class InspectRepository @Inject constructor(
 
   suspend fun getItem(itemId: String): InspectItem? = inspectDao.getItemById(itemId)?.toDomain()
 
+  suspend fun getGroup(groupId: String): InspectGroup? = inspectDao.getGroupById(groupId)?.toDomain()
+
+  suspend fun getAllGroupsWithItems(): List<InspectGroupWithItems> =
+    withContext(Dispatchers.IO) {
+      val groups = inspectDao.getAllGroupsOnce()
+      val itemsByGroup = inspectDao.getAllItemsOnce().map { it.toDomain() }.groupBy { it.groupId }
+      groups.map { groupEntity ->
+        val group = groupEntity.toDomain()
+        InspectGroupWithItems(
+          group = group,
+          items = itemsByGroup[group.id].orEmpty(),
+        )
+      }
+    }
+
   suspend fun countGroups(): Int = inspectDao.countGroups()
 
   suspend fun getInspectStorageStats(): InspectStorageStats =

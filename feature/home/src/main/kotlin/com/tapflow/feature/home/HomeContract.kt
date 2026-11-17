@@ -380,6 +380,10 @@ sealed interface HomeUiEffect {
 
   data class LaunchFeedbackEmail(val subject: String, val body: String) : HomeUiEffect
 
+  data class StartLocalBridgeService(val port: Int? = null) : HomeUiEffect
+
+  data object StopLocalBridgeService : HomeUiEffect
+
   data class ShowSnackbar(val message: String) : HomeUiEffect
 }
 

@@ -194,15 +194,16 @@ Tabs:
   # -------------------------------------------------------------
   - Console Tab:
       Overview:
-        - Controls the embedded Ktor WebSocket & HTTP server for Desktop Studio synchronization.
-        - Entitlement Guard: Starting or keeping the Ktor Embedded Server running strictly requires `EntitlementState.ProLifetime` (`ProFeatureGate.DESKTOP_CONSOLE`) and is excluded from the 7-Day Free Trial. Free and 7-Day Trial users see a `"Lifetime Pro Required • Excluded from 7-Day Trial"` banner, keep the server stopped, and tapping the toggle or upgrade button routes directly to `Route.Paywall`.
+        - Controls the embedded Ktor WebSocket & HTTP server (`127.0.0.1:{port}`) kept alive safely in the background via `LocalBridgeService` (`foregroundServiceType="specialUse"`, Manifest `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`).
+        - Entitlement Guard: Starting or keeping `LocalBridgeService` / Ktor Embedded Server running strictly requires `EntitlementState.ProLifetime` (`ProFeatureGate.DESKTOP_CONSOLE`) and is excluded from the 7-Day Free Trial. Free and 7-Day Trial users see a `"Lifetime Pro Required • Excluded from 7-Day Trial"` banner, keep the server stopped, and tapping the toggle or upgrade button routes directly to `Route.Paywall`.
+        - Background Keep-Alive & Teardown: Starting displays a low-priority ongoing notification (`"TapFlow Desktop Bridge Running (Port $port)"` with `[Stop]` action); stopping via `ConsoleTab`, notification `[Stop]`, or loss of `ProLifetime` stops live streaming, stops `TapFlowLocalServer`, stops `MediaProjectionService` if `OverlayService` is inactive, and removes the foreground notification. Exposes `isLiveStreamingFromConsole: StateFlow<Boolean>` so `OverlayService` close cleanup respects an active independent Desktop Console live stream.
       Content UI:
         - Server Status Card:
             - Status Badge: [RUNNING] (Green indicator) / [STOPPED] (Gray indicator).
             - Active Port Display: Displays listening port (e.g., `18080`).
             - Connected Clients: Displays count of active desktop clients (e.g., "1 Desktop Connected").
         - Server Master Toggle:
-            - Switch / Button to Start or Stop the Ktor Embedded Server.
+            - Switch / Button to Start or Stop `LocalBridgeService` & the Ktor Embedded Server.
         - Quick Connection Helper:
             - Displays ADB port forwarding command: `adb forward tcp:18080 tcp:18080`
             - Copy Command Button: Copies command to clipboard with a single tap.
@@ -558,14 +559,18 @@ Core Domain Models (:core:model - Zero Android Dependencies):
     - InspectPixel(id, label, x, y, hexColor, tolerance)
     - InspectCrop(id, label, cropPngPath, x, y, width, height, similarityThreshold)
 
-Ktor WebSocket Protocol (:core:server - JSON Envelope on ws://localhost:{port}/tapflow):
+Ktor WebSocket Protocol (:core:model + :core:server - JSON Envelope on ws://127.0.0.1:{port}/tapflow via LocalBridgeService):
   WsMessage(type: WsMessageType, requestId: String?, timestamp: Long, payloadJson: String)
   WsMessageType:
-    - HANDSHAKE_ACK | HEARTBEAT
-    - SYNC_ALL_SCRIPTS_REQUEST | SYNC_ALL_SCRIPTS_RESPONSE
-    - PUSH_SCRIPT | DELETE_SCRIPT
-    - START_LIVE_STREAM | STOP_LIVE_STREAM # Binary WebSocket Frames
-    - REMOTE_RUN_SCRIPT | REMOTE_STOP | EXECUTION_LOG_EVENT
+    - HANDSHAKE_ACK | HEARTBEAT | DEVICE_STATUS_EVENT (pushed immediately on connect & live on Accessibility / Shizuku / MediaProjection / foreground package / rotation changes)
+    - SYNC_ALL_SCRIPTS_REQUEST | SYNC_ALL_SCRIPTS_RESPONSE | PUSH_SCRIPT (optimistic `updatedAtMs` concurrency check when `forceOverwrite == false` -> `ERROR_RESPONSE("VERSION_CONFLICT")`) | DELETE_SCRIPT
+    - SYNC_ALL_PIPELINES_REQUEST | SYNC_ALL_PIPELINES_RESPONSE (`[Missing Script]`-safe) | PUSH_PIPELINE | DELETE_PIPELINE
+    - SYNC_ALL_INSPECT_REQUEST | SYNC_ALL_INSPECT_RESPONSE | GET_INSPECT_IMAGE_REQUEST | GET_INSPECT_IMAGE_RESPONSE | PUSH_INSPECT_ITEM | DELETE_INSPECT_GROUP | DELETE_INSPECT_ITEM
+    - CAPTURE_SNAPSHOT_REQUEST | CAPTURE_SNAPSHOT_RESPONSE (100% lossless PNG Base64 + foreground `appName` / `packageName` + screen dimensions & `rotationDegrees`)
+    - SYNC_INSTALLED_APPS_REQUEST | SYNC_INSTALLED_APPS_RESPONSE | SYNC_LOGS_REQUEST | SYNC_LOGS_RESPONSE | GET_ERROR_SCREENSHOT_REQUEST | GET_ERROR_SCREENSHOT_RESPONSE
+    - START_LIVE_STREAM | STOP_LIVE_STREAM (scaled JPEG ~18fps Binary WebSocket Frames with 12-byte big-endian header: `[width: Int32][height: Int32][rotationDegrees: Int32][JPEG bytes]`)
+    - REMOTE_RUN_SCRIPT | REMOTE_RUN_PIPELINE (`autoStart = true`, strict Accessibility & Vision check -> `ERROR_RESPONSE("PERMISSIONS_OR_VISION_NOT_READY")`) | REMOTE_STOP | EXECUTION_LOG_EVENT
+    - REMOTE_INPUT_EVENT (`TAP`, `SWIPE`, `GLOBAL_BACK`, `GLOBAL_HOME` via Shizuku with Accessibility fallback) | ERROR_RESPONSE (`code`, `message`, `conflictUpdatedAtMs`)
 
 ---
 

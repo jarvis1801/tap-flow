@@ -46,6 +46,32 @@ class LogRepository @Inject constructor(
     return source.map { list -> list.map { it.toDomain() } }
   }
 
+  suspend fun getAllScriptLogs(): List<ExecutionSessionLog> =
+    executionLogDao.getAllOnce().map { it.toDomain() }
+
+  suspend fun getAllPipelineLogs(): List<PipelineSessionLog> =
+    pipelineLogDao.getAllOnce().map { it.toDomain() }
+
+  suspend fun findErrorScreenshotPathByLogId(logId: String): String? {
+    if (logId.isBlank()) return null
+    executionLogDao.getById(logId)?.errorScreenshotPath?.takeIf { it.isNotBlank() }?.let { return it }
+    val pipelineLogs = pipelineLogDao.getAllOnce()
+    for (pipelineLog in pipelineLogs) {
+      if (pipelineLog.id == logId) {
+        pipelineLog.stepRuns.firstNotNullOfOrNull {
+          it.scriptSessionLog.errorScreenshotPath?.takeIf(String::isNotBlank)
+        }?.let { return it }
+      }
+      pipelineLog.stepRuns
+        .firstOrNull { it.scriptSessionLog.id == logId }
+        ?.scriptSessionLog
+        ?.errorScreenshotPath
+        ?.takeIf { it.isNotBlank() }
+        ?.let { return it }
+    }
+    return null
+  }
+
   suspend fun recordScriptSession(
     log: ExecutionSessionLog,
     nowUtcMs: Long = System.currentTimeMillis(),

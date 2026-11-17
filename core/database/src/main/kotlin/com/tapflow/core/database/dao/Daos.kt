@@ -75,6 +75,15 @@ interface InspectDao {
   @Query("SELECT * FROM inspect_items ORDER BY createdAtMs DESC")
   fun observeAllItems(): Flow<List<InspectItemEntity>>
 
+  @Query("SELECT * FROM inspect_groups ORDER BY createdAtMs DESC")
+  suspend fun getAllGroupsOnce(): List<InspectGroupEntity>
+
+  @Query("SELECT * FROM inspect_items ORDER BY createdAtMs DESC")
+  suspend fun getAllItemsOnce(): List<InspectItemEntity>
+
+  @Query("SELECT * FROM inspect_groups WHERE id = :groupId LIMIT 1")
+  suspend fun getGroupById(groupId: String): InspectGroupEntity?
+
   @Query("SELECT * FROM inspect_items WHERE groupId = :groupId ORDER BY createdAtMs DESC")
   fun observeItemsByGroup(groupId: String): Flow<List<InspectItemEntity>>
 

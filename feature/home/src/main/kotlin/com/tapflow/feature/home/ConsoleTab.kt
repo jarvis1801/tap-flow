@@ -242,7 +242,7 @@ fun ConsoleTabContent(
                   text =
                     when {
                       !state.isLifetimePro -> "Start WebSocket Server (Lifetime Pro)"
-                      isServerRunning -> "Server Enabled"
+                      isServerRunning -> "Foreground Bridge Active (127.0.0.1:${server.port})"
                       else -> "Start WebSocket Server"
                     },
                   style = MaterialTheme.typography.bodyLarge,

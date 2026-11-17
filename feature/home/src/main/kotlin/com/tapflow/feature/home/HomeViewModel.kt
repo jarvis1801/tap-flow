@@ -693,6 +693,7 @@ class HomeViewModel @Inject constructor(
             entitlementRepository.canUseFeature(ProFeatureGate.DESKTOP_CONSOLE)
         if (!isLifetimePro) {
           if (localServer.status.value.isRunning) {
+            sendEffect(HomeUiEffect.StopLocalBridgeService)
             viewModelScope.launch {
               localServer.stopServer("Lifetime Pro purchase is required for Desktop Console.")
             }
@@ -700,15 +701,15 @@ class HomeViewModel @Inject constructor(
           sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.DESKTOP_CONSOLE.displayName))
           return
         }
-        viewModelScope.launch {
-          val started = localServer.toggleServer()
-          val msg =
-            if (started) {
-              "Desktop Studio bridge listening on port ${localServer.status.value.port}"
-            } else {
-              localServer.status.value.lastError ?: "Desktop Studio bridge stopped"
-            }
-          sendEffect(HomeUiEffect.ShowSnackbar(msg))
+        val status = localServer.status.value
+        if (status.isRunning) {
+          sendEffect(HomeUiEffect.StopLocalBridgeService)
+          sendEffect(HomeUiEffect.ShowSnackbar("Desktop Studio bridge stopped"))
+        } else {
+          sendEffect(HomeUiEffect.StartLocalBridgeService(status.port))
+          sendEffect(
+            HomeUiEffect.ShowSnackbar("Desktop Studio bridge starting on port ${status.port}"),
+          )
         }
       }
       is HomeUiIntent.UpdateServerPort -> {

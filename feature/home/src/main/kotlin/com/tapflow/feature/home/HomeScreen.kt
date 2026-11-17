@@ -89,6 +89,7 @@ import androidx.core.os.LocaleListCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapflow.core.model.entitlement.EntitlementState
+import com.tapflow.core.service.bridge.LocalBridgeControlIntents
 import com.tapflow.core.service.overlay.OverlayLaunchIntents
 import com.tapflow.core.service.projection.MediaProjectionBridge
 import com.tapflow.core.service.shizuku.ShizukuManager
@@ -290,6 +291,17 @@ fun HomeScreen(
               val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
               cm.setPrimaryClip(ClipData.newPlainText("TapFlow Diagnostics", effect.body))
             }
+        }
+        is HomeUiEffect.StartLocalBridgeService -> {
+          ContextCompat.startForegroundService(
+            context,
+            LocalBridgeControlIntents.createStartIntent(context, effect.port),
+          )
+        }
+        HomeUiEffect.StopLocalBridgeService -> {
+          runCatching {
+            context.startService(LocalBridgeControlIntents.createStopIntent(context))
+          }
         }
         is HomeUiEffect.ShowSnackbar -> {
           launch {

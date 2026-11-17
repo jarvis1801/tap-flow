@@ -12,4 +12,9 @@
     <string name="overlay_stop_action">Close Overlay</string>
     <string name="external_trigger_channel_name">External Broadcast Triggers</string>
     <string name="external_trigger_channel_description">Alerts when MacroDroid or Tasker triggers are blocked or fail prerequisites.</string>
+    <string name="local_bridge_channel_name">Desktop Studio Bridge</string>
+    <string name="local_bridge_channel_description">Keeps local ADB USB WebSocket synchronization alive in the background.</string>
+    <string name="local_bridge_notification_title">TapFlow Desktop Bridge Running (Port %1$d)</string>
+    <string name="local_bridge_notification_text">Listening on 127.0.0.1:%1$d for Desktop Studio ADB connection.</string>
+    <string name="local_bridge_stop_action">Stop</string>
 </resources>

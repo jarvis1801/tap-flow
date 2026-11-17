@@ -1652,7 +1652,7 @@ class OverlayService :
   }
 
   private fun stopMediaProjectionIfNotStreamingToDesktop() {
-    if (!mediaProjectionBridge.isDesktopLiveStreamActive.value) {
+    if (!mediaProjectionBridge.isLiveStreamingFromConsole.value) {
       runCatching { stopService(Intent(this, MediaProjectionService::class.java)) }
     }
   }
