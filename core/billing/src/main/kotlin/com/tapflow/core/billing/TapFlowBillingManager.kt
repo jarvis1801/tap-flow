@@ -20,6 +20,7 @@ import com.android.billingclient.api.queryPurchasesAsync
 import com.tapflow.core.model.entitlement.EntitlementValidator
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -43,6 +44,8 @@ data class BillingSnapshot(
   val purchasedAtUtcMs: Long = 0L,
   val formattedPrice: String? = null,
   val offerToken: String? = null,
+  val regularOffer: ProductOfferInfo? = null,
+  val promoOffer: ProductOfferInfo? = null,
   val statusMessage: String? = null,
 )
 
@@ -59,12 +62,16 @@ class TapFlowBillingManager @Inject constructor(
 ) {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
   private val connectionMutex = Mutex()
+  private val productsBySku = ConcurrentHashMap<String, ProductDetails>()
 
   private val _billingSnapshot = MutableStateFlow(BillingSnapshot())
   val billingSnapshot: StateFlow<BillingSnapshot> = _billingSnapshot.asStateFlow()
 
-  @Volatile
-  private var cachedProductDetails: ProductDetails? = null
+  private val _regularProduct = MutableStateFlow<ProductDetails?>(null)
+  val regularProduct: StateFlow<ProductDetails?> = _regularProduct.asStateFlow()
+
+  private val _promoProduct = MutableStateFlow<ProductDetails?>(null)
+  val promoProduct: StateFlow<ProductDetails?> = _promoProduct.asStateFlow()
 
   private val purchasesUpdatedListener =
     PurchasesUpdatedListener { billingResult, purchases ->
@@ -129,8 +136,19 @@ class TapFlowBillingManager @Inject constructor(
     }
   }
 
-  fun launchLifetimePurchase(activity: Activity): BillingResult? {
-    val details = cachedProductDetails
+  fun launchLifetimePurchase(
+    activity: Activity,
+    targetSku: String = EntitlementValidator.SKU_PRO_LIFETIME,
+  ): BillingResult? {
+    val details =
+      when (targetSku) {
+        EntitlementValidator.SKU_PRO_LIFETIME_PROMO ->
+          _promoProduct.value ?: productsBySku[EntitlementValidator.SKU_PRO_LIFETIME_PROMO] ?: _regularProduct.value
+        EntitlementValidator.SKU_PRO_LIFETIME ->
+          _regularProduct.value ?: productsBySku[EntitlementValidator.SKU_PRO_LIFETIME]
+        else ->
+          productsBySku[targetSku] ?: _promoProduct.value ?: _regularProduct.value
+      }
     if (details == null) {
       scope.launch { syncBillingState() }
       _billingSnapshot.update {
@@ -139,7 +157,7 @@ class TapFlowBillingManager @Inject constructor(
       return null
     }
 
-    val offerToken = resolveOfferToken(details)
+    val offerToken = extractOfferInfo(details)?.offerToken
     val productParamsBuilder =
       BillingFlowParams.ProductDetailsParams.newBuilder()
         .setProductDetails(details)
@@ -186,21 +204,31 @@ class TapFlowBillingManager @Inject constructor(
           .setProductId(EntitlementValidator.SKU_PRO_LIFETIME)
           .setProductType(BillingClient.ProductType.INAPP)
           .build(),
+        QueryProductDetailsParams.Product.newBuilder()
+          .setProductId(EntitlementValidator.SKU_PRO_LIFETIME_PROMO)
+          .setProductType(BillingClient.ProductType.INAPP)
+          .build(),
       )
     val params = QueryProductDetailsParams.newBuilder().setProductList(productList).build()
     val result = billingClient.queryProductDetails(params)
     if (result.billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
-      val details = result.productDetailsList?.firstOrNull()
-      cachedProductDetails = details
-      if (details != null) {
-        val price = resolveFormattedPrice(details)
-        val token = resolveOfferToken(details)
-        _billingSnapshot.update {
-          it.copy(
-            formattedPrice = price,
-            offerToken = token,
-          )
-        }
+      val list = result.productDetailsList.orEmpty()
+      list.forEach { details -> productsBySku[details.productId] = details }
+
+      val regular = list.firstOrNull { it.productId == EntitlementValidator.SKU_PRO_LIFETIME }
+      val promo = list.firstOrNull { it.productId == EntitlementValidator.SKU_PRO_LIFETIME_PROMO }
+      _regularProduct.value = regular
+      _promoProduct.value = promo
+
+      val regularOffer = regular?.let(::extractOfferInfo)
+      val promoOffer = promo?.let(::extractOfferInfo)
+      _billingSnapshot.update {
+        it.copy(
+          formattedPrice = regularOffer?.formattedPrice ?: it.formattedPrice,
+          offerToken = regularOffer?.offerToken ?: it.offerToken,
+          regularOffer = regularOffer ?: it.regularOffer,
+          promoOffer = promoOffer ?: it.promoOffer,
+        )
       }
     }
   }
@@ -219,25 +247,27 @@ class TapFlowBillingManager @Inject constructor(
   private suspend fun processPurchases(purchases: List<Purchase>) {
     val matching =
       purchases.filter { purchase ->
-        purchase.products.contains(EntitlementValidator.SKU_PRO_LIFETIME)
+        purchase.products.any { EntitlementValidator.isLifetimeProSku(it) }
       }
 
-    val purchased =
-      matching.firstOrNull { it.purchaseState == Purchase.PurchaseState.PURCHASED }
-    if (purchased != null) {
-      if (!purchased.isAcknowledged) {
-        val ackParams =
-          AcknowledgePurchaseParams.newBuilder()
-            .setPurchaseToken(purchased.purchaseToken)
-            .build()
-        billingClient.acknowledgePurchase(ackParams)
+    val purchasedList = matching.filter { it.purchaseState == Purchase.PurchaseState.PURCHASED }
+    if (purchasedList.isNotEmpty()) {
+      purchasedList.forEach { purchase ->
+        if (!purchase.isAcknowledged) {
+          val ackParams =
+            AcknowledgePurchaseParams.newBuilder()
+              .setPurchaseToken(purchase.purchaseToken)
+              .build()
+          billingClient.acknowledgePurchase(ackParams)
+        }
       }
+      val primaryPurchase = purchasedList.maxByOrNull { it.purchaseTime } ?: purchasedList.first()
       _billingSnapshot.update {
         it.copy(
           isLifetimeOwned = true,
           isPendingPurchase = false,
-          purchaseTokenHash = sha256Hex(purchased.purchaseToken),
-          purchasedAtUtcMs = purchased.purchaseTime,
+          purchaseTokenHash = sha256Hex(primaryPurchase.purchaseToken),
+          purchasedAtUtcMs = primaryPurchase.purchaseTime,
           statusMessage = null,
         )
       }
@@ -268,17 +298,28 @@ class TapFlowBillingManager @Inject constructor(
   }
 
   @Suppress("DEPRECATION")
-  private fun resolveFormattedPrice(details: ProductDetails): String? {
-    val multiOfferPrice = details.oneTimePurchaseOfferDetailsList?.firstOrNull()?.formattedPrice
-    if (!multiOfferPrice.isNullOrBlank()) return multiOfferPrice
-    return details.oneTimePurchaseOfferDetails?.formattedPrice
-  }
-
-  @Suppress("DEPRECATION")
-  private fun resolveOfferToken(details: ProductDetails): String? {
-    val multiOfferToken = details.oneTimePurchaseOfferDetailsList?.firstOrNull()?.offerToken
-    if (!multiOfferToken.isNullOrBlank()) return multiOfferToken
-    return details.oneTimePurchaseOfferDetails?.offerToken
+  internal fun extractOfferInfo(details: ProductDetails): ProductOfferInfo? {
+    val multiOffer = details.oneTimePurchaseOfferDetailsList?.firstOrNull()
+    if (multiOffer != null && multiOffer.formattedPrice.isNotBlank()) {
+      return ProductOfferInfo(
+        productId = details.productId,
+        formattedPrice = multiOffer.formattedPrice,
+        priceAmountMicros = multiOffer.priceAmountMicros,
+        priceCurrencyCode = multiOffer.priceCurrencyCode,
+        offerToken = multiOffer.offerToken.takeIf { !it.isNullOrBlank() },
+      )
+    }
+    val legacyOffer = details.oneTimePurchaseOfferDetails
+    if (legacyOffer != null && legacyOffer.formattedPrice.isNotBlank()) {
+      return ProductOfferInfo(
+        productId = details.productId,
+        formattedPrice = legacyOffer.formattedPrice,
+        priceAmountMicros = legacyOffer.priceAmountMicros,
+        priceCurrencyCode = legacyOffer.priceCurrencyCode,
+        offerToken = legacyOffer.offerToken.takeIf { !it.isNullOrBlank() },
+      )
+    }
+    return null
   }
 
   private fun sha256Hex(raw: String): String {

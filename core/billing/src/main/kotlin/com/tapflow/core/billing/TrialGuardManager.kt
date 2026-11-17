@@ -8,11 +8,6 @@ import com.tapflow.core.datastore.TapFlowPreferencesRepository
 import com.tapflow.core.datastore.TrialStorageSnapshot
 import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.entitlement.TrialStatus
-import java.security.KeyStore
-import java.security.MessageDigest
-import javax.crypto.KeyGenerator
-import javax.crypto.Mac
-import javax.crypto.SecretKey
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -34,11 +29,9 @@ data class TrialEvaluation(
 @Singleton
 class TrialGuardManager @Inject constructor(
   private val preferencesRepository: TapFlowPreferencesRepository,
+  private val hmacSigner: HmacSigner,
 ) {
   companion object {
-    private const val ANDROID_KEYSTORE_PROVIDER = "AndroidKeyStore"
-    private const val HMAC_KEY_ALIAS = "tapflow_trial_hmac_key"
-    private const val HMAC_ALGORITHM = "HmacSHA256"
     private const val MS_PER_HOUR = 60L * 60L * 1000L
     private const val MS_PER_DAY = 24L * MS_PER_HOUR
   }
@@ -140,8 +133,8 @@ class TrialGuardManager @Inject constructor(
     }
 
     // HMAC verification
-    val expectedSignature = computeHmacBase64(startedAt, snapshot.maxObservedClockMs)
-    if (expectedSignature == null || !constantTimeEquals(storedSignature, expectedSignature)) {
+    val payload = "$startedAt:${snapshot.maxObservedClockMs}"
+    if (!hmacSigner.verifyBase64(payload, storedSignature)) {
       return tamperedEvaluation(startedAt)
     }
 
@@ -177,35 +170,6 @@ class TrialGuardManager @Inject constructor(
       remainingHours = 0,
     )
 
-  private fun computeHmacBase64(startedAtUtcMs: Long, maxObservedClockMs: Long): String? {
-    return runCatching {
-      val secretKey = getOrCreateHmacKey()
-      val mac = Mac.getInstance(HMAC_ALGORITHM)
-      mac.init(secretKey)
-      val payload = "$startedAtUtcMs:$maxObservedClockMs".toByteArray(Charsets.UTF_8)
-      val digest = mac.doFinal(payload)
-      Base64.encodeToString(digest, Base64.NO_WRAP)
-    }.getOrNull()
-  }
-
-  private fun getOrCreateHmacKey(): SecretKey {
-    val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE_PROVIDER).apply { load(null) }
-    val existing = keyStore.getKey(HMAC_KEY_ALIAS, null) as? SecretKey
-    if (existing != null) return existing
-
-    val keyGenerator =
-      KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_HMAC_SHA256, ANDROID_KEYSTORE_PROVIDER)
-    val spec =
-      KeyGenParameterSpec.Builder(
-        HMAC_KEY_ALIAS,
-        KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY,
-      )
-        .setDigests(KeyProperties.DIGEST_SHA256)
-        .build()
-    keyGenerator.init(spec)
-    return keyGenerator.generateKey()
-  }
-
-  private fun constantTimeEquals(a: String, b: String): Boolean =
-    MessageDigest.isEqual(a.toByteArray(Charsets.UTF_8), b.toByteArray(Charsets.UTF_8))
+  private fun computeHmacBase64(startedAtUtcMs: Long, maxObservedClockMs: Long): String? =
+    hmacSigner.signBase64("$startedAtUtcMs:$maxObservedClockMs")
 }

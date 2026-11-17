@@ -48,6 +48,12 @@ class TapFlowPreferencesRepository @Inject constructor(
     val TRIAL_STARTED_AT_UTC_MS = longPreferencesKey("trial_started_at_utc_ms")
     val TRIAL_MAX_OBSERVED_CLOCK_MS = longPreferencesKey("trial_max_observed_clock_ms")
     val TRIAL_HMAC_SIGNATURE = stringPreferencesKey("trial_hmac_signature_b64")
+
+    val PROMO_ACTIVE_CODE = stringPreferencesKey("promo_active_code")
+    val PROMO_ACTIVE_SKU = stringPreferencesKey("promo_active_sku")
+    val PROMO_EXPIRES_AT_UTC_MS = longPreferencesKey("promo_expires_at_utc_ms")
+    val PROMO_MAX_OBSERVED_CLOCK_MS = longPreferencesKey("promo_max_observed_clock_ms")
+    val PROMO_HMAC_SIGNATURE = stringPreferencesKey("promo_hmac_signature_b64")
   }
 
   private val safeData: Flow<Preferences> =
@@ -126,6 +132,19 @@ class TapFlowPreferencesRepository @Inject constructor(
     }
 
   suspend fun getTrialSnapshotOnce(): TrialStorageSnapshot = trialSnapshotFlow.first()
+
+  val promoSnapshotFlow: Flow<PromoStorageSnapshot> =
+    safeData.map { prefs ->
+      PromoStorageSnapshot(
+        activePromoCode = prefs[Keys.PROMO_ACTIVE_CODE],
+        activePromoSku = prefs[Keys.PROMO_ACTIVE_SKU],
+        promoExpiresAtUtcMs = prefs[Keys.PROMO_EXPIRES_AT_UTC_MS],
+        promoMaxObservedClockMs = prefs[Keys.PROMO_MAX_OBSERVED_CLOCK_MS] ?: 0L,
+        hmacSignatureBase64 = prefs[Keys.PROMO_HMAC_SIGNATURE],
+      )
+    }
+
+  suspend fun getPromoSnapshotOnce(): PromoStorageSnapshot = promoSnapshotFlow.first()
 
   suspend fun getPreferencesOnce(): AppPreferences = preferencesFlow.first()
 
@@ -230,6 +249,32 @@ class TapFlowPreferencesRepository @Inject constructor(
     dataStore.edit { prefs ->
       prefs[Keys.TRIAL_MAX_OBSERVED_CLOCK_MS] = maxObservedClockMs
       prefs[Keys.TRIAL_HMAC_SIGNATURE] = hmacSignatureBase64
+    }
+  }
+
+  suspend fun savePromoSnapshot(
+    activePromoCode: String,
+    activePromoSku: String,
+    promoExpiresAtUtcMs: Long,
+    promoMaxObservedClockMs: Long,
+    hmacSignatureBase64: String,
+  ) {
+    dataStore.edit { prefs ->
+      prefs[Keys.PROMO_ACTIVE_CODE] = activePromoCode
+      prefs[Keys.PROMO_ACTIVE_SKU] = activePromoSku
+      prefs[Keys.PROMO_EXPIRES_AT_UTC_MS] = promoExpiresAtUtcMs
+      prefs[Keys.PROMO_MAX_OBSERVED_CLOCK_MS] = promoMaxObservedClockMs
+      prefs[Keys.PROMO_HMAC_SIGNATURE] = hmacSignatureBase64
+    }
+  }
+
+  suspend fun updatePromoMaxObservedClock(
+    maxObservedClockMs: Long,
+    hmacSignatureBase64: String,
+  ) {
+    dataStore.edit { prefs ->
+      prefs[Keys.PROMO_MAX_OBSERVED_CLOCK_MS] = maxObservedClockMs
+      prefs[Keys.PROMO_HMAC_SIGNATURE] = hmacSignatureBase64
     }
   }
 }

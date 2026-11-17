@@ -104,6 +104,8 @@ dependencies {
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.coil.compose)
   implementation(libs.androidx.hilt.navigation.compose)
+  implementation(platform(libs.firebase.bom))
+  implementation(libs.firebase.config)
 
   testImplementation(libs.junit)
   testImplementation(libs.androidx.junit)

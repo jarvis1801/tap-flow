@@ -83,6 +83,31 @@ object EntitlementValidator {
   const val TRIAL_DURATION_MS: Long = 7L * 24L * 60L * 60L * 1000L
   const val CLOCK_ROLLBACK_TOLERANCE_MS: Long = 60_000L
   const val SKU_PRO_LIFETIME: String = "tapflow_pro_lifetime"
+  const val SKU_PRO_LIFETIME_PROMO: String = "tapflow_pro_lifetime_promo"
+  val LIFETIME_PRO_SKUS: Set<String> = setOf(SKU_PRO_LIFETIME, SKU_PRO_LIFETIME_PROMO)
+
+  fun isLifetimeProSku(productId: String): Boolean =
+    productId == SKU_PRO_LIFETIME || productId == SKU_PRO_LIFETIME_PROMO
+
+  fun isDiscountEligible(
+    entitlementState: EntitlementState,
+    hasActivePromoWindow: Boolean,
+  ): Boolean =
+    hasActivePromoWindow ||
+      entitlementState is EntitlementState.ProTrial ||
+      (entitlementState is EntitlementState.Free &&
+        entitlementState.trialStatus == TrialStatus.NOT_STARTED)
+
+  fun computeDiscountPercentOff(
+    regularPriceMicros: Long,
+    promoPriceMicros: Long,
+  ): Int? {
+    if (regularPriceMicros <= 0L || promoPriceMicros <= 0L || promoPriceMicros >= regularPriceMicros) {
+      return null
+    }
+    val pct = (((regularPriceMicros - promoPriceMicros).toDouble() / regularPriceMicros.toDouble()) * 100.0)
+    return kotlin.math.round(pct).toInt().coerceIn(1, 99)
+  }
 
   fun hasTrialOrLifetimeAccess(state: EntitlementState): Boolean =
     state.hasTrialOrLifetimeAccess

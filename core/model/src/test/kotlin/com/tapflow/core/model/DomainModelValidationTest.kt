@@ -374,4 +374,29 @@ class DomainModelValidationTest {
     val decoded = json.decodeFromString(OverlayPreferences.serializer(), encoded)
     assertEquals(custom, decoded)
   }
+
+  @Test
+  fun dualSkuConstantsEligibilityAndDiscountCalculation() {
+    assertEquals("tapflow_pro_lifetime", EntitlementValidator.SKU_PRO_LIFETIME)
+    assertEquals("tapflow_pro_lifetime_promo", EntitlementValidator.SKU_PRO_LIFETIME_PROMO)
+    assertTrue(EntitlementValidator.isLifetimeProSku(EntitlementValidator.SKU_PRO_LIFETIME))
+    assertTrue(EntitlementValidator.isLifetimeProSku(EntitlementValidator.SKU_PRO_LIFETIME_PROMO))
+    assertFalse(EntitlementValidator.isLifetimeProSku("other_sku"))
+
+    val notStarted = EntitlementState.Free(TrialStatus.NOT_STARTED, 7)
+    val activeTrial = EntitlementState.ProTrial(expiresAtUtcMs = 2_000_000_000_000L, remainingDays = 5, remainingHours = 3)
+    val expired = EntitlementState.Free(TrialStatus.EXPIRED, 0)
+    val tampered = EntitlementState.Free(TrialStatus.EXPIRED_TAMPERED, 0)
+
+    assertTrue(EntitlementValidator.isDiscountEligible(notStarted, hasActivePromoWindow = false))
+    assertTrue(EntitlementValidator.isDiscountEligible(activeTrial, hasActivePromoWindow = false))
+    assertFalse(EntitlementValidator.isDiscountEligible(expired, hasActivePromoWindow = false))
+    assertFalse(EntitlementValidator.isDiscountEligible(tampered, hasActivePromoWindow = false))
+    assertTrue(EntitlementValidator.isDiscountEligible(expired, hasActivePromoWindow = true))
+    assertTrue(EntitlementValidator.isDiscountEligible(tampered, hasActivePromoWindow = true))
+
+    assertEquals(50, EntitlementValidator.computeDiscountPercentOff(14_990_000L, 7_490_000L))
+    assertNull(EntitlementValidator.computeDiscountPercentOff(0L, 7_490_000L))
+    assertNull(EntitlementValidator.computeDiscountPercentOff(10_000_000L, 12_000_000L))
+  }
 }

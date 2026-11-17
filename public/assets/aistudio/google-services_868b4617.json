@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "807230664097",
+    "project_id": "tap-flow-832f7",
+    "storage_bucket": "tap-flow-832f7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:807230664097:android:77df7f0a05de7e7754efe0",
+        "android_client_info": {
+          "package_name": "com.jarvis.tapflow"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBaUFPZF3szI5uk7b-plpzbKewZZ5Pwt6k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

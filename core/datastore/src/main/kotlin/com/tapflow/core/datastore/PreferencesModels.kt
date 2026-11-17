@@ -43,6 +43,15 @@ data class TrialStorageSnapshot(
 )
 
 @Immutable
+data class PromoStorageSnapshot(
+  val activePromoCode: String? = null,
+  val activePromoSku: String? = null,
+  val promoExpiresAtUtcMs: Long? = null,
+  val promoMaxObservedClockMs: Long = 0L,
+  val hmacSignatureBase64: String? = null,
+)
+
+@Immutable
 data class AppPreferences(
   val hasCompletedPermissionOnboarding: Boolean = false,
   val darkMode: DarkModeOption = DarkModeOption.SYSTEM,
