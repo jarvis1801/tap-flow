@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TapFlow</string>
-    <string name="accessibility_service_description">TapFlow uses Accessibility Service to perform automated touch gestures, global system actions, and detect the active foreground app.</string>
+    <string name="accessibility_service_description">TapFlow uses Accessibility Service to perform automated touch gestures, global system actions, foreground app detection, optional text insertion, and optional Volume Down emergency stop.</string>
     <string name="boot_shell_title">TapFlow Core Ready</string>
     <string name="boot_shell_subtitle">Phase 1 Architecture &amp; Domain Skeleton</string>
     <string name="boot_shell_status_label">Multi-Module Build Active</string>

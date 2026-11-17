@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -20,20 +22,27 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Clear
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -45,6 +54,10 @@ import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -93,11 +106,55 @@ fun ScriptsTabContent(
           title = if (!hasActiveFilters) "No Scripts Yet" else "No Matching Scripts",
           subtitle =
             if (!hasActiveFilters) {
-              "Create a manual automation script or launch Live Recording over your target app."
+              "Create a manual automation script, launch Live Recording, or load beginner starter examples."
             } else {
               "Try clearing the search query or selected tag filters."
             },
           modifier = Modifier.padding(24.dp).align(Alignment.Center),
+          actions =
+            if (!hasActiveFilters && state.totalScriptsCount == 0) {
+              {
+                Column(
+                  modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                  verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                  Button(
+                    onClick = { onIntent(HomeUiIntent.AddManualScriptClicked) },
+                    modifier =
+                      Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("empty_add_script_button"),
+                  ) {
+                    Icon(
+                      imageVector = Icons.Filled.Add,
+                      contentDescription = null,
+                      modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Add Script")
+                  }
+                  FilledTonalButton(
+                    onClick = { onIntent(HomeUiIntent.LoadStarterTemplatesClicked) },
+                    modifier =
+                      Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("load_starter_templates_button"),
+                  ) {
+                    Icon(
+                      imageVector = Icons.Filled.AutoAwesome,
+                      contentDescription = null,
+                      modifier = Modifier.size(18.dp),
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Load Starter Templates")
+                  }
+                }
+              }
+            } else {
+              null
+            },
         )
       } else {
         LazyColumn(
@@ -116,6 +173,7 @@ fun ScriptsTabContent(
               onPlay = { onIntent(HomeUiIntent.PlayScriptClicked(item.script.id)) },
               onEdit = { onIntent(HomeUiIntent.EditScriptClicked(item.script.id)) },
               onLogs = { onIntent(HomeUiIntent.ViewScriptLogsClicked(item.script.id)) },
+              onDuplicate = { onIntent(HomeUiIntent.DuplicateScript(item.script.id)) },
               onDelete = { onIntent(HomeUiIntent.RequestDeleteScript(item.script.id)) },
             )
           }
@@ -200,8 +258,10 @@ private fun ScriptItemCard(
   onPlay: () -> Unit,
   onEdit: () -> Unit,
   onLogs: () -> Unit,
+  onDuplicate: () -> Unit,
   onDelete: () -> Unit,
 ) {
+  var showOverflowMenu by remember { mutableStateOf(false) }
   val script = item.script
   val updatedText =
     if (script.updatedAtMs > 0L) {
@@ -372,15 +432,55 @@ private fun ScriptItemCard(
               contentDescription = "Script logs",
             )
           }
-          IconButton(
-            onClick = onDelete,
-            modifier = Modifier.size(48.dp).testTag("delete_script_${script.id}"),
-          ) {
-            Icon(
-              imageVector = Icons.Filled.DeleteOutline,
-              contentDescription = "Delete script",
-              tint = MaterialTheme.colorScheme.error,
-            )
+          Box {
+            IconButton(
+              onClick = { showOverflowMenu = true },
+              modifier = Modifier.size(48.dp).testTag("more_script_${script.id}"),
+            ) {
+              Icon(
+                imageVector = Icons.Filled.MoreVert,
+                contentDescription = "Script options",
+              )
+            }
+            DropdownMenu(
+              expanded = showOverflowMenu,
+              onDismissRequest = { showOverflowMenu = false },
+            ) {
+              DropdownMenuItem(
+                text = { Text("Duplicate") },
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Filled.ContentCopy,
+                    contentDescription = null,
+                  )
+                },
+                onClick = {
+                  showOverflowMenu = false
+                  onDuplicate()
+                },
+                modifier = Modifier.testTag("duplicate_script_${script.id}"),
+              )
+              DropdownMenuItem(
+                text = {
+                  Text(
+                    text = "Delete",
+                    color = MaterialTheme.colorScheme.error,
+                  )
+                },
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Filled.DeleteOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                  )
+                },
+                onClick = {
+                  showOverflowMenu = false
+                  onDelete()
+                },
+                modifier = Modifier.testTag("delete_script_${script.id}"),
+              )
+            }
           }
         }
       }
@@ -475,6 +575,7 @@ internal fun EmptyTabStateCard(
   title: String,
   subtitle: String,
   modifier: Modifier = Modifier,
+  actions: (@Composable () -> Unit)? = null,
 ) {
   Card(
     modifier = modifier.widthIn(max = 420.dp).fillMaxWidth(),
@@ -502,6 +603,7 @@ internal fun EmptyTabStateCard(
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
+      actions?.invoke()
     }
   }
 }

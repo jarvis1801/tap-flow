@@ -35,6 +35,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tapflow.core.database.backup.ImportConflictStrategy
+import com.tapflow.core.service.permissions.AccessibilityProminentDisclosureDialog
+import com.tapflow.core.service.permissions.RuntimePermissionsDisabledDialog
 
 @Composable
 internal fun HomeDialogs(
@@ -461,6 +463,24 @@ internal fun HomeDialogs(
           Text("Close")
         }
       },
+    )
+  }
+
+  if (state.showPermissionsDisabledDialog) {
+    RuntimePermissionsDisabledDialog(
+      accessibilityConnected = state.isAccessibilityConnected,
+      overlayGranted = state.isOverlayPermissionGranted,
+      onRequestAccessibility = { onIntent(HomeUiIntent.RequestAccessibilityFromPreFlight) },
+      onRequestOverlay = { onIntent(HomeUiIntent.RequestOverlayFromPreFlight) },
+      onContinue = { onIntent(HomeUiIntent.ContinuePendingOverlayAction) },
+      onDismiss = { onIntent(HomeUiIntent.DismissPermissionsDisabledDialog) },
+    )
+  }
+
+  if (state.showAccessibilityDisclosureDialog) {
+    AccessibilityProminentDisclosureDialog(
+      onAcceptAndContinue = { onIntent(HomeUiIntent.AcceptAccessibilityDisclosure) },
+      onDecline = { onIntent(HomeUiIntent.DismissAccessibilityDisclosure) },
     )
   }
 }

@@ -17,4 +17,5 @@
     <string name="local_bridge_notification_title">TapFlow Desktop Bridge Running (Port %1$d)</string>
     <string name="local_bridge_notification_text">Listening on 127.0.0.1:%1$d for Desktop Studio ADB connection.</string>
     <string name="local_bridge_stop_action">Stop</string>
+    <string name="emergency_volume_stop_toast">Automation paused (Volume Down emergency stop)</string>
 </resources>

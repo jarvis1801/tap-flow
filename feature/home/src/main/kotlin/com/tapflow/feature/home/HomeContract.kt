@@ -72,6 +72,21 @@ sealed interface PendingMediaProjectionTarget {
 }
 
 @Immutable
+sealed interface PendingHomeOverlayAction {
+  @Immutable
+  data class PlayScript(val scriptId: String) : PendingHomeOverlayAction
+
+  @Immutable
+  data class PlayPipeline(val pipelineId: String) : PendingHomeOverlayAction
+
+  @Immutable
+  data object LiveRecorder : PendingHomeOverlayAction
+
+  @Immutable
+  data object LiveInspector : PendingHomeOverlayAction
+}
+
+@Immutable
 sealed interface RunnerLaunchTarget {
   val title: String
   val requiresVision: Boolean
@@ -157,6 +172,11 @@ data class HomeUiState(
   val importBackupPrompt: ImportBackupPrompt? = null,
   val showTermsDialog: Boolean = false,
   val showPrivacyDialog: Boolean = false,
+  val isAccessibilityConnected: Boolean = false,
+  val isOverlayPermissionGranted: Boolean = false,
+  val showPermissionsDisabledDialog: Boolean = false,
+  val showAccessibilityDisclosureDialog: Boolean = false,
+  val pendingHomeOverlayAction: PendingHomeOverlayAction? = null,
   val appVersionName: String = "1.0.0",
   val appVersionCode: Long = 1L,
 ) {
@@ -201,6 +221,10 @@ sealed interface HomeUiIntent {
 
   data class RequestDeleteScript(val scriptId: String) : HomeUiIntent
 
+  data class DuplicateScript(val scriptId: String) : HomeUiIntent
+
+  data object LoadStarterTemplatesClicked : HomeUiIntent
+
   data object ConfirmDeleteScript : HomeUiIntent
 
   data object DismissDeleteScript : HomeUiIntent
@@ -219,6 +243,8 @@ sealed interface HomeUiIntent {
   data class ViewPipelineLogsClicked(val pipelineId: String) : HomeUiIntent
 
   data class RequestDeletePipeline(val pipelineId: String) : HomeUiIntent
+
+  data class DuplicatePipeline(val pipelineId: String) : HomeUiIntent
 
   data object ConfirmDeletePipeline : HomeUiIntent
 
@@ -296,6 +322,14 @@ sealed interface HomeUiIntent {
 
   data class SetOverlaySize(val option: OverlaySizeOption) : HomeUiIntent
 
+  data class SetVolumeStopEnabled(val enabled: Boolean) : HomeUiIntent
+
+  data class SetKeepScreenAwakeWhileRunning(val enabled: Boolean) : HomeUiIntent
+
+  data class SetPauseOnScreenOff(val enabled: Boolean) : HomeUiIntent
+
+  data class SetShowDebugTouchMarker(val enabled: Boolean) : HomeUiIntent
+
   data class SetRunnerLaunchMode(val mode: RunnerLaunchMode) : HomeUiIntent
 
   data class SetRunnerLaunchRememberChoice(val remember: Boolean) : HomeUiIntent
@@ -336,6 +370,21 @@ sealed interface HomeUiIntent {
   data object SendFeedbackEmailClicked : HomeUiIntent
 
   data class SetAppBuildMetadata(val versionName: String, val versionCode: Long) : HomeUiIntent
+
+  // Runtime Permission Pre-Flight & Accessibility Prominent Disclosure
+  data class SyncOverlayPermission(val granted: Boolean) : HomeUiIntent
+
+  data object RequestAccessibilityFromPreFlight : HomeUiIntent
+
+  data object AcceptAccessibilityDisclosure : HomeUiIntent
+
+  data object DismissAccessibilityDisclosure : HomeUiIntent
+
+  data object RequestOverlayFromPreFlight : HomeUiIntent
+
+  data object ContinuePendingOverlayAction : HomeUiIntent
+
+  data object DismissPermissionsDisabledDialog : HomeUiIntent
 
   // MediaProjection consent lifecycle
   data object ConfirmMediaProjectionConsentDialog : HomeUiIntent
@@ -383,6 +432,10 @@ sealed interface HomeUiEffect {
   data class StartLocalBridgeService(val port: Int? = null) : HomeUiEffect
 
   data object StopLocalBridgeService : HomeUiEffect
+
+  data object LaunchAccessibilitySettings : HomeUiEffect
+
+  data object LaunchOverlaySettings : HomeUiEffect
 
   data class ShowSnackbar(val message: String) : HomeUiEffect
 }

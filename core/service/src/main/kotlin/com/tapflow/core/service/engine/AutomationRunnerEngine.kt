@@ -20,6 +20,7 @@ import com.tapflow.core.model.action.LongPressMode
 import com.tapflow.core.model.action.LoopMode
 import com.tapflow.core.model.action.LoopTimeoutAction
 import com.tapflow.core.model.action.MultiTouchMode
+import com.tapflow.core.model.action.Point2D
 import com.tapflow.core.model.action.PostTextActionKey
 import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.action.SwipeTrajectoryMode
@@ -52,6 +53,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.coroutineContext
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
@@ -62,7 +64,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
@@ -104,6 +108,29 @@ class AutomationRunnerEngine @Inject constructor(
 
   @Volatile
   private var standbyVariables: VariableRuntimeStore? = null
+
+  @Volatile
+  private var showDebugTouchMarker: Boolean = false
+
+  init {
+    engineScope.launch {
+      preferencesRepository.preferencesFlow
+        .map { it.overlay.showDebugTouchMarker }
+        .distinctUntilChanged()
+        .collect { enabled ->
+          showDebugTouchMarker = enabled
+        }
+    }
+  }
+
+  private fun emitDebugMarkerIfEnabled(
+    points: List<Point2D>,
+    isSwipe: Boolean = false,
+  ) {
+    if (showDebugTouchMarker && points.isNotEmpty()) {
+      controlHub.emitDebugTouchMarker(points = points, isSwipe = isSwipe)
+    }
+  }
 
   suspend fun prepareStandbyScript(script: Script) {
     val prevJob = activeJob
@@ -277,6 +304,7 @@ class AutomationRunnerEngine @Inject constructor(
     variables.seedIfAbsent(script.variables)
 
     val prefs = preferencesRepository.getPreferencesOnce()
+    showDebugTouchMarker = prefs.overlay.showDebugTouchMarker
     val shizukuPrefs = prefs.shizuku
     val startedAt = System.currentTimeMillis()
     val entries = mutableListOf<ActionLogEntry>()
@@ -466,6 +494,7 @@ class AutomationRunnerEngine @Inject constructor(
         repeat(repeats) { index ->
           val (tx, ty) = applyJitter(baseX, baseY, action.jitterPx)
           val pressMs = variables.resolveDurationInput(action.pressDuration, minMs = 1L)
+          emitDebugMarkerIfEnabled(listOf(Point2D(tx, ty)), isSwipe = false)
           val shizukuSucceeded =
             shizukuPrefs.shellInputInjection &&
               pressMs <= 120L &&
@@ -488,6 +517,7 @@ class AutomationRunnerEngine @Inject constructor(
         val baseX = variables.resolveNumericInput(action.x)
         val baseY = variables.resolveNumericInput(action.y)
         val (tx, ty) = applyJitter(baseX, baseY, action.jitterPx)
+        emitDebugMarkerIfEnabled(listOf(Point2D(tx, ty)), isSwipe = false)
         val shizukuReady = shizukuPrefs.shellInputInjection && shizukuManager.isReadyNow()
         val ok =
           if (shizukuReady) {
@@ -510,6 +540,9 @@ class AutomationRunnerEngine @Inject constructor(
         val baseX = variables.resolveNumericInput(action.x)
         val baseY = variables.resolveNumericInput(action.y)
         val (tx, ty) = applyJitter(baseX, baseY, action.jitterPx)
+        if (action.mode != LongPressMode.RELEASE_ONLY) {
+          emitDebugMarkerIfEnabled(listOf(Point2D(tx, ty)), isSwipe = false)
+        }
         val ok =
           when (action.mode) {
             LongPressMode.STANDARD -> {
@@ -559,10 +592,15 @@ class AutomationRunnerEngine @Inject constructor(
       }
 
       is ScriptAction.MultiTouch -> {
-        val (strokes, maxDur) = buildMultiTouchStrokes(action)
-        val ok = accessibilityBridge.dispatchMultiTouchStrokes(strokes, maxDur)
+        val built = buildMultiTouchStrokes(action)
+        if (showDebugTouchMarker) {
+          built.debugPaths.forEach { (pts, isSwipe) ->
+            emitDebugMarkerIfEnabled(pts, isSwipe = isSwipe)
+          }
+        }
+        val ok = accessibilityBridge.dispatchMultiTouchStrokes(built.strokes, built.maxDurationMs)
         if (!ok) throw ScriptFailureException("MultiTouch (${action.mode.name}) failed.")
-        summary = "MultiTouch ${action.mode.name} (${strokes.size} fingers)"
+        summary = "MultiTouch ${action.mode.name} (${built.strokes.size} fingers)"
         onCountExecuted()
       }
 
@@ -573,6 +611,13 @@ class AutomationRunnerEngine @Inject constructor(
         val eyRaw = variables.resolveNumericInput(action.endY)
         val (sx, sy) = applyJitter(sxRaw, syRaw, action.startJitterPx)
         val (ex, ey) = applyJitter(exRaw, eyRaw, action.endJitterPx)
+        val bezierSign = if (Random.nextBoolean()) 1f else -1f
+        if (showDebugTouchMarker) {
+          emitDebugMarkerIfEnabled(
+            buildSwipeDebugPoints(action, sx.toFloat(), sy.toFloat(), ex.toFloat(), ey.toFloat(), bezierSign),
+            isSwipe = true,
+          )
+        }
         val canTryShizuku =
           shizukuPrefs.shellInputInjection &&
             action.trajectoryMode == SwipeTrajectoryMode.LINEAR &&
@@ -584,7 +629,7 @@ class AutomationRunnerEngine @Inject constructor(
 
         val ok =
           shizukuSucceeded ||
-            executeSwipeViaAccessibility(action, sx.toFloat(), sy.toFloat(), ex.toFloat(), ey.toFloat())
+            executeSwipeViaAccessibility(action, sx.toFloat(), sy.toFloat(), ex.toFloat(), ey.toFloat(), bezierSign)
         if (!ok) throw ScriptFailureException("Swipe failed from ($sx,$sy) to ($ex,$ey).")
         summary = "Swipe ${action.trajectoryMode.name} ($sx,$sy)->($ex,$ey)"
         onCountExecuted()
@@ -595,6 +640,7 @@ class AutomationRunnerEngine @Inject constructor(
         if (action.tapToFocus && action.focusX != null && action.focusY != null) {
           val fx = action.focusX!!
           val fy = action.focusY!!
+          emitDebugMarkerIfEnabled(listOf(Point2D(fx, fy)), isSwipe = false)
           val focusTapOk =
             (shizukuPrefs.shellInputInjection && shizukuManager.isReadyNow() && shizukuManager.tap(fx, fy).isSuccess) ||
               accessibilityBridge.tap(fx.toFloat(), fy.toFloat(), 40L)
@@ -722,6 +768,9 @@ class AutomationRunnerEngine @Inject constructor(
 
       is ScriptAction.KeyEvent -> {
         val keyCode = mapToAndroidKeyCode(action.key)
+        if (action.key == SystemKeyType.VOLUME_UP || action.key == SystemKeyType.VOLUME_DOWN) {
+          accessibilityBridge.markSelfVolumeKeyDispatch()
+        }
         val shizukuSucceeded =
           shizukuPrefs.enhancedKeyEvents &&
             keyCode != null &&
@@ -941,12 +990,48 @@ class AutomationRunnerEngine @Inject constructor(
     return ControlSignal.None
   }
 
+  private fun buildSwipeDebugPoints(
+    action: ScriptAction.SwipeDrag,
+    sx: Float,
+    sy: Float,
+    ex: Float,
+    ey: Float,
+    bezierSign: Float,
+  ): List<Point2D> =
+    when (action.trajectoryMode) {
+      SwipeTrajectoryMode.LINEAR ->
+        listOf(Point2D(sx.roundToInt(), sy.roundToInt()), Point2D(ex.roundToInt(), ey.roundToInt()))
+      SwipeTrajectoryMode.BEZIER_CURVE -> {
+        val dx = ex - sx
+        val dy = ey - sy
+        val len = hypot(dx.toDouble(), dy.toDouble()).toFloat().coerceAtLeast(1f)
+        val curve = action.bezierCurvatureOffsetPx * bezierSign
+        val cx = (((sx + ex) / 2f) + ((-dy / len) * curve)).coerceAtLeast(0f)
+        val cy = (((sy + ey) / 2f) + ((dx / len) * curve)).coerceAtLeast(0f)
+        val steps = 8
+        (0..steps).map { i ->
+          val t = i.toFloat() / steps.toFloat()
+          val oneMinusT = 1f - t
+          val px = (oneMinusT * oneMinusT * sx) + (2f * oneMinusT * t * cx) + (t * t * ex)
+          val py = (oneMinusT * oneMinusT * sy) + (2f * oneMinusT * t * cy) + (t * t * ey)
+          Point2D(px.roundToInt().coerceAtLeast(0), py.roundToInt().coerceAtLeast(0))
+        }
+      }
+      SwipeTrajectoryMode.MULTI_POINT_PATH ->
+        if (action.multiPointPath.size >= 2) {
+          action.multiPointPath
+        } else {
+          listOf(Point2D(sx.roundToInt(), sy.roundToInt()), Point2D(ex.roundToInt(), ey.roundToInt()))
+        }
+    }
+
   private suspend fun executeSwipeViaAccessibility(
     action: ScriptAction.SwipeDrag,
     sx: Float,
     sy: Float,
     ex: Float,
     ey: Float,
+    bezierSign: Float,
   ): Boolean {
     val dragPath =
       Path().apply {
@@ -960,8 +1045,7 @@ class AutomationRunnerEngine @Inject constructor(
             val dx = ex - sx
             val dy = ey - sy
             val len = hypot(dx.toDouble(), dy.toDouble()).toFloat().coerceAtLeast(1f)
-            val jitterSign = if (Random.nextBoolean()) 1f else -1f
-            val curve = action.bezierCurvatureOffsetPx * jitterSign
+            val curve = action.bezierCurvatureOffsetPx * bezierSign
             val cx = ((sx + ex) / 2f) + ((-dy / len) * curve)
             val cy = ((sy + ey) / 2f) + ((dx / len) * curve)
             quadTo(cx.coerceAtLeast(0f), cy.coerceAtLeast(0f), ex, ey)
@@ -1014,26 +1098,38 @@ class AutomationRunnerEngine @Inject constructor(
     return true
   }
 
+  private data class BuiltMultiTouchStrokes(
+    val strokes: List<GestureDescription.StrokeDescription>,
+    val maxDurationMs: Long,
+    val debugPaths: List<Pair<List<Point2D>, Boolean>>,
+  )
+
   private fun buildMultiTouchStrokes(
     action: ScriptAction.MultiTouch,
-  ): Pair<List<GestureDescription.StrokeDescription>, Long> {
+  ): BuiltMultiTouchStrokes {
     val safeDur = action.durationMs.coerceIn(50L, AccessibilityManagerBridge.MAX_STROKE_SEGMENT_MS)
     return when (action.mode) {
       MultiTouchMode.CUSTOM_POINTS -> {
         var maxEnd = safeDur
+        val debugPts = mutableListOf<Point2D>()
         val strokes =
           action.customPoints.map { pt ->
             val (jx, jy) = applyJitter(pt.x, pt.y, pt.jitterPx)
             val start = pt.staggerDelayMs.coerceAtLeast(0L)
             val dur = pt.pressDurationMs.coerceIn(20L, AccessibilityManagerBridge.MAX_STROKE_SEGMENT_MS)
             maxEnd = maxOf(maxEnd, start + dur)
+            debugPts += Point2D(jx, jy)
             GestureDescription.StrokeDescription(
               Path().apply { moveTo(jx.toFloat(), jy.toFloat()) },
               start,
               dur,
             )
           }
-        strokes to maxEnd
+        BuiltMultiTouchStrokes(
+          strokes = strokes,
+          maxDurationMs = maxEnd,
+          debugPaths = if (debugPts.isEmpty()) emptyList() else listOf(debugPts to false),
+        )
       }
 
       MultiTouchMode.PINCH_SPREAD -> {
@@ -1051,44 +1147,70 @@ class AutomationRunnerEngine @Inject constructor(
             moveTo(cx + rStart, cy)
             lineTo(cx + rEnd, cy)
           }
-        listOf(
-          GestureDescription.StrokeDescription(p1, 0L, safeDur),
-          GestureDescription.StrokeDescription(p2, 0L, safeDur),
-        ) to safeDur
+        BuiltMultiTouchStrokes(
+          strokes =
+            listOf(
+              GestureDescription.StrokeDescription(p1, 0L, safeDur),
+              GestureDescription.StrokeDescription(p2, 0L, safeDur),
+            ),
+          maxDurationMs = safeDur,
+          debugPaths =
+            listOf(
+              listOf(
+                Point2D((cx - rStart).coerceAtLeast(0f).roundToInt(), cy.roundToInt()),
+                Point2D((cx - rEnd).coerceAtLeast(0f).roundToInt(), cy.roundToInt()),
+              ) to true,
+              listOf(
+                Point2D((cx + rStart).roundToInt(), cy.roundToInt()),
+                Point2D((cx + rEnd).roundToInt(), cy.roundToInt()),
+              ) to true,
+            ),
+        )
       }
 
       MultiTouchMode.ROTATE -> {
         val cx = action.centerX.toFloat().coerceAtLeast(0f)
         val cy = action.centerY.toFloat().coerceAtLeast(0f)
         val radius = action.radiusPx.toFloat().coerceAtLeast(20f)
-        val p1 = buildArcPath(cx, cy, radius, action.startAngleDeg, action.endAngleDeg)
-        val p2 = buildArcPath(cx, cy, radius, action.startAngleDeg + 180f, action.endAngleDeg + 180f)
-        listOf(
-          GestureDescription.StrokeDescription(p1, 0L, safeDur),
-          GestureDescription.StrokeDescription(p2, 0L, safeDur),
-        ) to safeDur
+        val (p1, pts1) = buildArcPathWithPoints(cx, cy, radius, action.startAngleDeg, action.endAngleDeg)
+        val (p2, pts2) = buildArcPathWithPoints(cx, cy, radius, action.startAngleDeg + 180f, action.endAngleDeg + 180f)
+        BuiltMultiTouchStrokes(
+          strokes =
+            listOf(
+              GestureDescription.StrokeDescription(p1, 0L, safeDur),
+              GestureDescription.StrokeDescription(p2, 0L, safeDur),
+            ),
+          maxDurationMs = safeDur,
+          debugPaths = listOf(pts1 to true, pts2 to true),
+        )
       }
     }
   }
 
-  private fun buildArcPath(
+  private fun buildArcPathWithPoints(
     cx: Float,
     cy: Float,
     radius: Float,
     startDeg: Float,
     endDeg: Float,
-  ): Path {
-    val steps = 16
-    return Path().apply {
-      for (i in 0..steps) {
-        val t = i.toFloat() / steps.toFloat()
-        val angleRad = Math.toRadians((startDeg + ((endDeg - startDeg) * t)).toDouble())
-        val px = (cx + (cos(angleRad) * radius).toFloat()).coerceAtLeast(0f)
-        val py = (cy + (sin(angleRad) * radius).toFloat()).coerceAtLeast(0f)
-        if (i == 0) moveTo(px, py) else lineTo(px, py)
+  ): Pair<Path, List<Point2D>> {
+    val steps = 12
+    val pts = ArrayList<Point2D>(steps + 1)
+    val path =
+      Path().apply {
+        for (i in 0..steps) {
+          val t = i.toFloat() / steps.toFloat()
+          val angleRad = Math.toRadians((startDeg + ((endDeg - startDeg) * t)).toDouble())
+          val px = (cx + (cos(angleRad) * radius).toFloat()).coerceAtLeast(0f)
+          val py = (cy + (sin(angleRad) * radius).toFloat()).coerceAtLeast(0f)
+          pts += Point2D(px.roundToInt(), py.roundToInt())
+          if (i == 0) moveTo(px, py) else lineTo(px, py)
+        }
       }
-    }
+    return path to pts
   }
+
+  // Arc paths are built by buildArcPathWithPoints above
 
   private fun applyJitter(x: Int, y: Int, jitterPx: Int): Pair<Int, Int> {
     if (jitterPx <= 0) return x.coerceAtLeast(0) to y.coerceAtLeast(0)

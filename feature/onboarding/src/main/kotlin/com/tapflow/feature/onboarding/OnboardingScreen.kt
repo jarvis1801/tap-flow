@@ -76,6 +76,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapflow.core.service.accessibility.TapFlowAccessibilityService
+import com.tapflow.core.service.permissions.AccessibilityProminentDisclosureDialog
+import com.tapflow.core.service.permissions.openAccessibilitySettings
 
 @Composable
 fun OnboardingScreen(
@@ -114,14 +116,7 @@ fun OnboardingScreen(
     viewModel.effects.collect { effect ->
       when (effect) {
         OnboardingUiEffect.LaunchAccessibilitySettings -> {
-          val serviceComponent =
-            ComponentName(context.packageName, TapFlowAccessibilityService::class.java.name)
-          val targeted =
-            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
-              putExtra(":settings:fragment_args_key", serviceComponent.flattenToString())
-            }
-          runCatching { context.startActivity(targeted) }
-            .onFailure { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+          openAccessibilitySettings(context)
         }
         OnboardingUiEffect.LaunchOverlaySettings -> {
           val intent =
@@ -203,6 +198,13 @@ fun OnboardingContent(
   onIntent: (OnboardingUiIntent) -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  if (state.showAccessibilityDisclosure) {
+    AccessibilityProminentDisclosureDialog(
+      onAcceptAndContinue = { onIntent(OnboardingUiIntent.AcceptAccessibilityDisclosure) },
+      onDecline = { onIntent(OnboardingUiIntent.DismissAccessibilityDisclosure) },
+    )
+  }
+
   Scaffold(
     modifier = modifier.fillMaxSize(),
     contentWindowInsets = WindowInsets(0, 0, 0, 0),

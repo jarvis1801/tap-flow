@@ -171,3 +171,12 @@ enum class RunnerLaunchMode {
   AUTO_START,
 }
 
+@Immutable
+@Serializable
+data class OverlayPreferences(
+  val volumeStopEnabled: Boolean = false,
+  val keepScreenAwakeWhileRunning: Boolean = true,
+  val pauseOnScreenOff: Boolean = true,
+  val showDebugTouchMarker: Boolean = false,
+)
+

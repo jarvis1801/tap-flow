@@ -202,7 +202,7 @@ class ScriptFlowLayoutEngineTest {
       )
     val tapOff = ScriptAction.Tap(id = "tap_off", postDelay = PostActionDelay.Off)
     val delayNode = ScriptAction.Delay(id = "del_1", config = DelayConfig.Fixed(300L))
-    val varNode = ScriptAction.VariableOp(id = "var_1")
+    val varNode = ScriptAction.SetVariable(id = "var_1", targetKey = "count", valueTemplate = "1")
 
     val layoutNonZero =
       ScriptFlowLayoutEngine.computeLayout(
@@ -213,12 +213,12 @@ class ScriptFlowLayoutEngineTest {
 
     val badgesByNodeId =
       layoutNonZero.nodes.filterIsInstance<FlowNode.ActionCard>().associateBy { it.id }
-    assertEquals("⏱ 500ms", badgesByNodeId.getValue("act_tap_g").postDelayBadge?.label)
-    assertEquals("⏱ 200–500ms", badgesByNodeId.getValue("act_tap_o").postDelayBadge?.label)
-    assertEquals("0ms (Off)", badgesByNodeId.getValue("act_tap_off").postDelayBadge?.label)
-    assertTrue(badgesByNodeId.getValue("act_tap_off").postDelayBadge?.isMutedOff == true)
-    assertNull(badgesByNodeId.getValue("act_del_1").postDelayBadge)
-    assertNull(badgesByNodeId.getValue("act_var_1").postDelayBadge)
+    assertEquals("⏱ 500ms", badgesByNodeId.getValue("action_tap_g").postDelayBadge?.label)
+    assertEquals("⏱ 200–500ms", badgesByNodeId.getValue("action_tap_o").postDelayBadge?.label)
+    assertEquals("0ms (Off)", badgesByNodeId.getValue("action_tap_off").postDelayBadge?.label)
+    assertTrue(badgesByNodeId.getValue("action_tap_off").postDelayBadge?.isMutedOff == true)
+    assertNull(badgesByNodeId.getValue("action_del_1").postDelayBadge)
+    assertNull(badgesByNodeId.getValue("action_var_1").postDelayBadge)
 
     // Outgoing edges carry matching badges on anchors
     val edgeBadges = layoutNonZero.edges.mapNotNull { it.delayBadge?.label }
@@ -254,7 +254,7 @@ class ScriptFlowLayoutEngineTest {
                 ),
                 ConditionLeaf(
                   id = "l_c",
-                  predicate = ConditionPredicate.AppMatch(packageNames = listOf("com.example.superlongpackagename.activity")),
+                  predicate = ConditionPredicate.AppMatch(packageName = "com.example.superlongpackagename.activity"),
                 ),
               ),
           ),
@@ -312,14 +312,14 @@ class ScriptFlowLayoutEngineTest {
     val ifNode = layout.nodes.filterIsInstance<FlowNode.DecisionCard>().single { it.blockId == "if_col" }
     assertTrue(ifNode.isCollapsed)
     assertEquals(3, ifNode.collapsedStepCount)
-    assertFalse(layout.nodes.any { it.id == "act_t1" || it.id == "act_d1" || it.id == "act_t2" || it.id == "else_hdr_if_col" })
+    assertFalse(layout.nodes.any { it.id == "action_t1" || it.id == "action_d1" || it.id == "action_t2" || it.id == "else_hdr_if_col" })
 
     val loopNode = layout.nodes.filterIsInstance<FlowNode.LoopHeaderCard>().single { it.blockId == "loop_col" }
     assertTrue(loopNode.isCollapsed)
     assertEquals(2, loopNode.collapsedStepCount)
     assertTrue(layout.containers.isEmpty())
     assertFalse(layout.edges.any { it.kind == FlowEdgeKind.LOOP_BACK })
-    assertFalse(layout.nodes.any { it.id == "act_lt1" || it.id == "act_lt2" })
+    assertFalse(layout.nodes.any { it.id == "action_lt1" || it.id == "action_lt2" })
   }
 
   @Test

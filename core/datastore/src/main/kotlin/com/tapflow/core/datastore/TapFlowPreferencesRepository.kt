@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.tapflow.core.model.common.OverlayPreferences
 import com.tapflow.core.model.common.OverlaySizeOption
 import com.tapflow.core.model.common.RunnerLaunchMode
 import java.io.IOException
@@ -28,6 +29,10 @@ class TapFlowPreferencesRepository @Inject constructor(
     val THEME_PALETTE = stringPreferencesKey("theme_palette_option")
     val OVERLAY_SIZE = stringPreferencesKey("overlay_size_option")
     val RUNNER_LAUNCH_MODE = stringPreferencesKey("runner_launch_mode")
+    val OVERLAY_VOLUME_STOP = booleanPreferencesKey("overlay_volume_stop_enabled")
+    val OVERLAY_KEEP_SCREEN_AWAKE = booleanPreferencesKey("overlay_keep_screen_awake")
+    val OVERLAY_PAUSE_ON_SCREEN_OFF = booleanPreferencesKey("overlay_pause_on_screen_off")
+    val OVERLAY_SHOW_DEBUG_TOUCH_MARKER = booleanPreferencesKey("overlay_show_debug_touch_marker")
     val KTOR_PORT = intPreferencesKey("ktor_server_port")
 
     val SHIZUKU_SHELL_INPUT = booleanPreferencesKey("shizuku_shell_input_injection")
@@ -86,6 +91,13 @@ class TapFlowPreferencesRepository @Inject constructor(
         themePalette = themePalette,
         overlaySize = overlaySize,
         runnerLaunchMode = runnerLaunchMode,
+        overlay =
+          OverlayPreferences(
+            volumeStopEnabled = prefs[Keys.OVERLAY_VOLUME_STOP] ?: false,
+            keepScreenAwakeWhileRunning = prefs[Keys.OVERLAY_KEEP_SCREEN_AWAKE] ?: true,
+            pauseOnScreenOff = prefs[Keys.OVERLAY_PAUSE_ON_SCREEN_OFF] ?: true,
+            showDebugTouchMarker = prefs[Keys.OVERLAY_SHOW_DEBUG_TOUCH_MARKER] ?: false,
+          ),
         ktorPort = (prefs[Keys.KTOR_PORT] ?: AppPreferences.DEFAULT_KTOR_PORT).coerceIn(1024, 65535),
         shizuku =
           ShizukuPreferences(
@@ -145,6 +157,22 @@ class TapFlowPreferencesRepository @Inject constructor(
 
   suspend fun setRunnerLaunchMode(mode: RunnerLaunchMode) {
     dataStore.edit { prefs -> prefs[Keys.RUNNER_LAUNCH_MODE] = mode.name }
+  }
+
+  suspend fun setVolumeStopEnabled(enabled: Boolean) {
+    dataStore.edit { prefs -> prefs[Keys.OVERLAY_VOLUME_STOP] = enabled }
+  }
+
+  suspend fun setKeepScreenAwakeWhileRunning(enabled: Boolean) {
+    dataStore.edit { prefs -> prefs[Keys.OVERLAY_KEEP_SCREEN_AWAKE] = enabled }
+  }
+
+  suspend fun setPauseOnScreenOff(enabled: Boolean) {
+    dataStore.edit { prefs -> prefs[Keys.OVERLAY_PAUSE_ON_SCREEN_OFF] = enabled }
+  }
+
+  suspend fun setShowDebugTouchMarker(enabled: Boolean) {
+    dataStore.edit { prefs -> prefs[Keys.OVERLAY_SHOW_DEBUG_TOUCH_MARKER] = enabled }
   }
 
   suspend fun setKtorPort(port: Int) {

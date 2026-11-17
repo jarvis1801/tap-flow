@@ -233,7 +233,7 @@ Tabs:
   - Use Shizuku Shell for Input Injection (Enhanced system-level touch compatibility).
   - Enable Rootless App Force-Stop (`am force-stop` crash recovery).
   - Enhanced Key Event Injection (Direct physical key events).
-  - Silent Background Screenshots (`screencap` via shell; bypasses MediaProjection when active).
+  - Silent Background Screenshots (`screencap` via shell instead of MediaProjection when active).
   - Auto-Grant Screen Capture (`PROJECT_MEDIA`): Grants `PROJECT_MEDIA` AppOp via Shizuku (`cmd appops set <pkg> PROJECT_MEDIA allow`), verifies `Allowed ✓`, skips TapFlow's pre-consent dialog so `createScreenCaptureIntent()` resolves silently on supported ROMs (falling back safely if blocked by OEM), and helps prevent Android 15+ screen-lock capture interruption.
   - MacroDroid / Tasker Broadcasts [Pro] (`externalBroadcastEnabled` in `ShizukuPreferences`): Enables `TapFlowExternalTriggerReceiver` and automatic `ACTION_EXECUTION_FINISHED` completion callbacks.
   - Setup Guide & Action Generator (MacroDroid / Tasker): Always-clickable entry opening `Route.ExternalAutomationGuide` (`ExternalAutomationGuideScreen`) with live prerequisite checks, Script/Pipeline intent generator with 1-tap copy, all 6 control actions, and step-by-step `MacroDroid` | `Tasker` setup instructions.
@@ -254,7 +254,7 @@ Tabs:
   - Floating Overlay & Safety (Free for ALL users):
   - Overlay Size (live-adjustable): Tiny (`28.dp` button / `16.dp` icon / `28.dp` bubble) / Compact [Default] (`34.dp` button / `19.dp` icon / `34.dp` bubble) / Medium (`42.dp` button / `22.dp` icon / `42.dp` bubble) / Large (`50.dp` button / `26.dp` icon / `50.dp` bubble) with a live mini preview card.
   - Runner Launch Behavior (`RunnerLaunchMode` `FilterChip` selector): `Ask Every Time` [Default] / `Standby` / `Auto-Start` (`AppPreferences.runnerLaunchMode`).
-  - Emergency Stop via Volume Down (`Boolean`, Default `true`): Pressing hardware Volume Down while a script is actively running immediately pauses/stops the runner cleanly.
+  - Emergency Stop via Volume Down (`Boolean`, Default `false`): Pressing hardware Volume Down while a script is actively running immediately pauses/stops the runner cleanly.
   - Keep Screen Awake While Running (`Boolean`, Default `true`): Applies `WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON` on the overlay dock strictly while `RunnerPhase.RUNNING`.
   - Pause Automatically on Screen Off (`Boolean`, Default `true`): Listens to `Intent.ACTION_SCREEN_OFF` to stop/pause execution cleanly when the user locks the screen.
   - Show Debug Touch Marker (`Boolean`, Default `false`): Briefly renders a `300ms` non-touchable translucent hollow ring/trail at executed touch coordinates for visual debugging.

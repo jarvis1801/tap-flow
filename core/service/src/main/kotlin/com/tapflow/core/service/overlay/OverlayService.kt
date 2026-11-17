@@ -8,8 +8,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
@@ -97,6 +99,7 @@ import com.tapflow.core.model.action.SwipeTrajectoryMode
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.DurationInput
 import com.tapflow.core.model.common.NumericInput
+import com.tapflow.core.model.common.OverlayPreferences
 import com.tapflow.core.model.inspect.InspectGroup
 import com.tapflow.core.model.inspect.InspectItem
 import com.tapflow.core.model.inspect.InspectPixel
@@ -226,6 +229,19 @@ class OverlayService :
   private var recorderPauseStartedAtMs: Long? = null
   private var isProcessingGesture = false
   @Volatile private var isClosingService = false
+  @Volatile private var overlayPrefs = OverlayPreferences()
+  private var captureInterceptVisible = false
+  private var captureInterceptTouch = false
+  private var isScreenOffReceiverRegistered = false
+
+  private val screenOffReceiver =
+    object : BroadcastReceiver() {
+      override fun onReceive(context: Context?, intent: Intent?) {
+        if (intent?.action == Intent.ACTION_SCREEN_OFF && overlayPrefs.pauseOnScreenOff) {
+          handleScreenOffSafetyPause()
+        }
+      }
+    }
 
   private val callbacks =
     object : OverlayCallbacks {
@@ -427,6 +443,7 @@ class OverlayService :
 
       override fun onDismissCaptureAlert() {
         uiState.update { it.copy(captureAlertMessage = null) }
+        syncCaptureLayerWindowState()
       }
 
       override fun onReturnToTapFlow() {
@@ -459,11 +476,14 @@ class OverlayService :
 
     attachWindowsInStrictZOrder()
     registerDockDisplayListener()
+    registerScreenOffSafetyReceiver()
 
     serviceScope.launch {
       val prefs = preferencesRepository.getPreferencesOnce()
+      overlayPrefs = prefs.overlay
       uiState.update { it.copy(overlaySize = prefs.overlaySize) }
       applySavedDockPosition(prefs.dockPosition.x, prefs.dockPosition.y)
+      updateKeepScreenAwakeFlag()
     }
 
     serviceScope.launch {
@@ -477,8 +497,40 @@ class OverlayService :
     }
 
     serviceScope.launch {
+      preferencesRepository.preferencesFlow
+        .map { it.overlay }
+        .distinctUntilChanged()
+        .collectLatest { prefs ->
+          overlayPrefs = prefs
+          updateKeepScreenAwakeFlag()
+          if (!prefs.showDebugTouchMarker && uiState.value.activeDebugMarkers.isNotEmpty()) {
+            uiState.update { it.copy(activeDebugMarkers = emptyList()) }
+            syncCaptureLayerWindowState()
+          }
+        }
+    }
+
+    serviceScope.launch {
       runnerControlHub.snapshot.collectLatest { snapshot ->
         uiState.update { it.copy(runnerSnapshot = snapshot) }
+        updateKeepScreenAwakeFlag()
+      }
+    }
+
+    serviceScope.launch {
+      runnerControlHub.debugTouchMarkers.collect { marker ->
+        if (!overlayPrefs.showDebugTouchMarker) return@collect
+        uiState.update { current ->
+          current.copy(activeDebugMarkers = (current.activeDebugMarkers + marker).takeLast(12))
+        }
+        syncCaptureLayerWindowState()
+        launch {
+          delay(320L)
+          uiState.update { current ->
+            current.copy(activeDebugMarkers = current.activeDebugMarkers.filterNot { it.id == marker.id })
+          }
+          syncCaptureLayerWindowState()
+        }
       }
     }
 
@@ -497,6 +549,7 @@ class OverlayService :
             captureAlertMessage = alert,
           )
         }
+        syncCaptureLayerWindowState()
       }
     }
   }
@@ -699,16 +752,28 @@ class OverlayService :
   }
 
   private fun setCaptureLayerInterceptable(visible: Boolean, interceptable: Boolean) {
+    captureInterceptVisible = visible
+    captureInterceptTouch = interceptable
+    syncCaptureLayerWindowState()
+  }
+
+  private fun syncCaptureLayerWindowState() {
     val view = captureRootView ?: return
     val params = captureLayoutParams ?: return
 
-    view.visibility = if (visible) View.VISIBLE else View.GONE
+    val currentUi = uiState.value
+    val hasVisualOverlayContent =
+      captureInterceptVisible ||
+        currentUi.captureAlertMessage != null ||
+        currentUi.activeDebugMarkers.isNotEmpty()
+
+    view.visibility = if (hasVisualOverlayContent) View.VISIBLE else View.GONE
     val baseFlags =
       WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
         WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
     params.flags =
-      if (interceptable) {
+      if (captureInterceptTouch) {
         baseFlags
       } else {
         baseFlags or
@@ -716,6 +781,65 @@ class OverlayService :
           WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
       }
     runCatching { windowManager.updateViewLayout(view, params) }
+  }
+
+  private fun updateKeepScreenAwakeFlag(forceClear: Boolean = false) {
+    val view = dockComposeView ?: return
+    val params = dockLayoutParams ?: return
+    val shouldKeepAwake =
+      !forceClear &&
+        !isClosingService &&
+        overlayPrefs.keepScreenAwakeWhileRunning &&
+        uiState.value.runnerSnapshot.phase == RunnerPhase.RUNNING
+    val currentlyHasFlag = (params.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) != 0
+    if (shouldKeepAwake == currentlyHasFlag) return
+
+    params.flags =
+      if (shouldKeepAwake) {
+        params.flags or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+      } else {
+        params.flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON.inv()
+      }
+    runCatching { windowManager.updateViewLayout(view, params) }
+  }
+
+  private fun registerScreenOffSafetyReceiver() {
+    if (isScreenOffReceiverRegistered) return
+    val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      registerReceiver(screenOffReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+    } else {
+      @Suppress("UnspecifiedRegisterReceiverFlag")
+      registerReceiver(screenOffReceiver, filter)
+    }
+    isScreenOffReceiverRegistered = true
+  }
+
+  private fun handleScreenOffSafetyPause() {
+    accessibilityBridge.forceReleaseActiveStroke()
+    if (runnerControlHub.snapshot.value.phase == RunnerPhase.RUNNING) {
+      runnerControlHub.pause("Paused automatically on screen off")
+    }
+    if (uiState.value.sessionState == OverlaySessionState.ACTIVE) {
+      when (uiState.value.mode) {
+        OverlayMode.LIVE_RECORDER -> pauseRecorderCapture()
+        OverlayMode.LIVE_INSPECTOR -> pauseInspectorCapture()
+        OverlayMode.GESTURE_PICKER -> {
+          setCaptureLayerInterceptable(visible = false, interceptable = false)
+          uiState.update {
+            it.copy(
+              sessionState = OverlaySessionState.PAUSED,
+              isCaptureActive = false,
+              capturePhase = OverlayCapturePhase.IDLE,
+              touchPreview = null,
+              statusHint = "Pick paused on screen off",
+            )
+          }
+        }
+        else -> Unit
+      }
+    }
+    updateKeepScreenAwakeFlag(forceClear = true)
   }
 
   private fun startScriptRunnerMode(
@@ -1660,11 +1784,17 @@ class OverlayService :
   private fun detachOverlayWindowsAndListeners() {
     edgeSnapAnimator?.cancel()
     edgeSnapAnimator = null
+    if (isScreenOffReceiverRegistered) {
+      runCatching { unregisterReceiver(screenOffReceiver) }
+      isScreenOffReceiverRegistered = false
+    }
+    updateKeepScreenAwakeFlag(forceClear = true)
     displayListener?.let { listener ->
       val dm = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
       runCatching { dm?.unregisterDisplayListener(listener) }
     }
     displayListener = null
+    uiState.update { it.copy(activeDebugMarkers = emptyList()) }
     setCaptureLayerInterceptable(visible = false, interceptable = false)
     captureRootView?.let { root ->
       root.setOnTouchListener(null)

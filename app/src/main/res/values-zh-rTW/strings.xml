@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TapFlow</string>
-    <string name="accessibility_service_description">TapFlow 使用無障礙服務執行自動觸控手勢、系統按鍵操作與偵測目前前景應用程式。</string>
+    <string name="accessibility_service_description">TapFlow 使用無障礙服務執行自動觸控手勢、系統按鍵操作、偵測目前前景應用程式，以及可選的文字輸入與音量下鍵緊急停止功能。</string>
     <string name="boot_shell_title">TapFlow 核心已就緒</string>
     <string name="boot_shell_subtitle">第一階段架構與領域模型骨架</string>
     <string name="boot_shell_status_label">多模組建置已啟用</string>

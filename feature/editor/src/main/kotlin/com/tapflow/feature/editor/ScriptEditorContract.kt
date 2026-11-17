@@ -78,6 +78,17 @@ data class ScriptEditorUiState(
   val currentForegroundPackage: String? = null,
   val inspectPickerTarget: InspectPickerTarget? = null,
   val inspectGroups: List<InspectGroupWithItems> = emptyList(),
+  val isAccessibilityConnected: Boolean = false,
+  val isOverlayPermissionGranted: Boolean = false,
+  val pendingOverlayPickRequest: PendingOverlayPickRequest? = null,
+  val showPermissionsDisabledDialog: Boolean = false,
+  val showAccessibilityDisclosureDialog: Boolean = false,
+)
+
+@Immutable
+data class PendingOverlayPickRequest(
+  val purpose: OverlayPickPurpose,
+  val targetType: GesturePickerTargetType,
 )
 
 sealed interface ScriptEditorUiIntent {
@@ -157,11 +168,25 @@ sealed interface ScriptEditorUiIntent {
 
   data object DismissActionSheet : ScriptEditorUiIntent
 
-  // Overlay Picker (Mode 2)
+  // Overlay Picker (Mode 2) & Runtime Permission Pre-Flight
   data class RequestOverlayPick(
     val purpose: OverlayPickPurpose,
     val targetType: GesturePickerTargetType,
   ) : ScriptEditorUiIntent
+
+  data class SyncOverlayPermission(val granted: Boolean) : ScriptEditorUiIntent
+
+  data object RequestAccessibilityFromPreFlight : ScriptEditorUiIntent
+
+  data object AcceptAccessibilityDisclosure : ScriptEditorUiIntent
+
+  data object DismissAccessibilityDisclosure : ScriptEditorUiIntent
+
+  data object RequestOverlayFromPreFlight : ScriptEditorUiIntent
+
+  data object ContinuePendingOverlayPick : ScriptEditorUiIntent
+
+  data object DismissPermissionsDisabledDialog : ScriptEditorUiIntent
 
   // App Picker
   data class OpenAppPicker(val target: AppPickerTarget) : ScriptEditorUiIntent
@@ -196,6 +221,10 @@ sealed interface ScriptEditorUiEffect {
     val requestId: String,
     val targetType: GesturePickerTargetType,
   ) : ScriptEditorUiEffect
+
+  data object LaunchAccessibilitySettings : ScriptEditorUiEffect
+
+  data object LaunchOverlaySettings : ScriptEditorUiEffect
 
   data class ShowUndoSnackbar(val message: String) : ScriptEditorUiEffect
 

@@ -8,12 +8,14 @@ import android.graphics.Path
 import android.media.AudioManager
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.inputmethod.InputMethodManager
 import com.tapflow.core.model.action.PostTextActionKey
 import com.tapflow.core.model.action.SystemKeyType
 import com.tapflow.core.service.shizuku.ShizukuManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -89,6 +91,15 @@ class AccessibilityManagerBridge @Inject constructor(
   private var activeStrokeX: Float = 0f
   private var activeStrokeY: Float = 0f
   private var activeHoldLoopJob: Job? = null
+  private val volumeDispatchSuppressedUntilElapsedMs = AtomicLong(0L)
+
+  fun markSelfVolumeKeyDispatch(durationMs: Long = 350L) {
+    val until = SystemClock.elapsedRealtime() + durationMs.coerceAtLeast(100L)
+    volumeDispatchSuppressedUntilElapsedMs.updateAndGet { prev -> maxOf(prev, until) }
+  }
+
+  fun isSelfVolumeKeyDispatchSuppressed(): Boolean =
+    SystemClock.elapsedRealtime() < volumeDispatchSuppressedUntilElapsedMs.get()
 
   internal fun attachHost(executorHost: AccessibilityExecutorHost) {
     host = executorHost
@@ -409,9 +420,11 @@ class AccessibilityManagerBridge @Inject constructor(
 
   fun performGlobalAction(keyType: SystemKeyType): Boolean {
     if (keyType == SystemKeyType.VOLUME_UP) {
+      markSelfVolumeKeyDispatch()
       return host?.adjustVolume(raise = true) ?: adjustVolumeDirect(raise = true)
     }
     if (keyType == SystemKeyType.VOLUME_DOWN) {
+      markSelfVolumeKeyDispatch()
       return host?.adjustVolume(raise = false) ?: adjustVolumeDirect(raise = false)
     }
     val activeHost = host ?: return false

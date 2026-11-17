@@ -260,7 +260,7 @@ fun SeamlessTabContent(
 
             ShizukuToggleRow(
               title = "Shell Input Injection",
-              subtitle = "Executes taps, swipes, and text via Shizuku shell, bypassing Accessibility touch filters.",
+              subtitle = "Executes taps, swipes, and text via Shizuku shell for enhanced system-level input compatibility.",
               checked = state.preferences.shizuku.shellInputInjection,
               enabled = togglesEnabled,
               testTag = "toggle_shizuku_shell_input",
@@ -287,7 +287,7 @@ fun SeamlessTabContent(
             HorizontalDivider()
             ShizukuToggleRow(
               title = "Silent Background Screenshots",
-              subtitle = "Captures frames silently via shell screencap and bypasses MediaProjection prompts.",
+              subtitle = "Captures frames silently via shell screencap instead of MediaProjection prompts when active.",
               checked = state.preferences.shizuku.silentScreenshots,
               enabled = togglesEnabled,
               testTag = "toggle_shizuku_silent_screenshots",

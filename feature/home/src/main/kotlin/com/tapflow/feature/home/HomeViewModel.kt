@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.tapflow.core.billing.BillingRestoreResult
 import com.tapflow.core.billing.EntitlementRepository
+import com.tapflow.core.database.asset.ScriptAssetManager
 import com.tapflow.core.database.backup.ImportConflictStrategy
 import com.tapflow.core.database.backup.TapFlowBackupManager
 import com.tapflow.core.database.repository.InspectGroupWithItems
@@ -29,6 +30,7 @@ import com.tapflow.core.model.pipeline.PipelineRepeatMode
 import com.tapflow.core.model.script.Script
 import com.tapflow.core.server.ServerUiStatus
 import com.tapflow.core.server.TapFlowLocalServer
+import com.tapflow.core.service.accessibility.AccessibilityManagerBridge
 import com.tapflow.core.service.overlay.OverlayStateBridge
 import com.tapflow.core.service.projection.MediaProjectionBridge
 import com.tapflow.core.service.projection.ScreenCaptureState
@@ -59,9 +61,11 @@ class HomeViewModel @Inject constructor(
   private val entitlementRepository: EntitlementRepository,
   private val localServer: TapFlowLocalServer,
   private val shizukuManager: ShizukuManager,
+  private val accessibilityManagerBridge: AccessibilityManagerBridge,
   private val mediaProjectionBridge: MediaProjectionBridge,
   private val overlayStateBridge: OverlayStateBridge,
   private val backupManager: TapFlowBackupManager,
+  private val scriptAssetManager: ScriptAssetManager,
   private val inspectImageImporter: InspectImageImporter,
 ) : ViewModel() {
 
@@ -91,6 +95,11 @@ class HomeViewModel @Inject constructor(
     val importBackupPrompt: ImportBackupPrompt? = null,
     val showTermsDialog: Boolean = false,
     val showPrivacyDialog: Boolean = false,
+    val isAccessibilityConnected: Boolean = false,
+    val isOverlayPermissionGranted: Boolean = false,
+    val showPermissionsDisabledDialog: Boolean = false,
+    val showAccessibilityDisclosureDialog: Boolean = false,
+    val pendingHomeOverlayAction: PendingHomeOverlayAction? = null,
     val appVersionName: String = "1.0.0",
     val appVersionCode: Long = 1L,
   )
@@ -138,6 +147,18 @@ class HomeViewModel @Inject constructor(
           localizedProPrice = price,
         )
       }
+
+    viewModelScope.launch {
+      accessibilityManagerBridge.isAccessibilityConnected.collect { connected ->
+        _localState.update { it.copy(isAccessibilityConnected = connected) }
+      }
+    }
+
+    viewModelScope.launch {
+      accessibilityManagerBridge.isAccessibilityConnected.collect { connected ->
+        _localState.update { it.copy(isAccessibilityConnected = connected) }
+      }
+    }
 
     viewModelScope.launch {
       inspectRepository.observeGroupsWithItems().collect {
@@ -288,6 +309,11 @@ class HomeViewModel @Inject constructor(
           importBackupPrompt = local.importBackupPrompt,
           showTermsDialog = local.showTermsDialog,
           showPrivacyDialog = local.showPrivacyDialog,
+          isAccessibilityConnected = local.isAccessibilityConnected,
+          isOverlayPermissionGranted = local.isOverlayPermissionGranted,
+          showPermissionsDisabledDialog = local.showPermissionsDisabledDialog,
+          showAccessibilityDisclosureDialog = local.showAccessibilityDisclosureDialog,
+          pendingHomeOverlayAction = local.pendingHomeOverlayAction,
           appVersionName = local.appVersionName,
           appVersionCode = local.appVersionCode,
         )
@@ -378,6 +404,7 @@ class HomeViewModel @Inject constructor(
       }
       HomeUiIntent.AddRecordScriptClicked -> {
         _localState.update { it.copy(isScriptFabExpanded = false) }
+        if (!ensurePermissionsReady(PendingHomeOverlayAction.LiveRecorder)) return
         launchTargetWithVisionGuard(
           target = PendingMediaProjectionTarget.LiveRecorder,
           requiresVision = true,
@@ -393,6 +420,9 @@ class HomeViewModel @Inject constructor(
                 blockers.joinToString(", ") { it.displayName },
               ),
             )
+            return@launch
+          }
+          if (!ensurePermissionsReady(PendingHomeOverlayAction.PlayScript(script.id))) {
             return@launch
           }
           val requiresVision = script.requiresVision()
@@ -460,6 +490,48 @@ class HomeViewModel @Inject constructor(
       HomeUiIntent.DismissDeleteScript -> {
         _localState.update { it.copy(deleteScriptPrompt = null) }
       }
+      is HomeUiIntent.DuplicateScript -> {
+        viewModelScope.launch {
+          val source = scriptRepository.getScriptById(intent.scriptId) ?: return@launch
+          val cloned =
+            ScriptCloningUtils.cloneScriptForDuplicate(
+              source = source,
+              assetManager = scriptAssetManager,
+            )
+          scriptRepository.saveScript(cloned)
+          sendEffect(HomeUiEffect.ShowSnackbar("Duplicated \"${source.title.ifBlank { "Untitled Script" }}\""))
+        }
+      }
+      HomeUiIntent.LoadStarterTemplatesClicked -> {
+        viewModelScope.launch {
+          val templates = StarterScriptTemplates.createAll()
+          templates.forEach { script ->
+            scriptRepository.saveScript(script)
+          }
+          sendEffect(HomeUiEffect.ShowSnackbar("Loaded 2 starter template scripts"))
+        }
+      }
+      is HomeUiIntent.DuplicateScript -> {
+        viewModelScope.launch {
+          val source = scriptRepository.getScriptById(intent.scriptId) ?: return@launch
+          val cloned =
+            ScriptCloningUtils.cloneScriptForDuplicate(
+              source = source,
+              assetManager = scriptAssetManager,
+            )
+          scriptRepository.saveScript(cloned)
+          sendEffect(HomeUiEffect.ShowSnackbar("Duplicated \"${source.title.ifBlank { "Untitled Script" }}\""))
+        }
+      }
+      HomeUiIntent.LoadStarterTemplatesClicked -> {
+        viewModelScope.launch {
+          val templates = StarterScriptTemplates.createAll()
+          templates.forEach { script ->
+            scriptRepository.saveScript(script)
+          }
+          sendEffect(HomeUiEffect.ShowSnackbar("Loaded 2 starter template scripts"))
+        }
+      }
       is HomeUiIntent.ToggleScriptTagFilter -> {
         val available = _uiState.value.availableScriptTags
         _localState.update { state ->
@@ -492,6 +564,9 @@ class HomeViewModel @Inject constructor(
                 blockers.joinToString(", ") { it.displayName },
               ),
             )
+            return@launch
+          }
+          if (!ensurePermissionsReady(PendingHomeOverlayAction.PlayPipeline(pipeline.id))) {
             return@launch
           }
           val requiresVision =
@@ -545,6 +620,14 @@ class HomeViewModel @Inject constructor(
                 ),
             )
           }
+        }
+      }
+      is HomeUiIntent.DuplicatePipeline -> {
+        viewModelScope.launch {
+          val source = pipelineRepository.getPipelineById(intent.pipelineId) ?: return@launch
+          val cloned = ScriptCloningUtils.clonePipelineForDuplicate(source = source)
+          pipelineRepository.savePipeline(cloned)
+          sendEffect(HomeUiEffect.ShowSnackbar("Duplicated \"${source.title.ifBlank { "Untitled Pipeline" }}\""))
         }
       }
       HomeUiIntent.ConfirmDeletePipeline -> {
@@ -656,6 +739,7 @@ class HomeViewModel @Inject constructor(
           sendEffect(HomeUiEffect.NavigateToPaywall(ProFeatureGate.ADVANCED_VISION.displayName))
           return
         }
+        if (!ensurePermissionsReady(PendingHomeOverlayAction.LiveInspector)) return
         launchTargetWithVisionGuard(
           target = PendingMediaProjectionTarget.LiveInspector,
           requiresVision = true,
@@ -872,6 +956,30 @@ class HomeViewModel @Inject constructor(
       }
       is HomeUiIntent.SetOverlaySize -> {
         viewModelScope.launch { preferencesRepository.setOverlaySize(intent.option) }
+      }
+      is HomeUiIntent.SetVolumeStopEnabled -> {
+        viewModelScope.launch { preferencesRepository.setVolumeStopEnabled(intent.enabled) }
+      }
+      is HomeUiIntent.SetKeepScreenAwakeWhileRunning -> {
+        viewModelScope.launch { preferencesRepository.setKeepScreenAwakeWhileRunning(intent.enabled) }
+      }
+      is HomeUiIntent.SetPauseOnScreenOff -> {
+        viewModelScope.launch { preferencesRepository.setPauseOnScreenOff(intent.enabled) }
+      }
+      is HomeUiIntent.SetShowDebugTouchMarker -> {
+        viewModelScope.launch { preferencesRepository.setShowDebugTouchMarker(intent.enabled) }
+      }
+      is HomeUiIntent.SetVolumeStopEnabled -> {
+        viewModelScope.launch { preferencesRepository.setVolumeStopEnabled(intent.enabled) }
+      }
+      is HomeUiIntent.SetKeepScreenAwakeWhileRunning -> {
+        viewModelScope.launch { preferencesRepository.setKeepScreenAwakeWhileRunning(intent.enabled) }
+      }
+      is HomeUiIntent.SetPauseOnScreenOff -> {
+        viewModelScope.launch { preferencesRepository.setPauseOnScreenOff(intent.enabled) }
+      }
+      is HomeUiIntent.SetShowDebugTouchMarker -> {
+        viewModelScope.launch { preferencesRepository.setShowDebugTouchMarker(intent.enabled) }
       }
       is HomeUiIntent.SetRunnerLaunchMode -> {
         viewModelScope.launch { preferencesRepository.setRunnerLaunchMode(intent.mode) }
@@ -1092,6 +1200,58 @@ class HomeViewModel @Inject constructor(
         }
       }
 
+      // Runtime Permission Pre-Flight & Accessibility Prominent Disclosure
+      is HomeUiIntent.SyncOverlayPermission -> {
+        _localState.update {
+          it.copy(
+            isOverlayPermissionGranted = intent.granted,
+            isAccessibilityConnected = accessibilityManagerBridge.isAccessibilityConnected.value,
+          )
+        }
+      }
+      HomeUiIntent.RequestAccessibilityFromPreFlight -> {
+        _localState.update { it.copy(showAccessibilityDisclosureDialog = true) }
+      }
+      HomeUiIntent.AcceptAccessibilityDisclosure -> {
+        _localState.update { it.copy(showAccessibilityDisclosureDialog = false) }
+        sendEffect(HomeUiEffect.LaunchAccessibilitySettings)
+      }
+      HomeUiIntent.DismissAccessibilityDisclosure -> {
+        _localState.update { it.copy(showAccessibilityDisclosureDialog = false) }
+      }
+      HomeUiIntent.RequestOverlayFromPreFlight -> {
+        sendEffect(HomeUiEffect.LaunchOverlaySettings)
+      }
+      HomeUiIntent.ContinuePendingOverlayAction -> {
+        val accessibilityOk = accessibilityManagerBridge.isAccessibilityConnected.value
+        val overlayOk = _localState.value.isOverlayPermissionGranted
+        _localState.update { it.copy(isAccessibilityConnected = accessibilityOk) }
+        if (accessibilityOk && overlayOk) {
+          val pending = _localState.value.pendingHomeOverlayAction
+          _localState.update {
+            it.copy(
+              showPermissionsDisabledDialog = false,
+              pendingHomeOverlayAction = null,
+            )
+          }
+          when (pending) {
+            is PendingHomeOverlayAction.PlayScript -> onIntent(HomeUiIntent.PlayScriptClicked(pending.scriptId))
+            is PendingHomeOverlayAction.PlayPipeline -> onIntent(HomeUiIntent.PlayPipelineClicked(pending.pipelineId))
+            PendingHomeOverlayAction.LiveRecorder -> onIntent(HomeUiIntent.AddRecordScriptClicked)
+            PendingHomeOverlayAction.LiveInspector -> onIntent(HomeUiIntent.LiveInspectClicked)
+            null -> Unit
+          }
+        }
+      }
+      HomeUiIntent.DismissPermissionsDisabledDialog -> {
+        _localState.update {
+          it.copy(
+            showPermissionsDisabledDialog = false,
+            pendingHomeOverlayAction = null,
+          )
+        }
+      }
+
       // MediaProjection consent flow
       HomeUiIntent.ConfirmMediaProjectionConsentDialog -> {
         val target = _localState.value.pendingProjectionTarget ?: return
@@ -1109,6 +1269,22 @@ class HomeViewModel @Inject constructor(
     }
   }
 
+  private fun ensurePermissionsReady(action: PendingHomeOverlayAction): Boolean {
+    val accessibilityOk = accessibilityManagerBridge.isAccessibilityConnected.value
+    val overlayOk = _localState.value.isOverlayPermissionGranted
+    _localState.update { it.copy(isAccessibilityConnected = accessibilityOk) }
+    if (!accessibilityOk || !overlayOk) {
+      _localState.update {
+        it.copy(
+          pendingHomeOverlayAction = action,
+          showPermissionsDisabledDialog = true,
+        )
+      }
+      return false
+    }
+    return true
+  }
+
   fun suppressOverlayAutoCloseBriefly() {
     overlayStateBridge.suppressAutoCloseBriefly()
   }
@@ -1117,6 +1293,14 @@ class HomeViewModel @Inject constructor(
     target: PendingMediaProjectionTarget,
     requiresVision: Boolean,
   ) {
+    val fallbackAction =
+      when (target) {
+        is PendingMediaProjectionTarget.RunScript -> PendingHomeOverlayAction.PlayScript(target.scriptId)
+        is PendingMediaProjectionTarget.RunPipeline -> PendingHomeOverlayAction.PlayPipeline(target.pipelineId)
+        PendingMediaProjectionTarget.LiveRecorder -> PendingHomeOverlayAction.LiveRecorder
+        PendingMediaProjectionTarget.LiveInspector -> PendingHomeOverlayAction.LiveInspector
+      }
+    if (!ensurePermissionsReady(fallbackAction)) return
     viewModelScope.launch {
       val prefs = preferencesRepository.getPreferencesOnce()
       val shizukuUnlocked = entitlementRepository.canUseFeature(ProFeatureGate.SHIZUKU_SUITE)

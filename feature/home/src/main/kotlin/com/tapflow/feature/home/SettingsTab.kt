@@ -48,6 +48,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -225,7 +226,7 @@ fun SettingsTabContent(
                 tint = MaterialTheme.colorScheme.primary,
               )
               Text(
-                text = "Floating Overlay",
+                text = "Floating Overlay & Safety",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
               )
@@ -350,6 +351,59 @@ fun SettingsTabContent(
                 },
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            HorizontalDivider()
+
+            Text(
+              text = "Safety & Debug Controls",
+              style = MaterialTheme.typography.labelLarge,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            val overlayPrefs = state.preferences.overlay
+            OverlaySafetySwitchRow(
+              title = "Emergency Stop via Volume Down",
+              subtitle =
+                "Off by default. Pressing hardware Volume Down while running immediately pauses automation.",
+              checked = overlayPrefs.volumeStopEnabled,
+              testTag = "toggle_volume_emergency_stop",
+              onCheckedChange = { enabled ->
+                onIntent(HomeUiIntent.SetVolumeStopEnabled(enabled))
+              },
+            )
+
+            OverlaySafetySwitchRow(
+              title = "Keep Screen Awake While Running",
+              subtitle =
+                "Applies keep-screen-on strictly while scripts or pipelines are actively executing.",
+              checked = overlayPrefs.keepScreenAwakeWhileRunning,
+              testTag = "toggle_keep_screen_awake",
+              onCheckedChange = { enabled ->
+                onIntent(HomeUiIntent.SetKeepScreenAwakeWhileRunning(enabled))
+              },
+            )
+
+            OverlaySafetySwitchRow(
+              title = "Auto-Pause on Screen Off",
+              subtitle =
+                "Automatically pauses playback and overlay capture when the device screen turns off or locks.",
+              checked = overlayPrefs.pauseOnScreenOff,
+              testTag = "toggle_pause_on_screen_off",
+              onCheckedChange = { enabled ->
+                onIntent(HomeUiIntent.SetPauseOnScreenOff(enabled))
+              },
+            )
+
+            OverlaySafetySwitchRow(
+              title = "Show Debug Touch Markers",
+              subtitle =
+                "Briefly renders a 300ms hollow ring and swipe trail at executed touch coordinates.",
+              checked = overlayPrefs.showDebugTouchMarker,
+              testTag = "toggle_debug_touch_marker",
+              onCheckedChange = { enabled ->
+                onIntent(HomeUiIntent.SetShowDebugTouchMarker(enabled))
+              },
             )
           }
         }
@@ -812,6 +866,47 @@ private fun SettingsClickableRow(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     }
+  }
+}
+
+@Composable
+private fun OverlaySafetySwitchRow(
+  title: String,
+  subtitle: String,
+  checked: Boolean,
+  testTag: String,
+  onCheckedChange: (Boolean) -> Unit,
+) {
+  Row(
+    modifier =
+      Modifier
+        .fillMaxWidth()
+        .heightIn(min = 56.dp)
+        .clickable { onCheckedChange(!checked) }
+        .padding(vertical = 4.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(12.dp),
+  ) {
+    Column(
+      modifier = Modifier.weight(1f),
+      verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+      Text(
+        text = title,
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.Medium,
+      )
+      Text(
+        text = subtitle,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+    Switch(
+      checked = checked,
+      onCheckedChange = onCheckedChange,
+      modifier = Modifier.testTag(testTag),
+    )
   }
 }
 

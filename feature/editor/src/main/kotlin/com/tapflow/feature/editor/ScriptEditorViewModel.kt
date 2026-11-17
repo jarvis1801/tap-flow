@@ -119,6 +119,18 @@ class ScriptEditorViewModel @Inject constructor(
     }
 
     viewModelScope.launch {
+      accessibilityManagerBridge.isAccessibilityConnected.collectLatest { connected ->
+        _uiState.update { it.copy(isAccessibilityConnected = connected) }
+      }
+    }
+
+    viewModelScope.launch {
+      accessibilityManagerBridge.isAccessibilityConnected.collectLatest { connected ->
+        _uiState.update { it.copy(isAccessibilityConnected = connected) }
+      }
+    }
+
+    viewModelScope.launch {
       inspectRepository.observeGroupsWithItems().collectLatest { groups ->
         _uiState.update { it.copy(inspectGroups = groups) }
       }
@@ -574,25 +586,69 @@ class ScriptEditorViewModel @Inject constructor(
 
       // Overlay Picker
       is ScriptEditorUiIntent.RequestOverlayPick -> {
-        val session = _uiState.value.actionEditorSession ?: return
-        val requestId = UUID.randomUUID().toString()
-        gesturePickerBridge.beginPick(requestId, intent.targetType)
+        val accessibilityOk = accessibilityManagerBridge.isAccessibilityConnected.value
+        val overlayOk = _uiState.value.isOverlayPermissionGranted
+        _uiState.update { it.copy(isAccessibilityConnected = accessibilityOk) }
+        if (!accessibilityOk || !overlayOk) {
+          _uiState.update {
+            it.copy(
+              pendingOverlayPickRequest =
+                PendingOverlayPickRequest(
+                  purpose = intent.purpose,
+                  targetType = intent.targetType,
+                ),
+              showPermissionsDisabledDialog = true,
+            )
+          }
+          return
+        }
+        beginOverlayPick(intent.purpose, intent.targetType)
+      }
+      is ScriptEditorUiIntent.SyncOverlayPermission -> {
         _uiState.update {
           it.copy(
-            actionEditorSession =
-              session.copy(
-                activePickerRequestId = requestId,
-                activePickPurpose = intent.purpose,
-              ),
+            isOverlayPermissionGranted = intent.granted,
+            isAccessibilityConnected = accessibilityManagerBridge.isAccessibilityConnected.value,
           )
         }
-        overlayStateBridge.suppressAutoCloseBriefly()
-        sendEffect(
-          ScriptEditorUiEffect.LaunchOverlayGesturePicker(
-            requestId = requestId,
-            targetType = intent.targetType,
-          ),
-        )
+      }
+      ScriptEditorUiIntent.RequestAccessibilityFromPreFlight -> {
+        _uiState.update { it.copy(showAccessibilityDisclosureDialog = true) }
+      }
+      ScriptEditorUiIntent.AcceptAccessibilityDisclosure -> {
+        _uiState.update { it.copy(showAccessibilityDisclosureDialog = false) }
+        sendEffect(ScriptEditorUiEffect.LaunchAccessibilitySettings)
+      }
+      ScriptEditorUiIntent.DismissAccessibilityDisclosure -> {
+        _uiState.update { it.copy(showAccessibilityDisclosureDialog = false) }
+      }
+      ScriptEditorUiIntent.RequestOverlayFromPreFlight -> {
+        sendEffect(ScriptEditorUiEffect.LaunchOverlaySettings)
+      }
+      ScriptEditorUiIntent.ContinuePendingOverlayPick -> {
+        val accessibilityOk = accessibilityManagerBridge.isAccessibilityConnected.value
+        val overlayOk = _uiState.value.isOverlayPermissionGranted
+        _uiState.update { it.copy(isAccessibilityConnected = accessibilityOk) }
+        if (accessibilityOk && overlayOk) {
+          val pending = _uiState.value.pendingOverlayPickRequest
+          _uiState.update {
+            it.copy(
+              showPermissionsDisabledDialog = false,
+              pendingOverlayPickRequest = null,
+            )
+          }
+          if (pending != null) {
+            beginOverlayPick(pending.purpose, pending.targetType)
+          }
+        }
+      }
+      ScriptEditorUiIntent.DismissPermissionsDisabledDialog -> {
+        _uiState.update {
+          it.copy(
+            showPermissionsDisabledDialog = false,
+            pendingOverlayPickRequest = null,
+          )
+        }
       }
 
       // App Picker
@@ -984,6 +1040,31 @@ class ScriptEditorViewModel @Inject constructor(
       is ScriptAction.BooleanOp -> action.copy(id = id)
       is ScriptAction.TypeCastOp -> action.copy(id = id)
     }
+
+  private fun beginOverlayPick(
+    purpose: OverlayPickPurpose,
+    targetType: com.tapflow.core.service.overlay.GesturePickerTargetType,
+  ) {
+    val session = _uiState.value.actionEditorSession ?: return
+    val requestId = UUID.randomUUID().toString()
+    gesturePickerBridge.beginPick(requestId, targetType)
+    _uiState.update {
+      it.copy(
+        actionEditorSession =
+          session.copy(
+            activePickerRequestId = requestId,
+            activePickPurpose = purpose,
+          ),
+      )
+    }
+    overlayStateBridge.suppressAutoCloseBriefly()
+    sendEffect(
+      ScriptEditorUiEffect.LaunchOverlayGesturePicker(
+        requestId = requestId,
+        targetType = targetType,
+      ),
+    )
+  }
 
   fun suppressOverlayAutoCloseBriefly() {
     overlayStateBridge.suppressAutoCloseBriefly()

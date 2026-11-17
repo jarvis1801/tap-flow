@@ -87,10 +87,13 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.service.bridge.LocalBridgeControlIntents
 import com.tapflow.core.service.overlay.OverlayLaunchIntents
+import com.tapflow.core.service.permissions.openAccessibilitySettings
+import com.tapflow.core.service.permissions.openOverlayPermissionSettings
 import com.tapflow.core.service.projection.MediaProjectionBridge
 import com.tapflow.core.service.shizuku.ShizukuManager
 import kotlinx.coroutines.launch
@@ -119,6 +122,13 @@ fun HomeScreen(
 
   LaunchedEffect(initialTab) {
     viewModel.onIntent(HomeUiIntent.InitializeTabIfUnset(initialTab))
+  }
+
+  LifecycleResumeEffect(Unit) {
+    viewModel.onIntent(
+      HomeUiIntent.SyncOverlayPermission(Settings.canDrawOverlays(context)),
+    )
+    onPauseOrDispose {}
   }
 
   LaunchedEffect(deepLinkTab, deepLinkTabSeq) {
@@ -302,6 +312,12 @@ fun HomeScreen(
           runCatching {
             context.startService(LocalBridgeControlIntents.createStopIntent(context))
           }
+        }
+        HomeUiEffect.LaunchAccessibilitySettings -> {
+          openAccessibilitySettings(context)
+        }
+        HomeUiEffect.LaunchOverlaySettings -> {
+          openOverlayPermissionSettings(context)
         }
         is HomeUiEffect.ShowSnackbar -> {
           launch {

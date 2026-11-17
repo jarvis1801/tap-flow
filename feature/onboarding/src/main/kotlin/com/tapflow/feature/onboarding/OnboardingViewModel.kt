@@ -64,7 +64,14 @@ class OnboardingViewModel @Inject constructor(
         }
       }
       OnboardingUiIntent.OpenAccessibilitySettings -> {
+        _uiState.update { it.copy(showAccessibilityDisclosure = true) }
+      }
+      OnboardingUiIntent.AcceptAccessibilityDisclosure -> {
+        _uiState.update { it.copy(showAccessibilityDisclosure = false) }
         sendEffect(OnboardingUiEffect.LaunchAccessibilitySettings)
+      }
+      OnboardingUiIntent.DismissAccessibilityDisclosure -> {
+        _uiState.update { it.copy(showAccessibilityDisclosure = false) }
       }
       OnboardingUiIntent.OpenOverlaySettings -> {
         sendEffect(OnboardingUiEffect.LaunchOverlaySettings)

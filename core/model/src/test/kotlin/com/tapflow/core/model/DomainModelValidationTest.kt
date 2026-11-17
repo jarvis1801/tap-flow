@@ -3,6 +3,7 @@ package com.tapflow.core.model
 import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.NumericInput
+import com.tapflow.core.model.common.OverlayPreferences
 import com.tapflow.core.model.common.OverlaySizeOption
 import com.tapflow.core.model.common.RunnerLaunchMode
 import com.tapflow.core.model.condition.ColorMatchMode
@@ -352,5 +353,25 @@ class DomainModelValidationTest {
       val decoded = json.decodeFromString(RunnerLaunchMode.serializer(), encoded)
       assertEquals(mode, decoded)
     }
+  }
+
+  @Test
+  fun overlayPreferencesDefaultsAndSerialization() {
+    val defaults = OverlayPreferences()
+    assertFalse(defaults.volumeStopEnabled)
+    assertTrue(defaults.keepScreenAwakeWhileRunning)
+    assertTrue(defaults.pauseOnScreenOff)
+    assertFalse(defaults.showDebugTouchMarker)
+
+    val custom =
+      OverlayPreferences(
+        volumeStopEnabled = true,
+        keepScreenAwakeWhileRunning = false,
+        pauseOnScreenOff = false,
+        showDebugTouchMarker = true,
+      )
+    val encoded = json.encodeToString(OverlayPreferences.serializer(), custom)
+    val decoded = json.decodeFromString(OverlayPreferences.serializer(), encoded)
+    assertEquals(custom, decoded)
   }
 }

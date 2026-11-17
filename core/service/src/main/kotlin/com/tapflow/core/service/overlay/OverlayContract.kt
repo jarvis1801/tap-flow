@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import com.tapflow.core.model.action.Point2D
 import com.tapflow.core.model.common.OverlaySizeOption
+import com.tapflow.core.service.engine.DebugTouchMarkerEvent
 import com.tapflow.core.service.engine.RunnerExecutionSnapshot
 import com.tapflow.core.service.projection.ScreenCaptureState
 import dagger.BindsOptionalOf
@@ -62,6 +63,7 @@ data class OverlayUiState(
   val capturePhase: OverlayCapturePhase = OverlayCapturePhase.IDLE,
   val pickerTargetType: GesturePickerTargetType? = null,
   val touchPreview: OverlayTouchPreview? = null,
+  val activeDebugMarkers: List<DebugTouchMarkerEvent> = emptyList(),
   val runnerSnapshot: RunnerExecutionSnapshot = RunnerExecutionSnapshot(),
   val captureState: ScreenCaptureState = ScreenCaptureState.Idle,
   val captureAlertMessage: String? = null,

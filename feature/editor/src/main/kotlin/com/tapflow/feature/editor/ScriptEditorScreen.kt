@@ -3,6 +3,7 @@ package com.tapflow.feature.editor
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
@@ -87,6 +88,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tapflow.core.model.action.ClipboardActionType
 import com.tapflow.core.model.action.LoopMode
@@ -94,6 +96,10 @@ import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.common.NumericInput
 import com.tapflow.core.model.condition.ConditionGroup
 import com.tapflow.core.service.overlay.OverlayLaunchIntents
+import com.tapflow.core.service.permissions.AccessibilityProminentDisclosureDialog
+import com.tapflow.core.service.permissions.RuntimePermissionsDisabledDialog
+import com.tapflow.core.service.permissions.openAccessibilitySettings
+import com.tapflow.core.service.permissions.openOverlayPermissionSettings
 import kotlinx.coroutines.launch
 
 @Composable
@@ -109,6 +115,13 @@ fun ScriptEditorScreen(
 
   BackHandler {
     viewModel.onIntent(ScriptEditorUiIntent.BackClicked)
+  }
+
+  LifecycleResumeEffect(Unit) {
+    viewModel.onIntent(
+      ScriptEditorUiIntent.SyncOverlayPermission(Settings.canDrawOverlays(context)),
+    )
+    onPauseOrDispose {}
   }
 
   LaunchedEffect(viewModel) {
@@ -130,6 +143,12 @@ fun ScriptEditorScreen(
           viewModel.suppressOverlayAutoCloseBriefly()
           ContextCompat.startForegroundService(context, intent)
           context.findActivity()?.moveTaskToBack(true)
+        }
+        ScriptEditorUiEffect.LaunchAccessibilitySettings -> {
+          openAccessibilitySettings(context)
+        }
+        ScriptEditorUiEffect.LaunchOverlaySettings -> {
+          openOverlayPermissionSettings(context)
         }
         is ScriptEditorUiEffect.ShowUndoSnackbar -> {
           launch {
@@ -488,6 +507,24 @@ fun ScriptEditorContent(
       },
       onSelectCrop = { item, crop -> onIntent(ScriptEditorUiIntent.ImportInspectCrop(item, crop)) },
       onDismiss = { onIntent(ScriptEditorUiIntent.DismissInspectPicker) },
+    )
+  }
+
+  if (state.showPermissionsDisabledDialog) {
+    RuntimePermissionsDisabledDialog(
+      accessibilityConnected = state.isAccessibilityConnected,
+      overlayGranted = state.isOverlayPermissionGranted,
+      onRequestAccessibility = { onIntent(ScriptEditorUiIntent.RequestAccessibilityFromPreFlight) },
+      onRequestOverlay = { onIntent(ScriptEditorUiIntent.RequestOverlayFromPreFlight) },
+      onContinue = { onIntent(ScriptEditorUiIntent.ContinuePendingOverlayPick) },
+      onDismiss = { onIntent(ScriptEditorUiIntent.DismissPermissionsDisabledDialog) },
+    )
+  }
+
+  if (state.showAccessibilityDisclosureDialog) {
+    AccessibilityProminentDisclosureDialog(
+      onAcceptAndContinue = { onIntent(ScriptEditorUiIntent.AcceptAccessibilityDisclosure) },
+      onDecline = { onIntent(ScriptEditorUiIntent.DismissAccessibilityDisclosure) },
     )
   }
 }

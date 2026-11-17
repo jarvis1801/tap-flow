@@ -9,16 +9,38 @@ import android.graphics.Bitmap
 import android.media.AudioManager
 import android.os.Build
 import android.view.Display
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
+import android.widget.Toast
+import com.tapflow.core.datastore.TapFlowPreferencesRepository
+import com.tapflow.core.service.R
+import com.tapflow.core.service.engine.RunnerControlHub
+import com.tapflow.core.service.engine.RunnerPhase
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class TapFlowAccessibilityService : AccessibilityService(), AccessibilityExecutorHost {
 
   @Inject lateinit var bridge: AccessibilityManagerBridge
+  @Inject lateinit var preferencesRepository: TapFlowPreferencesRepository
+  @Inject lateinit var runnerControlHub: RunnerControlHub
+
+  private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+  private var preferencesJob: Job? = null
+
+  @Volatile
+  private var volumeStopEnabled: Boolean = false
 
   override fun onServiceConnected() {
     super.onServiceConnected()
@@ -31,11 +53,45 @@ class TapFlowAccessibilityService : AccessibilityService(), AccessibilityExecuto
         flags =
           flags or
             AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+            AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS or
             AccessibilityServiceInfo.DEFAULT
         notificationTimeout = 50L
       }
     bridge.attachHost(this)
+    preferencesJob?.cancel()
+    preferencesJob =
+      serviceScope.launch {
+        preferencesRepository.preferencesFlow
+          .map { it.overlay.volumeStopEnabled }
+          .distinctUntilChanged()
+          .collect { enabled ->
+            volumeStopEnabled = enabled
+          }
+      }
     resolveForegroundPackageNow()?.let { bridge.updateForegroundPackage(it) }
+  }
+
+  override fun onKeyEvent(event: KeyEvent?): Boolean {
+    if (event == null || !volumeStopEnabled) return false
+    if (event.keyCode != KeyEvent.KEYCODE_VOLUME_DOWN || event.action != KeyEvent.ACTION_DOWN) {
+      return false
+    }
+    if (runnerControlHub.snapshot.value.phase != RunnerPhase.RUNNING) {
+      return false
+    }
+    if (bridge.isSelfVolumeKeyDispatchSuppressed()) {
+      return false
+    }
+    if (event.repeatCount == 0) {
+      bridge.forceReleaseActiveStroke()
+      runnerControlHub.pause("Paused by Volume Down")
+      Toast.makeText(
+        this,
+        getString(R.string.emergency_volume_stop_toast),
+        Toast.LENGTH_SHORT,
+      ).show()
+    }
+    return true
   }
 
   override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -122,11 +178,16 @@ class TapFlowAccessibilityService : AccessibilityService(), AccessibilityExecuto
   }
 
   override fun onUnbind(intent: Intent?): Boolean {
+    preferencesJob?.cancel()
+    preferencesJob = null
     bridge.detachHost(this)
     return super.onUnbind(intent)
   }
 
   override fun onDestroy() {
+    preferencesJob?.cancel()
+    preferencesJob = null
+    serviceScope.cancel()
     bridge.detachHost(this)
     super.onDestroy()
   }

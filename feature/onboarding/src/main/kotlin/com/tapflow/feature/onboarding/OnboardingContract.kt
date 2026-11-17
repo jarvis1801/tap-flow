@@ -9,6 +9,7 @@ data class OnboardingUiState(
   val notificationsGranted: Boolean = false,
   val batteryOptimizationIgnored: Boolean = false,
   val restrictedGuideExpanded: Boolean = false,
+  val showAccessibilityDisclosure: Boolean = false,
   val isContinuing: Boolean = false,
 ) {
   val mandatoryGrantedCount: Int
@@ -30,6 +31,10 @@ sealed interface OnboardingUiIntent {
   ) : OnboardingUiIntent
 
   data object OpenAccessibilitySettings : OnboardingUiIntent
+
+  data object AcceptAccessibilityDisclosure : OnboardingUiIntent
+
+  data object DismissAccessibilityDisclosure : OnboardingUiIntent
 
   data object OpenOverlaySettings : OnboardingUiIntent
 

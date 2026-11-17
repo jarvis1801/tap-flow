@@ -18,15 +18,19 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -36,6 +40,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -104,6 +112,7 @@ fun PipelinesTabContent(
               onPlay = { onIntent(HomeUiIntent.PlayPipelineClicked(item.pipeline.id)) },
               onEdit = { onIntent(HomeUiIntent.EditPipelineClicked(item.pipeline.id)) },
               onLogs = { onIntent(HomeUiIntent.ViewPipelineLogsClicked(item.pipeline.id)) },
+              onDuplicate = { onIntent(HomeUiIntent.DuplicatePipeline(item.pipeline.id)) },
               onDelete = { onIntent(HomeUiIntent.RequestDeletePipeline(item.pipeline.id)) },
             )
           }
@@ -132,8 +141,10 @@ private fun PipelineItemCard(
   onPlay: () -> Unit,
   onEdit: () -> Unit,
   onLogs: () -> Unit,
+  onDuplicate: () -> Unit,
   onDelete: () -> Unit,
 ) {
+  var showOverflowMenu by remember { mutableStateOf(false) }
   val pipeline = item.pipeline
   Card(
     modifier = Modifier.fillMaxWidth().testTag("pipeline_card_${pipeline.id}"),
@@ -323,15 +334,55 @@ private fun PipelineItemCard(
               contentDescription = "Pipeline logs",
             )
           }
-          IconButton(
-            onClick = onDelete,
-            modifier = Modifier.size(48.dp).testTag("delete_pipeline_${pipeline.id}"),
-          ) {
-            Icon(
-              imageVector = Icons.Filled.DeleteOutline,
-              contentDescription = "Delete pipeline",
-              tint = MaterialTheme.colorScheme.error,
-            )
+          Box {
+            IconButton(
+              onClick = { showOverflowMenu = true },
+              modifier = Modifier.size(48.dp).testTag("more_pipeline_${pipeline.id}"),
+            ) {
+              Icon(
+                imageVector = Icons.Filled.MoreVert,
+                contentDescription = "Pipeline options",
+              )
+            }
+            DropdownMenu(
+              expanded = showOverflowMenu,
+              onDismissRequest = { showOverflowMenu = false },
+            ) {
+              DropdownMenuItem(
+                text = { Text("Duplicate") },
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Filled.ContentCopy,
+                    contentDescription = null,
+                  )
+                },
+                onClick = {
+                  showOverflowMenu = false
+                  onDuplicate()
+                },
+                modifier = Modifier.testTag("duplicate_pipeline_${pipeline.id}"),
+              )
+              DropdownMenuItem(
+                text = {
+                  Text(
+                    text = "Delete",
+                    color = MaterialTheme.colorScheme.error,
+                  )
+                },
+                leadingIcon = {
+                  Icon(
+                    imageVector = Icons.Filled.DeleteOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                  )
+                },
+                onClick = {
+                  showOverflowMenu = false
+                  onDelete()
+                },
+                modifier = Modifier.testTag("delete_pipeline_${pipeline.id}"),
+              )
+            }
           }
         }
       }

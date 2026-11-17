@@ -1,8 +1,10 @@
 package com.tapflow.core.service.engine
 
 import androidx.compose.runtime.Immutable
+import com.tapflow.core.model.action.Point2D
 import com.tapflow.core.model.entitlement.ProFeatureGate
 import com.tapflow.core.model.log.ActionLogEntry
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Job
@@ -49,6 +51,14 @@ sealed interface RunnerStepCommand {
   data object NextSingleStep : RunnerStepCommand
 }
 
+@Immutable
+data class DebugTouchMarkerEvent(
+  val id: String = UUID.randomUUID().toString(),
+  val points: List<Point2D>,
+  val isSwipe: Boolean = false,
+  val timestampMs: Long = System.currentTimeMillis(),
+)
+
 @Singleton
 class RunnerControlHub @Inject constructor() {
   private val _snapshot = MutableStateFlow(RunnerExecutionSnapshot())
@@ -64,6 +74,14 @@ class RunnerControlHub @Inject constructor() {
       onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
   val liveLogEvents: SharedFlow<ActionLogEntry> = _liveLogEvents.asSharedFlow()
+
+  private val _debugTouchMarkers =
+    MutableSharedFlow<DebugTouchMarkerEvent>(
+      replay = 0,
+      extraBufferCapacity = 32,
+      onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+  val debugTouchMarkers: SharedFlow<DebugTouchMarkerEvent> = _debugTouchMarkers.asSharedFlow()
 
   @Volatile
   private var activeSessionJob: Job? = null
@@ -156,6 +174,19 @@ class RunnerControlHub @Inject constructor() {
 
   fun emitActionLog(entry: ActionLogEntry) {
     _liveLogEvents.tryEmit(entry)
+  }
+
+  fun emitDebugTouchMarker(
+    points: List<Point2D>,
+    isSwipe: Boolean = false,
+  ) {
+    if (points.isEmpty()) return
+    _debugTouchMarkers.tryEmit(
+      DebugTouchMarkerEvent(
+        points = points,
+        isSwipe = isSwipe,
+      ),
+    )
   }
 
   fun play() {

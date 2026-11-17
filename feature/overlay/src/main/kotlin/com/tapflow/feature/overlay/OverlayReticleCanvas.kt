@@ -1,5 +1,8 @@
 package com.tapflow.feature.overlay
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -19,6 +22,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -36,6 +42,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.tapflow.core.model.action.Point2D
+import com.tapflow.core.service.engine.DebugTouchMarkerEvent
 import com.tapflow.core.service.overlay.GesturePickerTargetType
 import com.tapflow.core.service.overlay.OverlayCapturePhase
 import com.tapflow.core.service.overlay.OverlayMode
@@ -58,7 +65,10 @@ internal fun OverlayCaptureFeedbackLayer(state: OverlayUiState) {
     return
   }
 
-  if (!state.isCaptureActive && state.captureAlertMessage == null) {
+  if (!state.isCaptureActive &&
+    state.captureAlertMessage == null &&
+    state.activeDebugMarkers.isEmpty()
+  ) {
     return
   }
 
@@ -96,6 +106,13 @@ internal fun OverlayCaptureFeedbackLayer(state: OverlayUiState) {
           )
         }
       }
+    }
+
+    if (state.activeDebugMarkers.isNotEmpty()) {
+      DebugTouchMarkerLayer(
+        markers = state.activeDebugMarkers,
+        accentColor = MaterialTheme.colorScheme.primary,
+      )
     }
 
     state.captureAlertMessage?.let { alertMsg ->
@@ -324,6 +341,106 @@ private fun TouchCoordinateReadoutBadge(
       color = MaterialTheme.colorScheme.onSurface,
       modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
     )
+  }
+}
+
+@Composable
+private fun DebugTouchMarkerLayer(
+  markers: List<DebugTouchMarkerEvent>,
+  accentColor: Color,
+) {
+  Box(
+    modifier =
+      Modifier
+        .fillMaxSize()
+        .testTag("overlay_debug_touch_marker_layer"),
+  ) {
+    markers.forEach { marker ->
+      key(marker.id) {
+        DebugTouchMarkerItem(marker = marker, accentColor = accentColor)
+      }
+    }
+  }
+}
+
+@Composable
+private fun DebugTouchMarkerItem(
+  marker: DebugTouchMarkerEvent,
+  accentColor: Color,
+) {
+  val progress = remember(marker.id) { Animatable(0f) }
+  LaunchedEffect(marker.id) {
+    progress.animateTo(
+      targetValue = 1f,
+      animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
+    )
+  }
+  val t = progress.value
+  val alpha = (1f - t).coerceIn(0f, 1f)
+  if (alpha <= 0.01f) return
+
+  Canvas(modifier = Modifier.fillMaxSize()) {
+    val ringColor = accentColor.copy(alpha = 0.85f * alpha)
+    val fillTint = accentColor.copy(alpha = 0.14f * alpha)
+    val ringStrokeWidth = 2.5.dp.toPx()
+
+    if (marker.isSwipe && marker.points.size >= 2) {
+      val trailPath =
+        Path().apply {
+          val first = marker.points.first()
+          moveTo(first.x.toFloat(), first.y.toFloat())
+          for (i in 1 until marker.points.size) {
+            val pt = marker.points[i]
+            lineTo(pt.x.toFloat(), pt.y.toFloat())
+          }
+        }
+      drawPath(
+        path = trailPath,
+        color = accentColor.copy(alpha = 0.55f * alpha),
+        style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round),
+      )
+      val startPt = marker.points.first()
+      val endPt = marker.points.last()
+      drawCircle(
+        color = fillTint,
+        radius = 12.dp.toPx(),
+        center = Offset(startPt.x.toFloat(), startPt.y.toFloat()),
+      )
+      drawCircle(
+        color = ringColor,
+        radius = 12.dp.toPx(),
+        center = Offset(startPt.x.toFloat(), startPt.y.toFloat()),
+        style = Stroke(width = ringStrokeWidth),
+      )
+      val endRadius = 14.dp.toPx() + (10.dp.toPx() * t)
+      drawCircle(
+        color = fillTint,
+        radius = endRadius,
+        center = Offset(endPt.x.toFloat(), endPt.y.toFloat()),
+      )
+      drawCircle(
+        color = ringColor,
+        radius = endRadius,
+        center = Offset(endPt.x.toFloat(), endPt.y.toFloat()),
+        style = Stroke(width = ringStrokeWidth),
+      )
+    } else {
+      val radius = 16.dp.toPx() + (12.dp.toPx() * t)
+      marker.points.forEach { pt ->
+        val center = Offset(pt.x.toFloat(), pt.y.toFloat())
+        drawCircle(
+          color = fillTint,
+          radius = radius,
+          center = center,
+        )
+        drawCircle(
+          color = ringColor,
+          radius = radius,
+          center = center,
+          style = Stroke(width = ringStrokeWidth),
+        )
+      }
+    }
   }
 }
 
