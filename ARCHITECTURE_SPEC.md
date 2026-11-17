@@ -19,7 +19,7 @@ Entitlement Matrix (Free vs. TapFlow Pro):
 - Free Tier (100% Free Forever — Available permanently after trial expires):
     - Unlimited Scripts, Unlimited Actions per Script, and Unlimited Pipelines (`RunOnce` + `Abort` error handling).
     - ALL Script Actions Unlocked: Tap, Double Tap, Long Press (`Standard`, `Press Down Only`, `Release Only`, `Hold Until`), Multi-Touch, Swipe & Drag (`Linear`, `Bezier Curve`, `Multi-Point Path`), Humanized Variance (`jitterPx` & `microMovementJitter`), Input Text (`Accessibility SetText`, `Clipboard Paste`, `Human-like Typing`), Delay (`Fixed`, `RandomRange`, `Deviation`), `IfBlock` / `ElseIfBranch` / `Else`, `LoopBlock` (`Count`, `While`, `Until`, `Unlimited`), `Dynamic Variables` & ALL `VariableOp` actions, `KeyEvent`, `LaunchApp`, `ForceStopApp` (falls back safely to Accessibility `HOME` + `killBackgroundProcesses` without Shizuku), `ClipboardOp`, `Vibrate`, `PlayAlertSound`.
-    - Cross-Device Resolution & Ratio Coordinate Scaling (`Stretch`, `Aspect-Fit`, `Aspect-Fill`, `1:1`) + Starter Example Templates + Duplicate Script/Pipeline.
+    - Starter Example Templates + Duplicate Script/Pipeline + All Overlay Safety Controls (`Volume Down Emergency Stop`, `Keep Screen Awake`, `Pause on Screen Off`, `Debug Touch Marker`, `OverlaySizeOption`, `RunnerLaunchMode`).
     - Basic Conditions & Vision: Single-Point `ColorMatch`, `AppMatch`, `VariableCompare`, Mode 2 Gesture Picker, Mode 3 Live Recording, and Inspect Tab + `Inspect Studio` Single-Pixel Picker + Screenshot Import.
     - Basic Execution Status in Logs (run outcome badges `SUCCESS`/`FAILED`/`STOPPED`, title, timestamp, duration, total steps).
 - TapFlow Pro (Unlocked during 7-Day Trial OR via `tapflow_pro_lifetime` Purchase — 6 Gates):
@@ -53,10 +53,10 @@ Permission Checklist (Card-based UI):
 # 1. Accessibility Service (Mandatory)
 - Accessibility Permission:
 Type: MANDATORY [Required]
-Purpose: Enables simulated touch input, gestures (tap, swipe), global system key navigation, hardware volume-key emergency stop, and foreground app detection.
+Purpose: Enables simulated touch input, gestures (tap, swipe), global system key navigation, volume-key emergency stop, and foreground app detection.
 Google Play Prominent Disclosure Guardrail:
 - Clicking `[Grant Permission]` on Accessibility MUST first display a clear **Prominent Disclosure `AlertDialog`** explaining:
-(1) Why TapFlow uses AccessibilityService API (simulated gestures, foreground app package check for App Match, optional text insertion, volume-key emergency stop).
+(1) What AccessibilityService accesses (simulated gestures, current foreground app package name for App Match, optional text insertion, volume-key emergency stop).
 (2) Explicit guarantee that TapFlow is **100% offline** and NEVER collects, stores remotely, or transmits personal or screen data.
 (3) `[Accept & Continue]` (launches `Settings.ACTION_ACCESSIBILITY_SETTINGS`) and `[Decline]` buttons.
 Status Detection: Evaluates `AccessibilityManager.getEnabledAccessibilityServiceList()` AND live `accessibilityBridge.isAccessibilityConnected`.
@@ -84,6 +84,7 @@ Status Detection: Evaluates `AccessibilityManager.getEnabledAccessibilityService
 
 Restricted Settings Helper (Android 13–16+ Sideload / Enhanced Confirmation Mode Guardrail):
 - Helper Banner / Button: [Blocked by "Restricted Setting"? Open App Info]
+Purpose: On Android 13+ (Accessibility) and Android 15+ (Display over other apps), sideloaded APKs can be locked by Enhanced Confirmation Mode.
 Action Trigger: Launches `Settings.ACTION_APPLICATION_DETAILS_SETTINGS` with `package:${packageName}` URI and shows inline guide ("App Info ➔ Top-right ⋮ menu ➔ Allow restricted settings").
 
 Runtime Pre-Flight Mandatory Permission Guard (CRITICAL):
@@ -92,10 +93,13 @@ Runtime Pre-Flight Mandatory Permission Guard (CRITICAL):
 - Strictly verify `accessibilityBridge.isAccessibilityConnected.value` AND `Settings.canDrawOverlays(context)`.
 - If either is missing: **ABORT overlay launch** and immediately show a `"Permissions Disabled"` Material 3 Dialog listing what is missing (`Accessibility Service` / `Floating Overlay`) with direct 1-tap fix buttons (respecting the Prominent Disclosure dialog for Accessibility) and auto-rechecking on `ON_RESUME`.
 
-Lifecycle & Persistence:
-- OnResume Auto-Check re-verifies all 4 permissions dynamically when returning from Settings.
-- When all mandatory permissions are validated, saves `hasCompletedPermissionOnboarding = true` into Preferences DataStore.
-- `[Get Started / Continue]` disabled until all 3 Mandatory permissions are granted; `[Exit App]` calls `activity.finishAffinity()`.
+Lifecycle & Real-time Verification:
+- OnResume Auto-Check: Re-verifies all 4 permissions dynamically when returning from Settings without requiring restarts.
+- Persistence: When all mandatory permissions are validated, saves `hasCompletedPermissionOnboarding = true` into Preferences DataStore.
+
+Navigation Controls & Exit Guardrail:
+- Primary Action Button: [Get Started / Continue] — Strictly DISABLED until all 3 Mandatory permissions are granted; navigates to `Route.Home(HomeTab.SCRIPT)` and clears backstack.
+- Secondary Action Button: [Exit App] — Calls `activity.finishAffinity()`.
 
 ---
 
@@ -103,138 +107,356 @@ Lifecycle & Persistence:
 Navigation Architecture:
 Layout:
 - Top App Bar: Consistent across all tabs; displays active Tab Title, real-time Search Action Bar (auto-focusing on expand, `BackHandler` to clear & collapse), and a compact Entitlement Pill (`[PRO]` / `[Trial: Xd left]` / `[Upgrade]`) opening `Route.Paywall`.
-- Bottom Navigation Bar: Switches between `[Scripts]` | `[Pipelines]` | `[Inspect]` | `[Console]` | `[Seamless (Shizuku)]` | `[Settings]`.
+- Bottom Navigation Bar (or Navigation Drawer): Switches between the 6 primary tabs:
+[Scripts] | [Pipelines] | [Inspect] | [Console] | [Seamless (Shizuku)] | [Settings]
 
 Tabs:
+# -------------------------------------------------------------
 # TAB 1: SCRIPTS
+# -------------------------------------------------------------
 - Script Tab:
   Search & Tag Filter:
-  - Auto-focusing Search Bar (`BackHandler` collapses/clears) + horizontal multi-select Tag `FilterChip` bar (`Clear` pill when active; tapping card tags also toggles filter).
+  - Top Search Bar filtering scripts in real-time by Script Title or Tag (auto-focuses on expand; `BackHandler` clears & collapses).
+  - Horizontal multi-select Tag `FilterChip` bar (shown when tags exist, with leading `Clear` chip; tapping card tags also toggles filter).
   Empty State Starter Templates:
-  - When 0 scripts exist (and no active search/filter), show a friendly Empty State card with `[+ Create Script]` AND **`[Load Starter Templates]`** (inserting 2 beginner-friendly offline example scripts: 1. *"Basic Tap Loop Example"*, 2. *"Screen Color Check Example"* so new users can inspect & view their `[Flow]` diagram immediately).
+  - When 0 scripts exist (and no active search/filter), show a friendly Empty State card with `[+ Add Script]` AND **`[Load Starter Templates]`** (inserting 2 beginner-friendly offline example scripts: *"Example: Basic Tap Loop"* and *"Example: Color Match Decision"* so new users can inspect & preview `[Flow]` immediately).
   Script Item Card UI:
-  - Content: Title, Description, Tag Chips, Source Screen Badge (if differs from current device e.g. `720×1600`), Total Top-Level Action Count, Updated Timestamp.
+  - Content: Title, Description, Tag Chips, Total Top-Level Action Count, Updated Timestamp.
   - Quick Action Icons / Menu:
   - Play Icon (▶):
-  1) **Pre-Flight Permission Guard** (Accessibility + Overlay).
-  2) **Entitlement Guard** (`detectScriptProBlockers(script)` — only gates `ADVANCED_VISION`).
-  3) **Launch Mode Choice** (`ASK_EVERY_TIME` dialog with `Open in Standby`, `Start Immediately`, `"Remember my choice"`, or `STANDBY`/`AUTO_START`).
-  4) **Vision Guard** (prompts `MediaProjection` if `ColorMatch`/`ImageMatch` present and Silent Screenshot off).
-  5) **Launch**: Minimizes app & starts Floating Window Runner (`EXTRA_AUTO_START`).
+  Pre-Flight Permission Guard: Checks `isAccessibilityConnected` & `Settings.canDrawOverlays`.
+  Entitlement Guard: Checks `detectScriptProBlockers(script)` (only gates `ADVANCED_VISION` — `ImageMatch` or Multi-Point/Region `ColorMatch`); standard Actions, Delays, Variables, Loops, Jitter, and Bezier swipes run cleanly on Free tier. If blocked, opens `Route.Paywall`.
+  Launch Mode Choice (`preferences.runnerLaunchMode`):
+  - `ASK_EVERY_TIME` (Default): Opens Material 3 `"Start Runner"` dialog with **`Open in Standby`** (*"Opens floating controls paused — tap ▶ once inside your target app"*), **`Start Immediately`** (*"Begins running actions right away"*), and optional `"Remember my choice (can change in Settings)"` checkbox (persists `STANDBY` / `AUTO_START` when checked).
+  - `STANDBY` / `AUTO_START`: Skips the prompt and applies the saved preference directly.
+  Vision Guard: Runs right after resolving launch mode; scans script action tree recursively for Vision requirements (`ColorMatch` or `ImageMatch`).
+  - If Vision required AND Shizuku Silent Screenshot is disabled: Prompts for `MediaProjection` consent (with user hint to select "Entire screen") before starting `MediaProjectionService`.
+  - If Vision not required (or Shizuku Silent Screenshot enabled): Skips MediaProjection immediately.
+  Launch: Minimizes app to background and launches Floating Window Runner (`OverlayService` with `specialUse`, passing `EXTRA_AUTO_START = false` for Standby or `true` for Auto-Start).
   - Edit Icon (✏️): Navigates to `Route.ScriptEditor(scriptId = item.id)`.
-  - Duplicate Action (in `⋮` or quick action): Clones Script with new ID, updated timestamp, and `" (Copy)"` suffix.
-  - Log Icon (📋): Navigates to `Route.ScriptLog(scriptId = item.id)`.
-  - Delete Icon (🗑️): Warns if referenced by Pipelines (`"Used by N pipeline(s)"`) before deleting.
-  FAB:
-  - Speed-Dial FAB [➕ Add Script]: Manual (`ScriptEditor`) or Recording (Pre-Flight Permission Guard + MediaProjection Guard ➔ Mode 3 Record Standby).
+  - Duplicate Action (in `⋮` or quick action): Clones Script with new UUID, updated timestamp, and `" (Copy)"` suffix.
+  - Log Icon (📋): Navigates to `Route.ScriptLog(scriptId = item.id)` (basic run status cards Free; log export & detailed traces gated by `FULL_LOGS`).
+  - Delete Icon (🗑️): Checks if any Pipeline references this Script; warns user ("Used by N pipeline(s)") in confirmation dialog before removing from Room DB (remaining pipeline references render gracefully as `[Missing Script]`).
+  Floating Action Button (FAB):
+  - Expandable Speed-Dial FAB [➕ Add Script]:
+  - Unlimited Scripts Free: No Free script-count cap.
+  - Option 1 (Manual): Navigates to `Route.ScriptEditor(scriptId = null)`.
+  - Option 2 (Recording): Pre-Flight Permission Guard + `MediaProjection` Guard (unless Shizuku Silent Screenshot is enabled) ➔ minimizes app and launches Floating Window in Record Mode.
 
+# -------------------------------------------------------------
 # TAB 2: PIPELINES
+# -------------------------------------------------------------
 - Pipeline Tab:
-  Search & Tag Filter: Auto-focusing Search Bar + multi-select Tag `FilterChip` bar.
+  Search & Tag Filter:
+  - Auto-focusing Search Bar (`BackHandler` collapses/clears) + multi-select Tag `FilterChip` bar.
   Pipeline Item Card UI:
-  - Content: Title, Description, Tag Chips, Included Scripts Summary, `[Missing Script]` warning if broken.
+  - Content: Title, Description, Tag Chips, Included Scripts Summary (e.g., "3 Scripts • 8 Total Runs"), warning badge if any step references a `[Missing Script]`.
   - Quick Action Icons / Menu:
-  - Play (▶): Pre-Flight Permission Guard ➔ Entitlement Guard (`PIPELINE_AUTOMATION` / `ADVANCED_VISION`) ➔ Launch Mode Choice ➔ Vision Guard ➔ Launch Overlay Pipeline Runner.
-  - Edit (✏️), Duplicate (clones Pipeline), Log (📋), Delete (🗑️).
-  FAB: Single Action FAB [➕ Add Pipeline].
+  - Play Icon (▶):
+  Pre-Flight Permission Guard: Checks `isAccessibilityConnected` & `Settings.canDrawOverlays`.
+  Entitlement Guard: Verifies Pro entitlement (`PIPELINE_AUTOMATION` / `ADVANCED_VISION`) ONLY if pipeline uses multi-repeat/unlimited looping, `Skip & Continue` recovery, or child scripts requiring `ADVANCED_VISION`.
+  Launch Mode Choice (`preferences.runnerLaunchMode`): Shows the `"Start Runner"` choice dialog when `ASK_EVERY_TIME` (with `Open in Standby`, `Start Immediately`, and `"Remember my choice"` checkbox) or applies `STANDBY` / `AUTO_START` directly before running the Vision Guard.
+  Vision Guard: Scans all child scripts in the pipeline for Vision requirements; prompts `MediaProjection` consent if needed (unless Shizuku Silent Screenshot is enabled).
+  Launch: Minimizes app and launches Floating Window Runner in Pipeline Mode with `EXTRA_AUTO_START` (`false` for Standby, `true` for Auto-Start).
+  - Edit Icon (✏️): Navigates to `Route.PipelineEditor(pipelineId = item.id)`.
+  - Duplicate Action (in `⋮` or quick action): Clones Pipeline with new UUID, updated timestamp, and `" (Copy)"` suffix.
+  - Log Icon (📋): Navigates to `Route.PipelineLog(pipelineId = item.id)` (basic run status cards Free; log export & detailed traces gated by `FULL_LOGS`).
+  - Delete Icon (🗑️): Shows confirmation dialog before removing from Room DB.
+  Floating Action Button (FAB):
+  - Single Action FAB [➕ Add Pipeline]: Unlimited Pipelines Free; navigates to `Route.PipelineEditor(pipelineId = null)`.
 
+# -------------------------------------------------------------
 # TAB 3: INSPECT
+# -------------------------------------------------------------
 - Inspect Tab:
-  Top App Bar Overflow (`⋮` Menu): `Clear All Inspect Images` (wipes PNG files in `inspect_screens` / `inspect_crops` via `clearAllInspectImagesOnly()` while preserving Room metadata & `script_templates`).
-  Search & Filter: Multi-field Search Bar filtering by Group Title, Tag, Foreground App Name, or Orientation (`Portrait` / `Landscape` / `Unfolded`).
-  Hierarchical List:
-  - `InspectGroupCard`: Title, Tag Chips, Item Count, Delete (`🗑️` cascading + orphan PNG cleanup), Expand/Collapse.
-  - `InspectItemCard` (Inside expanded Group):
-  - Square `92.dp` (`1:1`) proportional Screenshot Thumbnail (`ContentScale.Fit` on lossless PNG, or `"Image Deleted"` placeholder when PNG missing).
-  - Metadata: `24.dp` App Icon (loaded async on `Dispatchers.IO`) + Foreground App Name (NO raw package name displayed!) + Orientation & Resolution Pill (`Portrait` / `Landscape` / `Unfolded` + `W × H`).
-  - Expandable Rows: Inspected Color Pixels (usable even if PNG cleared) & Inspected Image Crops (`Image Deleted` placeholder if PNG missing).
-  - `[Open Studio]` button (strictly disabled `"Studio Unavailable (Image Deleted)"` if PNG missing).
-  FAB: Live Screen Inspect [Pro] (Pre-Flight Permission Guard + MediaProjection Guard ➔ Mode 4 Standby) & Import Screenshot [Free].
+  Top App Bar Overflow (`⋮` Menu):
+  - `Clear All Inspect Images`: Available to all users; opens confirmation dialog (`Clear All Inspect Images?`) and wipes PNG files in `inspect_screens` / `inspect_crops` via `clearAllInspectImagesOnly()` while preserving Room metadata (`InspectGroup`, `InspectItem`, `InspectPixel`) and `script_templates`.
+  Search & Filter:
+  - Multi-field Search Bar filtering by Group Title, Tag, Foreground App Name, or Orientation (`Portrait` / `Landscape` / `Unfolded`).
+  Hierarchical List (Inspect Groups & Items):
+  - Inspect Group Card:
+  - Header: Group Title, Tag Chips, Child Items Count badge (e.g., "5 Items").
+  - Trailing Actions:
+  - Delete Icon (🗑️): Cascading delete of group, child items, and orphan PNG files on disk.
+  - Expand / Collapse Arrow Icon [▲ / ▼]: Toggles visibility of nested Inspect Items.
+  - Nested Inspect Item Card (Inside expanded Group):
+  - Visuals: Square `92.dp` (`1:1`) proportional Screenshot Thumbnail (`ContentScale.Fit` on lossless PNG rendered via Coil), or `"Image Deleted"` placeholder (`Icons.Rounded.ImageNotSupported`) when PNG was cleared from disk.
+  - Metadata: `24.dp` App Icon (loaded async on `Dispatchers.IO`) + Captured Foreground App Name + Orientation & Resolution Pill (`Portrait` / `Landscape` / `Unfolded` + `W × H`); raw `packageName` is hidden from card UI.
+  - Expandable Rows:
+  - Row 1 (Inspected Color Pixels):
+  - Displays list of pixel dots with Color Swatch, HEX (#RRGGBB), and Coordinates (X, Y) — stays usable for `ColorMatch` import even after PNG images are cleared.
+  - Individual Delete Icon (🗑️) per pixel entry.
+  - Row 2 (Inspected Image Crops):
+  - Displays list of cropped template thumbnails with dimensions (W × H px), or `"Image Deleted"` placeholder when source PNG was cleared.
+  - Individual Delete Icon (🗑️) per crop entry.
+  - Action Button:
+  - `[Open Studio]` Button: Navigates directly to `Route.InspectStudio(inspectItemId = item.id)` (Free tier allows Pixel Inspect Mode; Image Crop Mode gated by `ProFeatureGate.ADVANCED_VISION`); strictly disabled (`"Studio Unavailable (Image Deleted)"`) when the source PNG is missing.
+  Floating Action Button (FAB):
+  - Expandable Speed-Dial FAB [➕ New Inspect]:
+  - Option 1 (Live Screen Inspect - Pro):
+  Pre-Flight Permission Guard + Entitlement Guard (`ProFeatureGate.ADVANCED_VISION`) + `MediaProjection` Guard (unless Shizuku Silent Screenshot is enabled) ➔ minimizes app and launches Floating Window in Mode 4 (Inspect Image Mode).
+  - Option 2 (Import Screenshot - Free): Opens system Photo/File Picker (`GetContent("image/*")`) to import an existing image into a new Inspect Group/Item (converted to lossless PNG; Free users can pick single pixels in Inspect Studio).
 
+# -------------------------------------------------------------
 # TAB 4: CONSOLE (Desktop ADB / WebSocket Bridge - Lifetime Pro Only)
+# -------------------------------------------------------------
 - Console Tab:
-    - Controls Ktor WebSocket & HTTP server (`127.0.0.1:{port}`) via `LocalBridgeService` (`foregroundServiceType="specialUse"`, Manifest `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`).
-    - Strictly requires `EntitlementState.ProLifetime` (`ProFeatureGate.DESKTOP_CONSOLE`, excluded from 7-Day Trial).
-    - Ongoing low-priority notification with `[Stop]`; exposes `isLiveStreamingFromConsole: StateFlow<Boolean>`.
-    - UI: Status card (`RUNNING`/`STOPPED`, Port, Connected Clients), Master Toggle, `adb forward tcp:{port} tcp:{port}` + Copy button, Custom Port selector.
+  Overview:
+  - Controls the embedded Ktor WebSocket & HTTP server (`127.0.0.1:{port}`) kept alive safely in the background via `LocalBridgeService` (`foregroundServiceType="specialUse"`, Manifest `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`).
+  - Entitlement Guard: Starting or keeping `LocalBridgeService` / Ktor Embedded Server running strictly requires `EntitlementState.ProLifetime` (`ProFeatureGate.DESKTOP_CONSOLE`) and is excluded from the 7-Day Free Trial. Free and 7-Day Trial users see a `"Lifetime Pro Required • Excluded from 7-Day Trial"` banner, keep the server stopped, and tapping the toggle or upgrade button routes directly to `Route.Paywall`.
+  - Background Keep-Alive & Teardown: Starting displays a low-priority ongoing notification (`"TapFlow Desktop Bridge Running (Port $port)"` with `[Stop]` action); stopping via `ConsoleTab`, notification `[Stop]`, or loss of `ProLifetime` stops live streaming, stops `TapFlowLocalServer`, stops `MediaProjectionService` if `OverlayService` is inactive, and removes the foreground notification. Exposes `isLiveStreamingFromConsole: StateFlow<Boolean>` so `OverlayService` close cleanup respects an active independent Desktop Console live stream.
+  Content UI:
+  - Server Status Card:
+  - Status Badge: [RUNNING] (Green indicator) / [STOPPED] (Gray indicator).
+  - Active Port Display: Displays listening port (e.g., `18080`).
+  - Connected Clients: Displays count of active desktop clients (e.g., "1 Desktop Connected").
+  - Server Master Toggle:
+  - Switch / Button to Start or Stop `LocalBridgeService` & the Ktor Embedded Server.
+  - Quick Connection Helper:
+  - Displays ADB port forwarding command: `adb forward tcp:18080 tcp:18080`
+  - Copy Command Button: Copies command to clipboard with a single tap.
+  - Server Configuration:
+  - Custom Port Selector (Default: 18080; persisted in DataStore).
 
+# -------------------------------------------------------------
 # TAB 5: SEAMLESS (SHIZUKU INTEGRATION - Pro Feature)
+# -------------------------------------------------------------
 - Seamless (Shizuku) Tab:
-    - Overview: Manages rootless system-level shell execution for enhanced input compatibility and workflow reliability.
-    - Environment Checklist (real-time + `ON_RESUME` refresh):
-        - Check 1: Installed (`moe.shizuku.privileged.api`) + `[Install Shizuku]` when missing.
-        - Check 2: Running (`Shizuku.pingBinder()`) + `[Open Shizuku]` when stopped.
-        - Check 3: Permission (`Shizuku.checkSelfPermission()`) + `[Request Permission]` ONLY when running & ungranted.
-    - Feature Toggles (Disabled unless Shizuku fully ready AND Pro/Trial active):
-        - Use Shizuku Shell for Input Injection (Enhanced input compatibility).
-        - Enable Rootless App Force-Stop (`am force-stop` crash recovery).
-        - Enhanced Key Event Injection (Direct physical key events).
-        - Silent Background Screenshots (`screencap` via shell).
-        - Auto-Grant Screen Capture (`PROJECT_MEDIA`): `cmd appops set <pkg> PROJECT_MEDIA allow` (skips TapFlow pre-consent dialog & prevents Android 15+ screen-lock interruption).
-        - MacroDroid / Tasker Broadcasts (`externalBroadcastEnabled`): Enables `TapFlowExternalTriggerReceiver` + completion callbacks.
-        - Setup Guide & Action Generator row ➔ `Route.ExternalAutomationGuide`.
+  Overview:
+  - Manages rootless system-level shell execution for enhanced system-level input compatibility and workflow reliability.
+  - Entitlement Guard: Feature toggles require TapFlow Pro (Trial or Lifetime).
+  Environment Checklist Card (Real-Time Diagnostic + `ON_RESUME` refresh):
+  - Check 1: Shizuku App Installed (`moe.shizuku.privileged.api`)? (Verified / Not Installed with `[Install Shizuku]`).
+  - Check 2: Shizuku Service Running (`Shizuku.pingBinder()`)? (Running / Stopped with `[Open Shizuku]`).
+  - Check 3: TapFlow Permission Granted (`Shizuku.checkSelfPermission()`)? (Granted / Not Granted with `[Request Permission]` shown ONLY when running & ungranted).
+  Shizuku Feature Toggles (Stored in DataStore):
+  - Use Shizuku Shell for Input Injection (Enhanced system-level touch compatibility).
+  - Enable Rootless App Force-Stop (`am force-stop` crash recovery).
+  - Enhanced Key Event Injection (Direct physical key events).
+  - Silent Background Screenshots (`screencap` via shell; bypasses MediaProjection when active).
+  - Auto-Grant Screen Capture (`PROJECT_MEDIA`): Grants `PROJECT_MEDIA` AppOp via Shizuku (`cmd appops set <pkg> PROJECT_MEDIA allow`), verifies `Allowed ✓`, skips TapFlow's pre-consent dialog so `createScreenCaptureIntent()` resolves silently on supported ROMs (falling back safely if blocked by OEM), and helps prevent Android 15+ screen-lock capture interruption.
+  - MacroDroid / Tasker Broadcasts [Pro] (`externalBroadcastEnabled` in `ShizukuPreferences`): Enables `TapFlowExternalTriggerReceiver` and automatic `ACTION_EXECUTION_FINISHED` completion callbacks.
+  - Setup Guide & Action Generator (MacroDroid / Tasker): Always-clickable entry opening `Route.ExternalAutomationGuide` (`ExternalAutomationGuideScreen`) with live prerequisite checks, Script/Pipeline intent generator with 1-tap copy, all 6 control actions, and step-by-step `MacroDroid` | `Tasker` setup instructions.
+  State Guardrail:
+  - All feature toggles are strictly Disabled & Greyed Out if Shizuku is not installed, not running, permission is ungranted, OR Pro entitlement is inactive.
 
+# -------------------------------------------------------------
 # TAB 6: SETTINGS
+# -------------------------------------------------------------
 - Setting Tab:
-    - TapFlow Pro Banner (`Pro Lifetime` / `7-Day Trial` / `Free`, Upgrade, Trial, Restore Purchase).
-    - Appearance: Dark Mode (`System Default` / `Force Light` / `Force Dark`) + Theme Palette (`Material You` / `Cyan Precision` / `Cobalt Tactical` / `Amber Industrial` / `AMOLED True Black` [Pro Trial+Lifetime]).
-    - Floating Overlay & Safety (Free for ALL users):
-        - Overlay Size (`Tiny` / `Compact` [Default] / `Medium` / `Large`) with mini preview.
-        - Runner Launch Behavior (`Ask Every Time` [Default] / `Standby` / `Auto-Start`).
-        - Emergency Stop via Volume Down (`Boolean`, Default `true`): Pressing Volume Down while a script is actively running immediately stops/pauses the runner safely.
-        - Keep Screen Awake While Running (`Boolean`, Default `true`): Applies `FLAG_KEEP_SCREEN_ON` on overlay dock ONLY while `RunnerPhase.RUNNING`.
-        - Pause Automatically on Screen Off (`Boolean`, Default `true`): Listens to `Intent.ACTION_SCREEN_OFF` to stop/pause execution immediately if the user manually locks the phone.
-        - Show Debug Touch Marker (`Boolean`, Default `false`): Briefly displays a `300ms` non-touchable translucent hollow circle/trail at executed touch coordinates for visual debugging.
-    - Localization: `English` / `繁體中文` / `简体中文` via `AppCompatDelegate.setApplicationLocales()` (preserving standard `Activity.recreate()` with `windowBackground` dark/AMOLED sync to prevent white flash).
-    - Storage & Cache (Free for ALL users): Live `inspect_screens` & `inspect_crops` size + `[Clear All]` (`clearAllInspectImagesOnly()`).
-    - Data Backup & Transfer (`Lifetime Pro` ONLY — Excluded from 7-Day Trial):
-        - Export `.tapflow` (includes `sourceScreenWidth`, `sourceScreenHeight`, `coordinateScalingMode` on Scripts; excludes Inspect PNGs).
-        - Import `.tapflow` (`OpenDocument(arrayOf("*/*"))`, Copy vs Overwrite conflict choice) + **Import Resolution & Ratio Adapter Dialog** whenever any imported Script's `sourceScreenWidth × sourceScreenHeight` differs from the current device (allowing Bake/Convert now OR Runtime Auto-Adapt across `Stretch` / `Aspect-Fit` / `Aspect-Fill` / `1:1 Raw`, with `ImageMatch` DPI warning).
-    - Legal & Compliance (Offline TnC / Privacy Policy), Feedback via Email, About.
+  Preferences List:
+  - TapFlow Pro Card (Top Banner):
+  - Shows current tier: `[Pro Lifetime Active ✓]` / `[7-Day Trial: Xd Xh Left]` / `[Free Plan]`.
+  - Actions: `[Upgrade to Lifetime Pro]`, `[Start 7-Day Free Trial]` (if unused), `[Restore Google Play Purchase]`.
+  - Appearance:
+  - Dark Mode: System Default / Force Light / Force Dark.
+  - Theme Palette: Dynamic Material You (Android 12+) / Cyan Precision / Cobalt Tactical / Amber Industrial / AMOLED True Black (`#000000` surfaces with forced dark system bars, unlocked for both 7-Day Free Trial and Lifetime Pro via `ProFeatureGate.AMOLED_THEME`; falls back cleanly to `DYNAMIC_MATERIAL_YOU` on Free tier and routes Free taps to `Route.Paywall`).
+  - Floating Overlay & Safety (Free for ALL users):
+  - Overlay Size (live-adjustable): Tiny (`28.dp` button / `16.dp` icon / `28.dp` bubble) / Compact [Default] (`34.dp` button / `19.dp` icon / `34.dp` bubble) / Medium (`42.dp` button / `22.dp` icon / `42.dp` bubble) / Large (`50.dp` button / `26.dp` icon / `50.dp` bubble) with a live mini preview card.
+  - Runner Launch Behavior (`RunnerLaunchMode` `FilterChip` selector): `Ask Every Time` [Default] / `Standby` / `Auto-Start` (`AppPreferences.runnerLaunchMode`).
+  - Emergency Stop via Volume Down (`Boolean`, Default `true`): Pressing hardware Volume Down while a script is actively running immediately pauses/stops the runner cleanly.
+  - Keep Screen Awake While Running (`Boolean`, Default `true`): Applies `WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON` on the overlay dock strictly while `RunnerPhase.RUNNING`.
+  - Pause Automatically on Screen Off (`Boolean`, Default `true`): Listens to `Intent.ACTION_SCREEN_OFF` to stop/pause execution cleanly when the user locks the screen.
+  - Show Debug Touch Marker (`Boolean`, Default `false`): Briefly renders a `300ms` non-touchable translucent hollow ring/trail at executed touch coordinates for visual debugging.
+  - Localization:
+  - Language Picker: English / Traditional Chinese (繁體中文) / Simplified Chinese (简体中文).
+  - Implementation: Uses `AppCompatDelegate.setApplicationLocales()` (`MainActivity : AppCompatActivity()`, `Theme.AppCompat.DayNight.NoActionBar`, `AppLocalesMetadataHolderService`, `generateLocaleConfig = true`, preserving standard `Activity.recreate()` with `windowBackground` dark/AMOLED sync).
+  - Storage & Cache (Free for ALL users — Free, Trial, and Pro):
+  - Displays live Inspect storage usage (`Inspect Screenshots: XX.X MB (N images)` calculated on `Dispatchers.IO` from `inspect_screens` & `inspect_crops`, resetting to `0 B (0 images)` after clearing).
+  - `[Clear All]` Button (disabled when `0 images` and `0 B`): Opens a destructive confirmation `AlertDialog` (`"Clear All Inspect Images?"`) and deletes only the PNG files inside `inspect_screens` & `inspect_crops` (`clearAllInspectImagesOnly()`), keeping `InspectGroup`/`InspectItem`/`InspectPixel` DB rows and Script-owned `script_templates` assets completely intact.
+  - Data Backup & Transfer (Lifetime Pro Only — Excluded from 7-Day Trial):
+  - Entitlement Guard: Strictly requires `EntitlementState.ProLifetime` (`ProFeatureGate.DATA_BACKUP`) and is excluded from the 7-Day Free Trial. Free and 7-Day Trial users see `"Requires Lifetime Pro purchase (not included in 7-day trial)."` and tapping Export/Import routes directly to `Route.Paywall` without opening the SAF file picker.
+  - Export Data:
+  - Exports Scripts, Pipelines, Dynamic Variables, and Action configurations as a lightweight `.tapflow` (JSON) file via SAF `CreateDocument("application/json")`.
+  - Strictly excludes all Inspect Groups, Inspect Items, and PNG screenshot assets.
+  - Import Data:
+  - Uses SAF `OpenDocument()` with MIME filter `arrayOf("*/*")` (since custom `.tapflow` extensions are grayed out by Android document pickers under strict MIME types) and validates `.tapflow` extension + JSON schema on read.
+  - Conflict Strategy: Option to "Import as Copy" or "Overwrite" if duplicate script titles exist.
+  - Legal & Compliance:
+  - Terms & Conditions (TnC).
+  - Privacy Policy.
+  - Support & Community:
+  - Feedback via Email: Launches email client with system diagnostics pre-filled.
+  - About:
+  - TapFlow App Version Name & Version Code.
+  - Copyright © TapFlow. All Rights Reserved (Proprietary Software).
 
 ---
 
 ## 3. Script Edit & Add Page Specification
-Top App Bar (Pinned 2-Row Clean M3 Header):
-- Row 1: Back (`isDirty` guard), Borderless Editable Title, `[Flow]` (publishes live draft to `ScriptFlowPreviewBridge` ➔ opens `Route.ScriptFlow`), `[Save]` button.
-- Row 2: Expandable Borderless Description + compact text-labeled pills: `"Global Delay: 0ms"`, `"Variables (N)"`, `"Tags (N)"`, and **`"Screen: 1080×2400 (Stretch)"`** (opens Screen Resolution & Ratio Converter / Scaling Mode sheet).
+Page Architecture & Navigation Flow:
+Pinned 2-Row Material 3 Top Header Bar (`Surface` with `surfaceContainer` elevation & `statusBarsPadding()`):
+- Row 1:
+- Left: Navigation Back Icon (`isDirty` Unsaved Changes confirmation dialog: Discard / Keep Editing / Save & Exit).
+- Center: Borderless editable Script Title (`"Untitled Script..."`).
+- Right: `[Flow]` button (publishes live draft to `ScriptFlowPreviewBridge` ➔ opens read-only `Route.ScriptFlow`) and `[Save]` button.
+- Row 2:
+- Expandable borderless Script Description + compact text-labeled pills: `"Global Delay: 0ms"`, `"Variables (N)"`, `"Tags (N)"`.
+- Global Delay Modal BottomSheet: Configures `DelayConfig` (`Fixed` / `RandomRange` / `Deviation`, defaulting to `0ms`) with `[Save]` and `[Apply to All Actions]`.
+- Dynamic Variables Modal BottomSheet: Manages script variables (`Key`, Type: `Text [STRING]` / `Number [NUMBER]` / `Yes-No [BOOLEAN]`, `Default Value`).
 
-Action Tree & Plain-Language UX:
-- Distinct per-Action-Type icons (`TouchApp`, `AdsClick`, `PanToolAlt`, `Pinch`, `Swipe`, `Keyboard`, `HourglassBottom`, `AltRoute`, `Repeat`, etc.) with strict M3 `Container -> onContainer` contrast; minimal `⋮` overflow menus (no row of tiny Edit/Delete/Arrow icon buttons); tapping card edits.
-- Inline indented branches for `IfBlock` (`If:` ➔ `Do these:`, `+ Or if not, check...` / `If not, check:`, `+ If none match...` / `If nothing above matched:`, `"Runs only the first match above"` note) and `LoopBlock`, allowing sequential `IfBlock` placement and nesting up to depth 3.
-- Slim hairline `+ Insert` dividers + tail `+ Add Step` buttons.
-- Global Delay defaults to **`0ms`** (`Fixed(0L)`) with `[Save]` and `[Apply to All Actions]` buttons; standalone `Delay` action strictly clamped `>= 50ms`.
-- Universal Post-Action Delay (`Script Default` / `Custom Wait` / `No Wait (0ms)`) on physical actions; `0ms` on Flow Control & VariableOps.
-- Required targets on new Actions start **EMPTY** (`""` / `null`) with clear red inline validation errors on Save; tuning timings (`50ms` press duration, `800ms` hold, `300ms` swipe, `1000ms` delay, etc.) provide suggested defaults.
+Action Tree Viewport (Inline Nested Architecture):
+- `LazyColumn` rendering sequential top-level actions with inline indented collapsible containers for `IfBlock` (`If:` / `Do these:`, `+ Or if not, check...` / `If not, check:`, `+ If none match...` / `If nothing above matched:`, `"Runs only the first match above"` note) and `LoopBlock` (`Body`), supporting sequential `IfBlock` placement and nesting up to 3 levels deep.
+- Slim hairline `+ Insert` dividers between items and `+ Add Step` buttons at branch tails / empty state.
+- Distinct per-Action-Type icons (`TouchApp`, `AdsClick`, `PanToolAlt`, `Pinch`, `Swipe`, `Keyboard`, `HourglassBottom`, `AltRoute`, `Repeat`, etc.) with strict M3 `Container -> onContainer` contrast; tapping card opens Edit; clean `⋮` overflow menu (`Edit`, `Move Up`, `Move Down`, `Delete` w/ Undo Snackbar).
+- Required user targets on new Actions start **EMPTY** (`""` / `null`) with inline red validation errors on Save; hidden tuning timings provide suggested defaults.
+
+Universal Action-Level Post Delay (Applied to physical interaction actions):
+- Modes: `Global` (inherits `Script.globalDelay`, default `0ms`), `Override` (`DelayConfig >= 0ms`), `Off (0ms)`.
+- Excluded (Strictly `0ms`): `IfBlock`, `LoopBlock`, `Break`, `Continue`, `EndScript`, `Delay`, and all `VariableOp`s.
 
 ---
 
-## 4. Action Catalog & Cross-Device Coordinate Scaling Math
-(All 4 Action Categories — Touch & Gestures, Flow Control, System & Hardware, Variable Operations — 100% Free except `ADVANCED_VISION` conditions `ImageMatch` & Multi-Point/Region `ColorMatch`.)
+## 4. Action Catalog (Add Action BottomSheet — Plain-Language UI Labels)
+# Category 1: Touch & Gestures (100% Free)
+Touch & Gestures:
+- Tap:
+    - Coordinates `(X, Y)` (Raw Integer or bound Number Variable), Humanized Tap Offset (`Jitter`, px), Hold Time (`Press Duration`, suggested `50ms`), How Many Taps (`Repeat Count`, default `1`), Wait Between Taps (`Repeat Interval`), `[Pick on Screen]` (`Pre-Flight Permission Guard` ➔ Overlay Mode 2).
+    - Post-Action Delay: `Global` / `Override` / `Off`.
+- Double Tap:
+    - Coordinates `(X, Y)`, Humanized Tap Offset (`Jitter`), Hold Time (`50ms`), Pause Between Taps (`Tap Interval`, suggested `100ms`), `[Pick on Screen]`.
+    - Post-Action Delay: `Global` / `Override` / `Off`.
+- Long Press:
+    - Coordinates `(X, Y)`, Humanized Tap Offset (`Jitter`), Hold Duration (`800ms`), Finger Tremble (`Micro-movement Jitter`), Operation Mode (`Standard`, `Press Down Only`, `Release Only`, `Hold Until` — chaining `StrokeDescription` segments `< 55,000ms` via `AccessibilityManagerBridge`), `[Pick on Screen]`.
+    - Post-Action Delay: `Global` / `Override` / `Off`.
+- Multi-touch:
+    - Modes: `Custom Points` (points list, jitter, hold time, finger timing offset), `Pinch / Spread` (center, start/end distance, duration), `Rotate` (center, start/end angle, radius, duration), `[Pick on Screen]`.
+    - Post-Action Delay: `Global` / `Override` / `Off`.
+- Swipe & Drag:
+    - Start `(X1, Y1)` & End `(X2, Y2)`, Humanized Offset (`Jitter`), Duration (`300ms`), Pause Before Drag / Before Release, Swipe Style (`Straight Line`, `Curved (Human-like)`, `Custom Multi-Point Path`), `[Pick on Screen]`.
+    - Post-Action Delay: `Global` / `Override` / `Off`.
+- Input Text:
+    - Where to Type (`Current Text Box` or `Tap Position First`), Text to Type (`+ Date`, `+ Time`, `+ 4-Digit Random`, `+ Clipboard`, `+ Saved Variable`, collapsible Epoch tag), How to Type (`Instant Fill` via `ACTION_SET_TEXT`, `Paste Text` via `ACTION_PASTE`, `Type Slowly` via Shizuku or progressive `ACTION_SET_TEXT`), Erase Existing Text First, Keyboard Key After Typing, Hide Keyboard Afterward.
+    - Post-Action Delay: `Global` / `Override` / `Off`.
 
-Cross-Device Coordinate & Ratio Scaling Engine (`ScriptCoordinateScaler`):
-- Let `(srcW, srcH)` be the Script's `sourceScreenWidth × sourceScreenHeight` (auto-stamped when created/recorded on device; if `0` treat as `1:1` raw).
-- Let `(dstW, dstH)` be the target screen dimensions aligned to the script's orientation (`if ((srcW > srcH) != (liveW > liveH))` match live display orientation when running or use target portrait/landscape pair on static conversion).
-- Exact Transformation Rules (`CoordinateScalingMode`):
-    1. `NONE` (1:1 Raw): `(x, y) ➔ (x, y)`
-    2. `STRETCH` (Percentage X/Y — exact when aspect ratios match; fits responsive UI edges when ratios differ):
-        - `scaleX = dstW.toDouble() / srcW`, `scaleY = dstH.toDouble() / srcH`
-        - `newX = (x * scaleX).roundToInt().coerceIn(0, dstW - 1)`
-        - `newY = (y * scaleY).roundToInt().coerceIn(0, dstH - 1)`
-        - `scaledRadius = (r * min(scaleX, scaleY)).roundToInt()`
-    3. `FIT_CENTER` (Aspect-Fit / Letterbox Centered — preserves aspect ratio inside centered viewport for games with side/top bars):
-        - `s = min(dstW.toDouble() / srcW, dstH.toDouble() / srcH)`
-        - `offsetX = (dstW - srcW * s) / 2.0`, `offsetY = (dstH - srcH * s) / 2.0`
-        - `newX = (offsetX + x * s).roundToInt().coerceIn(0, dstW - 1)`
-        - `newY = (offsetY + y * s).roundToInt().coerceIn(0, dstH - 1)`
-        - `scaledRadius = (r * s).roundToInt()`
-    4. `FILL_CROP` (Aspect-Fill / Center-Crop — scales uniformly to fill screen and crops excess):
-        - `s = max(dstW.toDouble() / srcW, dstH.toDouble() / srcH)`
-        - `offsetX = (dstW - srcW * s) / 2.0`, `offsetY = (dstH - srcH * s) / 2.0`
-        - `newX = (offsetX + x * s).roundToInt().coerceIn(0, dstW - 1)`
-        - `newY = (offsetY + y * s).roundToInt().coerceIn(0, dstH - 1)`
-        - `scaledRadius = (r * s).roundToInt()`
-- Applies recursively across ALL `Tap`, `DoubleTap`, `LongPress`, `MultiTouch` (points, centers, pinch distances, rotate radius), `SwipeDrag` (start/end, multi-point path), `InputText` (`tapToFocus`), `Jitter` radii, `ColorMatch` coords/regions, `ImageMatch` ROI, and all nested `IfBlock` / `ElseIfBranch` / `LoopBlock` children.
-- **Anti-Double-Scaling Rule**: When converting/baking statically on Import or in `ScriptEditor`, update `sourceScreenWidth = dstW` and `sourceScreenHeight = dstH` so runtime sees `src == dst` and scales `1:1`. When keeping original `(srcW, srcH)` for dynamic runtime adaptation, `AutomationRunnerEngine` scales dynamically against live screen bounds on execution (caching scaled `ImageMatch` template bitmaps by `(path, dstW, dstH)`).
+# Category 2: Flow Control (Free Actions; Advanced Vision Conditions Gated)
+Flow Control:
+- If Block (`If` ➔ `Else If` ➔ `Else`):
+    - Plain-language top live summary + 3-level Card-in-Card builder (`All True (AND)` / `Any True (OR)` / `None True (NOT)` + 4 friendly visual rule tiles: Check Screen Color, Find Image on Screen [`ADVANCED_VISION`], Check Current App, Check Variable).
+    - `ColorMatch`: Single Point [Free], Multi-Point / Region [`ADVANCED_VISION`], RGB tolerance, Inspect DAO import.
+    - `ImageMatch` [`ADVANCED_VISION`]: 32-pixel / Fast Template Matching, Search ROI, Inspect DAO import (duplicates cropped PNG into Script-owned `script_templates` folder), confidence slider.
+    - `AppMatch` [Free]: Active foreground app picker (with Coil icons, `<queries>`, `[Select Current Foreground App]`).
+    - `VariableCompare` [Free]: String, Number, Boolean comparisons.
+    - Child Branches: `Then Branch` ("If Yes, do these:"), ordered `ElseIfBranches` ("If not, check:"), optional `Else Branch` ("If nothing above matched:").
+- Delay: Standalone wait using `DelayConfig` (`Exact Wait` / `Random Range` / `About ±`, strictly clamped `>= 50ms`).
+- End Script: Halts execution and resets state.
+- Loop Block: `Repeat N Times` (`Count`), `Repeat While...`, `Repeat Until...`, `Repeat Forever` (`Unlimited`), Loop Interval Delay, Safety Stop Limits (`Max Timeout` `60s`, `Max Iterations` `500`, `On Timeout`), Body Branch + `Break` + `Continue`.
 
-*(Sections 5, 6, 7, 8, and 9 retain all finalized Pipeline, Logs, Inspect Studio, Overlay Window/Modes/Resource Release, Domain Models, Ktor WebSocket Protocol, and MacroDroid/Tasker Broadcast contracts, with `OverlayService` additionally enforcing `FLAG_KEEP_SCREEN_ON` while `RUNNING`, `ACTION_SCREEN_OFF` safety pause, Volume-Down Emergency Stop via `TapFlowAccessibilityService`, and optional `300ms` Debug Touch Marker rendering on `FLAG_NOT_TOUCHABLE` overlay.)*
+# Category 3: System & Hardware (100% Free)
+System & Hardware:
+- Key Events: Home, Back, Recents, Power Dialog, Volume Up/Down (`AudioManager` fallback if Shizuku unavailable), Notifications, Quick Settings, Take Screenshot. Post-Action Delay: `Global` / `Override` / `Off`.
+- Application Lifecycle: `LaunchApp` & `ForceStopApp` (Shizuku `am force-stop` when ready & Pro, falling back safely to Accessibility `HOME` + `ActivityManager.killBackgroundProcesses()`). Post-Action Delay: `Global` / `Override` / `Off`.
+- Clipboard Operations: Copy, Paste, Clear (`Android 10+` background reads via Shizuku shell or 1×1 focusable transparent Overlay View). Post-Action Delay: `Global` / `Override` / `Off` for Paste; `0ms` for Copy/Clear.
+- Device Feedback & Alerts: Vibrate (`200ms` / custom pattern), Play Alert Sound. Post-Action Delay: `0ms`.
+
+# Category 4: Variable Operations (100% Free)
+Variable Operations:
+- In-memory per execution session (non-resetting across steps/repeats within a single Pipeline run).
+- Operations: Set Variable, Math (+, -, *, /, %, Round, Floor, Ceil, Abs), Random Generator, String Ops (Join, Trim, Replace/Regex, Substring), Boolean Ops (Toggle, AND, OR), Type Casting. Post-Action Delay: `0ms`.
+
+---
+
+## 5. Pipeline Edit & Add Page Specification
+Top App Bar: Back (`isDirty` guard), Title & Description, Pipeline Settings Trigger, Save Pipeline Button.
+Pipeline-Level Execution Settings (BottomSheet):
+- Pipeline Repeat Mode: Run Once [Free] / Loop Pipeline (`N > 1` or `Unlimited` [Pro: `PIPELINE_AUTOMATION`]).
+- Error Handling Strategy: Abort Pipeline (Default, Free) / Skip & Continue [Pro: `PIPELINE_AUTOMATION`] (logs failure, captures error screenshot, proceeds to next step).
+  Pipeline Step List Viewport:
+- `LazyColumn` with `[+ Add Script]` insertion points; Step Card (`STEP #01`, Script Title & Tags or `[Missing Script]`, Action Count, Repeat Count Stepper `[ - ] [ N ] [ + ]`, Reorder, Delete).
+  Add Script BottomSheet Picker:
+- Searchable Room DB script list; supports duplicate script invocations.
+  Pipeline Execution & Variable Lifecycle Rules:
+- Runs each step `Repeat Count = N` times before advancing; Runner shows `[Step / TotalSteps]` + `[Run / Repeat]`; Variables persist across repeat iterations & multiple invocations within one Pipeline run.
+
+---
+
+## 6. Log Pages & Inspect Studio Specification
+Script Log Page:
+- Top Bar: Back, Title, Status Filter, Search Bar, Export JSON/Text [Pro: `FULL_LOGS`], Clear All.
+- Session Cards: Header (Free) + Detailed Body [Pro: `FULL_LOGS`] (Control events, Action steps, Nested IF Condition Inspector with ✓/✗ & Actual vs Expected, Crash Error + Zoomable Fullscreen Error Screenshot).
+- Retention Guardrails: Keep latest 50 sessions or auto-purge > 7 days; delete associated orphan PNGs.
+  Pipeline Log Page:
+- Outer Pipeline summary card (Free) + Export & Inner Nested Script Log cards (`Run #1`, `Run #2`) gated by `FULL_LOGS`.
+  Inspect Studio Page:
+- Fullscreen Interactive Canvas loading 100% Lossless PNG via Coil (`Size.ORIGINAL`); 100%–1000% Pinch-to-Zoom with Pixel Grid, two-finger Pan, single-finger Inspect Drag.
+- Top Bar: Back, Title (`Group / Item` + Orientation/Resolution subtitle), Saved Markers On/Off toggle (`Icons.Rounded.Visibility` / `VisibilityOff`, default ON), Mode Switcher (`Pixel Inspect` / `Image Crop [Pro]`).
+- Transparent Saved Markers & Info Popup: Hollow high-contrast Pixel rings & perimeter-only Crop borders (100% transparent interiors); tapping a marker opens a Material 3 Info Popup (with `[Delete]` / `[Close]`) WITHOUT overwriting the active unsaved reticle/crop box.
+- Dynamic Touch Loupe: Smart-flips above/below finger; 10x crosshair lens + HEX + `(X, Y)` in Pixel mode; live box + `(W × H)` in Crop mode.
+- Bottom Control Bar: Swatch + HEX + ±1px Nudge D-Pad + Save in Pixel mode; aspect-fitted Thumbnail + Crop Box Nudge/Resize + `"Save Crop Region"` in Crop mode (persists `(x, y, width, height)` referencing `fullScreenPngPath` without duplicating crop PNGs on disk).
+
+---
+
+## 7. Floating Window (Overlay Service) Specification
+Service Architecture & Window Rules:
+- `OverlayService` (`foregroundServiceType="specialUse"`, Manifest `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`) manages `WindowManager` (`TYPE_APPLICATION_OVERLAY`) powered by `ComposeView`.
+- `MediaProjectionService` (`foregroundServiceType="mediaProjection"`) is strictly decoupled, started ONLY after `ActivityResult` consent and before `getMediaProjection()`.
+- Orientation & Foldable Display Handling: `MediaProjectionService` registers `DisplayManager.DisplayListener` + `onConfigurationChanged` (debounced `150ms`–`200ms`) comparing exact `(width, height, densityDpi)` to rebuild `ImageReader` and call `virtualDisplay.resize()`. `OverlayService` overrides `onConfigurationChanged` to re-clamp `y` and re-snap `x` to the remembered edge so the dock never flies off-screen on fold/unfold.
+- `MediaProjection.Callback.onStop()`: Releases `VirtualDisplay`/`ImageReader`, safely pauses runner/capture, and alerts user.
+- Keep Screen Awake, Screen-Off Auto-Pause & Debug Touch Marker:
+    - Applies `FLAG_KEEP_SCREEN_ON` on `dockLayoutParams` strictly while `keepScreenAwakeWhileRunning == true` AND `RunnerPhase.RUNNING`.
+    - Registers `Intent.ACTION_SCREEN_OFF` receiver to pause/stop active execution immediately when the screen locks.
+    - When `showDebugTouchMarker == true`, flashes a `300ms` non-touchable (`FLAG_NOT_TOUCHABLE`) hollow circle/swipe trail at executed coordinates.
+- Z-Order & Fullscreen Coordinate Alignment: Full-screen capture layer uses `FLAG_LAYOUT_IN_SCREEN | FLAG_LAYOUT_NO_LIMITS`, `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES`, reads `event.rawX` / `event.rawY`, and stays strictly **below** Floating Control Dock in Z-order.
+- Headerless Shadow-Free Icon-First Dock: Magnetic left/right edge snap (re-snaps on width changes via `OnLayoutChangeListener`), `0.dp` shadowElevation/tonalElevation with `0.75.dp` `outlineVariant` border, keeping only top collapse toggle `▲` + scaled icons (`Tiny`/`Compact`/`Medium`/`Large`) + tiny numeric counters, collapsible to icon-only bubble.
+
+Touch Intercept & Passthrough Execution State Machine (Modes 2, 3, 4):
+1. Intercept touch (`rawX / rawY`, path, duration).
+2. Pre-Replay Capture (Modes 3 & 4, skipped on Mode 4 swipe/scroll drags): Hide highlight UI, yield ~50ms, capture clean frame.
+3. Disable Passthrough: Set `captureRootView` `View.GONE` + `FLAG_NOT_TOUCHABLE` and yield ~40ms.
+4. Replay Gesture: Dispatch tap/long-press/swipe via Shizuku with automatic Accessibility fallback (or Accessibility directly).
+5. Restore Capture Layer ONLY if `sessionState == ACTIVE`.
+
+Modes, State-Driven Button Visibility & Resource Cleanup:
+- Mode 1 (Runner): `EXTRA_AUTO_START` (`true` auto-starts; `false` calls `prepareStandbyScript` / `prepareStandbyPipeline` emitting `RunnerPhase.IDLE`).
+    - `RUNNING`: `[Pause ⏸]`, `[Stop ⏹]`, `[Close ✕]` (NO `[Play ▶]`).
+    - `PAUSED`: `[Play/Resume ▶]`, `[Prev ⏮]`, `[Next ⏭]`, `[Stop ⏹]`, `[Close ✕]` (NO `[Pause ⏸]`).
+    - `IDLE` / `STOPPED` / `COMPLETED` / `FAILED` / `PAYWALL_BLOCKED`: `[Play ▶]`, `[Prev ⏮]`, `[Next ⏭]`, `[Close ✕]` (NO `[Pause ⏸]` or `[Stop ⏹]`).
+- Mode 2 (Gesture Picker): `isCaptureActive == true` shows `[Pause ⏸]` + `[Close ✕]`; `false` shows `[Inspect/Resume 🎯]` + `[Close ✕]`. Publishes to `GesturePickerBridge` and returns to `MainActivity` preserving editor BottomSheet.
+- Mode 3 (Live Script Recorder): Starts in `STANDBY` (`[Record ●]` + `[Close ✕]`); `ACTIVE` (`[Pause ⏸]`, `[Stop ⏹]`, `[Close ✕]` + count); `PAUSED` (`[Resume ▶]`, `[Stop ⏹]`, `[Close ✕]` + count). Saves full-screen lossless PNG + clicked pixel color ONLY (`crops = emptyList()`).
+- Mode 4 (Live Image & Target Inspector [Pro]): Starts in `STANDBY` (`[Inspect 🎯]` + `[Close ✕]`). `[Inspect]` starts new `InspectGroup`; `[Pause]` keeps group open; `[Stop]` finalizes group back to `STANDBY`. Clicks capture full-screen lossless PNG + foreground App Name/Package + Pixel color ONLY (`crops = emptyList()`), while drags replay smoothly without creating tap snapshots.
+- Resource Release & Auto-Close on Return to TapFlow: Closing overlay (`[Close ✕]`, notification Stop, `ACTION_CLOSE`, `onDestroy`, OR returning to `MainActivity` outside brief launch suppression / permission flow) saves pending `LIVE_RECORDER` steps, cancels pending `GESTURE_PICKER`, stops runner jobs, cancels active strokes, stops `MediaProjectionService` (`releaseAll()` unless independent Console live stream is active), and removes all overlay views. Closing Modes 1/3/4 does NOT pull TapFlow to the foreground.
+
+---
+
+## 8. Core Domain Models & Local IPC Contracts
+Core Domain Models (:core:model - Zero Android Dependencies):
+EntitlementState: Free, ProTrial, ProLifetime, PendingPurchase
+DelayConfig (Sealed Interface):
+# Global & Post-Action delays allow >= 0ms (default 0ms); standalone Delay action strictly clamped >= 50ms. All modes Free.
+- Fixed(durationMs: Long) | RandomRange(minMs: Long, maxMs: Long) | Deviation(baseMs: Long, deltaMs: Long)
+PostActionDelay: Global | Override(config: DelayConfig) | Off
+VariableType: STRING ("Text") | NUMBER ("Number") | BOOLEAN ("Yes / No")
+VariableDefinition(key, type, defaultValue)
+ScriptAction (Tree Node):
+- Tap, DoubleTap, LongPress, MultiTouch, SwipeDrag, InputText
+- IfBlock(id, name, conditionRoot, thenActions, elseIfBranches, elseActions), ElseIfBranch(id, name, conditionRoot, actions)
+- LoopBlock(id, name, mode, safeguards, bodyActions), Delay, Break, Continue, EndScript
+- KeyEvent, LaunchApp, ForceStopApp, ClipboardOp, Vibrate, PlayAlertSound, VariableOp
+ConditionNode / ConditionGroup (Max depth 3): ConditionGroup(ALL/ANY/NONE) & ConditionLeaf(ColorMatch, ImageMatch, AppMatch, VariableCompare)
+Inspect Models: InspectGroup, InspectItem(fullScreenPngPath, screenWidth, screenHeight, appName, packageName, pixels, crops; computed ScreenOrientation PORTRAIT/LANDSCAPE/SQUARE_UNFOLDED), InspectPixel, InspectCrop(cropPngPath: String? = null, x, y, width, height, similarityThreshold)
+
+Ktor WebSocket Protocol (:core:model + :core:server - JSON Envelope on ws://127.0.0.1:{port}/tapflow via LocalBridgeService):
+WsMessage(type: WsMessageType, requestId: String?, timestamp: Long, payloadJson: String)
+WsMessageType:
+- HANDSHAKE_ACK | HEARTBEAT | DEVICE_STATUS_EVENT
+- SYNC_ALL_SCRIPTS_REQUEST | SYNC_ALL_SCRIPTS_RESPONSE | PUSH_SCRIPT (`forceOverwrite` + `VERSION_CONFLICT`) | DELETE_SCRIPT
+- SYNC_ALL_PIPELINES_REQUEST | SYNC_ALL_PIPELINES_RESPONSE | PUSH_PIPELINE | DELETE_PIPELINE
+- SYNC_ALL_INSPECT_REQUEST | SYNC_ALL_INSPECT_RESPONSE | GET_INSPECT_IMAGE_REQUEST | GET_INSPECT_IMAGE_RESPONSE | PUSH_INSPECT_ITEM | DELETE_INSPECT_GROUP | DELETE_INSPECT_ITEM
+- CAPTURE_SNAPSHOT_REQUEST | CAPTURE_SNAPSHOT_RESPONSE (100% lossless PNG Base64 + foreground app & dims)
+- SYNC_INSTALLED_APPS_REQUEST | SYNC_INSTALLED_APPS_RESPONSE | SYNC_LOGS_REQUEST | SYNC_LOGS_RESPONSE | GET_ERROR_SCREENSHOT_REQUEST | GET_ERROR_SCREENSHOT_RESPONSE
+- START_LIVE_STREAM | STOP_LIVE_STREAM (Binary WebSocket Frames with 12-byte big-endian header: `[width: Int32][height: Int32][rotationDegrees: Int32][JPEG bytes]`)
+- REMOTE_RUN_SCRIPT | REMOTE_RUN_PIPELINE (`autoStart = true`) | REMOTE_STOP | EXECUTION_LOG_EVENT
+- REMOTE_INPUT_EVENT (`TAP`, `SWIPE`, `GLOBAL_BACK`, `GLOBAL_HOME`) | ERROR_RESPONSE
+
+---
+
+## 9. MacroDroid / Tasker External Broadcast Contract (`:core:service` & `:app`)
+Exported BroadcastReceiver: `com.tapflow.core.service.external.TapFlowExternalTriggerReceiver` (`android:exported="true"`).
+- Incoming Actions: `com.jarvis.tapflow.ACTION_PLAY_SCRIPT` (`script_id` or `script_name`), `ACTION_PLAY_PIPELINE` (`pipeline_id` or `pipeline_name`), `ACTION_RESUME`, `ACTION_PAUSE`, `ACTION_STOP`, `ACTION_CLOSE`, `ACTION_NEXT_ACTION`, `ACTION_PREV_ACTION`.
+- Outgoing Broadcast (`com.jarvis.tapflow.ACTION_EXECUTION_FINISHED`): Unrestricted standard broadcast (`FLAG_INCLUDE_STOPPED_PACKAGES`) with dot-free Tasker-compatible extras (`status`, `mode`, `target_id`, `target_title`, `duration_ms`, `steps_executed`, `error`).
+- Guardrails (`goAsync()` + cold-start Shizuku binder wait ~800ms):
+    1. Pro / 7-Day Trial active (`EXTERNAL_BROADCAST`) ➔ else `REJECTED` (`PRO_REQUIRED`) + Notification.
+    2. Shizuku installed, `pingBinder()` alive, permission granted ➔ else `FAILED` (`SHIZUKU_NOT_READY`) + Notification.
+    3. `externalBroadcastEnabled == true` ➔ else `REJECTED` (`EXTERNAL_TRIGGER_DISABLED`) + Notification.
+    4. Accessibility & Overlay permissions granted ➔ else `FAILED` (`PERMISSIONS_MISSING`) + Notification.
+    5. Starts `OverlayService` via `ContextCompat.startForegroundService` with Shizuku `am start-foreground-service` fallback.
