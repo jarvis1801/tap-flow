@@ -248,4 +248,54 @@ class PromoAndDualSkuPricingTest {
     assertEquals(6, case3.promoRemainingDays)
     assertEquals(12, case3.promoRemainingHours)
   }
+
+  @Test
+  fun selectBestOneTimeOffer_prefersExpectedPurchaseOptionId_ignoresRentals_andFallsBack() {
+    val candidates =
+      listOf(
+        OneTimeOfferCandidate(
+          purchaseOptionId = "buy-lifetime",
+          isRental = true,
+          formattedPrice = "$1.99",
+          priceAmountMicros = 1_990_000L,
+          priceCurrencyCode = "USD",
+          offerToken = "tok-rental",
+        ),
+        OneTimeOfferCandidate(
+          purchaseOptionId = "other-option",
+          isRental = false,
+          formattedPrice = "$19.99",
+          priceAmountMicros = 19_990_000L,
+          priceCurrencyCode = "USD",
+          offerToken = "tok-other",
+        ),
+        OneTimeOfferCandidate(
+          purchaseOptionId = "buy-lifetime",
+          isRental = false,
+          formattedPrice = "$14.99",
+          priceAmountMicros = 14_990_000L,
+          priceCurrencyCode = "USD",
+          offerToken = "tok-buy-lifetime",
+        ),
+      )
+
+    val matched =
+      selectBestOneTimeOffer(
+        productId = EntitlementValidator.SKU_PRO_LIFETIME,
+        candidates = candidates,
+        expectedPurchaseOptionId = EntitlementValidator.PURCHASE_OPTION_LIFETIME,
+      )
+    assertEquals("$14.99", matched?.formattedPrice)
+    assertEquals("tok-buy-lifetime", matched?.offerToken)
+
+    // Fallback to first non-rental when expected ID is absent
+    val fallback =
+      selectBestOneTimeOffer(
+        productId = EntitlementValidator.SKU_PRO_LIFETIME_PROMO,
+        candidates = candidates,
+        expectedPurchaseOptionId = EntitlementValidator.PURCHASE_OPTION_PROMO,
+      )
+    assertEquals("$19.99", fallback?.formattedPrice)
+    assertEquals("tok-other", fallback?.offerToken)
+  }
 }

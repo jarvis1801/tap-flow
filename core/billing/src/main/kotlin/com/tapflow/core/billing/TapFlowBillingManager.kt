@@ -49,6 +49,38 @@ data class BillingSnapshot(
   val statusMessage: String? = null,
 )
 
+internal data class OneTimeOfferCandidate(
+  val purchaseOptionId: String?,
+  val isRental: Boolean,
+  val formattedPrice: String,
+  val priceAmountMicros: Long,
+  val priceCurrencyCode: String,
+  val offerToken: String?,
+)
+
+internal fun selectBestOneTimeOffer(
+  productId: String,
+  candidates: List<OneTimeOfferCandidate>,
+  expectedPurchaseOptionId: String?,
+): ProductOfferInfo? {
+  val nonRentalOffers = candidates.filter { !it.isRental && it.formattedPrice.isNotBlank() }
+  val chosen =
+    if (!expectedPurchaseOptionId.isNullOrBlank()) {
+      nonRentalOffers.firstOrNull { it.purchaseOptionId == expectedPurchaseOptionId }
+        ?: nonRentalOffers.firstOrNull()
+    } else {
+      nonRentalOffers.firstOrNull()
+    } ?: return null
+
+  return ProductOfferInfo(
+    productId = productId,
+    formattedPrice = chosen.formattedPrice,
+    priceAmountMicros = chosen.priceAmountMicros,
+    priceCurrencyCode = chosen.priceCurrencyCode,
+    offerToken = chosen.offerToken?.takeIf { it.isNotBlank() },
+  )
+}
+
 enum class BillingRestoreResult {
   RESTORED_LIFETIME,
   PENDING_SETTLEMENT,
@@ -157,11 +189,12 @@ class TapFlowBillingManager @Inject constructor(
       return null
     }
 
-    val offerToken = extractOfferInfo(details)?.offerToken
+    val expectedOptionId = EntitlementValidator.expectedPurchaseOptionId(details.productId)
+    val offerToken = extractOfferInfo(details, expectedOptionId)?.offerToken
     val productParamsBuilder =
       BillingFlowParams.ProductDetailsParams.newBuilder()
         .setProductDetails(details)
-    if (!offerToken.isNullOrBlank()) {
+    if (offerToken != null) {
       productParamsBuilder.setOfferToken(offerToken)
     }
 
@@ -220,8 +253,14 @@ class TapFlowBillingManager @Inject constructor(
       _regularProduct.value = regular
       _promoProduct.value = promo
 
-      val regularOffer = regular?.let(::extractOfferInfo)
-      val promoOffer = promo?.let(::extractOfferInfo)
+      val regularOffer =
+        regular?.let {
+          extractOfferInfo(it, EntitlementValidator.PURCHASE_OPTION_LIFETIME)
+        }
+      val promoOffer =
+        promo?.let {
+          extractOfferInfo(it, EntitlementValidator.PURCHASE_OPTION_PROMO)
+        }
       _billingSnapshot.update {
         it.copy(
           formattedPrice = regularOffer?.formattedPrice ?: it.formattedPrice,
@@ -298,25 +337,35 @@ class TapFlowBillingManager @Inject constructor(
   }
 
   @Suppress("DEPRECATION")
-  internal fun extractOfferInfo(details: ProductDetails): ProductOfferInfo? {
-    val multiOffer = details.oneTimePurchaseOfferDetailsList?.firstOrNull()
-    if (multiOffer != null && multiOffer.formattedPrice.isNotBlank()) {
-      return ProductOfferInfo(
-        productId = details.productId,
-        formattedPrice = multiOffer.formattedPrice,
-        priceAmountMicros = multiOffer.priceAmountMicros,
-        priceCurrencyCode = multiOffer.priceCurrencyCode,
-        offerToken = multiOffer.offerToken.takeIf { !it.isNullOrBlank() },
-      )
-    }
+  internal fun extractOfferInfo(
+    details: ProductDetails,
+    expectedPurchaseOptionId: String? = EntitlementValidator.expectedPurchaseOptionId(details.productId),
+  ): ProductOfferInfo? {
+    val multiCandidates =
+      details.oneTimePurchaseOfferDetailsList.orEmpty().map { offer ->
+        OneTimeOfferCandidate(
+          purchaseOptionId = offer.purchaseOptionId,
+          isRental = offer.rentalDetails != null,
+          formattedPrice = offer.formattedPrice,
+          priceAmountMicros = offer.priceAmountMicros,
+          priceCurrencyCode = offer.priceCurrencyCode,
+          offerToken = offer.offerToken,
+        )
+      }
+    selectBestOneTimeOffer(
+      productId = details.productId,
+      candidates = multiCandidates,
+      expectedPurchaseOptionId = expectedPurchaseOptionId,
+    )?.let { return it }
+
     val legacyOffer = details.oneTimePurchaseOfferDetails
-    if (legacyOffer != null && legacyOffer.formattedPrice.isNotBlank()) {
+    if (legacyOffer != null && legacyOffer.rentalDetails == null && legacyOffer.formattedPrice.isNotBlank()) {
       return ProductOfferInfo(
         productId = details.productId,
         formattedPrice = legacyOffer.formattedPrice,
         priceAmountMicros = legacyOffer.priceAmountMicros,
         priceCurrencyCode = legacyOffer.priceCurrencyCode,
-        offerToken = legacyOffer.offerToken.takeIf { !it.isNullOrBlank() },
+        offerToken = legacyOffer.offerToken?.takeIf { it.isNotBlank() },
       )
     }
     return null

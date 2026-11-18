@@ -1,7 +1,9 @@
 package com.jarvis.tapflow.navigation
 
+import androidx.annotation.Keep
 import kotlinx.serialization.Serializable
 
+@Keep
 @Serializable
 enum class HomeTab {
   SCRIPT,

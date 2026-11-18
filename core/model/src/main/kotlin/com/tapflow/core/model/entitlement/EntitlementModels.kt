@@ -83,11 +83,20 @@ object EntitlementValidator {
   const val TRIAL_DURATION_MS: Long = 7L * 24L * 60L * 60L * 1000L
   const val CLOCK_ROLLBACK_TOLERANCE_MS: Long = 60_000L
   const val SKU_PRO_LIFETIME: String = "tapflow_pro_lifetime"
+  const val PURCHASE_OPTION_LIFETIME: String = "buy-lifetime"
   const val SKU_PRO_LIFETIME_PROMO: String = "tapflow_pro_lifetime_promo"
+  const val PURCHASE_OPTION_PROMO: String = "buy-promo"
   val LIFETIME_PRO_SKUS: Set<String> = setOf(SKU_PRO_LIFETIME, SKU_PRO_LIFETIME_PROMO)
 
   fun isLifetimeProSku(productId: String): Boolean =
     productId == SKU_PRO_LIFETIME || productId == SKU_PRO_LIFETIME_PROMO
+
+  fun expectedPurchaseOptionId(productId: String): String? =
+    when (productId) {
+      SKU_PRO_LIFETIME -> PURCHASE_OPTION_LIFETIME
+      SKU_PRO_LIFETIME_PROMO -> PURCHASE_OPTION_PROMO
+      else -> null
+    }
 
   fun isDiscountEligible(
     entitlementState: EntitlementState,
