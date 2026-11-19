@@ -1,9 +1,11 @@
 package com.tapflow.core.billing
 
+import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
 import com.tapflow.core.model.entitlement.EntitlementValidator
 import kotlinx.serialization.Serializable
 
+@Keep
 @Immutable
 @Serializable
 data class RemotePromoCode(
@@ -15,6 +17,7 @@ data class RemotePromoCode(
   val sku: String = EntitlementValidator.SKU_PRO_LIFETIME_PROMO,
 )
 
+@Keep
 @Immutable
 @Serializable
 data class PromoCodeCatalog(

@@ -3,6 +3,7 @@ package com.tapflow.core.database.backup
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.annotation.Keep
 import com.tapflow.core.database.TapFlowJson
 import com.tapflow.core.database.dao.PipelineDao
 import com.tapflow.core.database.dao.ScriptDao
@@ -19,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
+@Keep
 @Serializable
 data class TapFlowBackupEnvelope(
   val schemaVersion: Int = CURRENT_SCHEMA_VERSION,

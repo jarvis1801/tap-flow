@@ -1,8 +1,8 @@
 package com.tapflow.core.database
 
-import androidx.room.Database
-import androidx.room.RoomDatabase
-import androidx.room.TypeConverters
+import androidx.room3.ColumnTypeConverters
+import androidx.room3.Database
+import androidx.room3.RoomDatabase
 import com.tapflow.core.database.dao.ExecutionLogDao
 import com.tapflow.core.database.dao.InspectDao
 import com.tapflow.core.database.dao.PipelineDao
@@ -27,7 +27,7 @@ import com.tapflow.core.database.entity.ScriptEntity
   version = 1,
   exportSchema = false,
 )
-@TypeConverters(TapFlowTypeConverters::class)
+@ColumnTypeConverters(TapFlowTypeConverters::class)
 abstract class TapFlowDatabase : RoomDatabase() {
   abstract fun scriptDao(): ScriptDao
   abstract fun pipelineDao(): PipelineDao

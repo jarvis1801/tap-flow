@@ -1,7 +1,8 @@
 package com.tapflow.core.database
 
 import android.content.Context
-import androidx.room.Room
+import androidx.room3.Room
+import androidx.sqlite.driver.AndroidSQLiteDriver
 import com.tapflow.core.database.dao.ExecutionLogDao
 import com.tapflow.core.database.dao.InspectDao
 import com.tapflow.core.database.dao.PipelineDao
@@ -13,6 +14,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -23,11 +25,13 @@ object DatabaseModule {
   fun provideTapFlowDatabase(
     @ApplicationContext context: Context,
   ): TapFlowDatabase {
-    return Room.databaseBuilder(
-      context,
-      TapFlowDatabase::class.java,
-      "tapflow.db",
-    ).build()
+    return Room.databaseBuilder<TapFlowDatabase>(
+      context = context,
+      name = "tapflow.db",
+    )
+      .setDriver(AndroidSQLiteDriver())
+      .setQueryCoroutineContext(Dispatchers.IO)
+      .build()
   }
 
   @Provides

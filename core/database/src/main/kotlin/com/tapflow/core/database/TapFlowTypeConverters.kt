@@ -1,6 +1,6 @@
 package com.tapflow.core.database
 
-import androidx.room.TypeConverter
+import androidx.room3.ColumnTypeConverter
 import com.tapflow.core.model.action.ScriptAction
 import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.VariableDefinition
@@ -19,112 +19,112 @@ import kotlinx.serialization.builtins.serializer
 class TapFlowTypeConverters {
   private val json = TapFlowJson.instance
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun fromStringList(value: List<String>): String =
     json.encodeToString(ListSerializer(String.serializer()), value)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun toStringList(raw: String): List<String> =
     if (raw.isBlank()) emptyList()
     else json.decodeFromString(ListSerializer(String.serializer()), raw)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun fromDelayConfig(value: DelayConfig): String =
     json.encodeToString(DelayConfig.serializer(), value)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun toDelayConfig(raw: String): DelayConfig =
     json.decodeFromString(DelayConfig.serializer(), raw)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun fromVariableList(value: List<VariableDefinition>): String =
     json.encodeToString(ListSerializer(VariableDefinition.serializer()), value)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun toVariableList(raw: String): List<VariableDefinition> =
     if (raw.isBlank()) emptyList()
     else json.decodeFromString(ListSerializer(VariableDefinition.serializer()), raw)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun fromScriptActionList(value: List<ScriptAction>): String =
     json.encodeToString(ListSerializer(ScriptAction.serializer()), value)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun toScriptActionList(raw: String): List<ScriptAction> =
     if (raw.isBlank()) emptyList()
     else json.decodeFromString(ListSerializer(ScriptAction.serializer()), raw)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun fromConditionGroup(value: ConditionGroup): String =
     json.encodeToString(ConditionGroup.serializer(), value)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun toConditionGroup(raw: String): ConditionGroup =
     json.decodeFromString(ConditionGroup.serializer(), raw)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun fromPipelineStepList(value: List<PipelineStep>): String =
     json.encodeToString(ListSerializer(PipelineStep.serializer()), value)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun toPipelineStepList(raw: String): List<PipelineStep> =
     if (raw.isBlank()) emptyList()
     else json.decodeFromString(ListSerializer(PipelineStep.serializer()), raw)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun fromPipelineRepeatMode(value: PipelineRepeatMode): String =
     json.encodeToString(PipelineRepeatMode.serializer(), value)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun toPipelineRepeatMode(raw: String): PipelineRepeatMode =
     json.decodeFromString(PipelineRepeatMode.serializer(), raw)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun fromPipelineErrorStrategy(value: PipelineErrorStrategy): String = value.name
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun toPipelineErrorStrategy(raw: String): PipelineErrorStrategy =
     runCatching { PipelineErrorStrategy.valueOf(raw) }.getOrDefault(PipelineErrorStrategy.ABORT)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun fromInspectPixelList(value: List<InspectPixel>): String =
     json.encodeToString(ListSerializer(InspectPixel.serializer()), value)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun toInspectPixelList(raw: String): List<InspectPixel> =
     if (raw.isBlank()) emptyList()
     else json.decodeFromString(ListSerializer(InspectPixel.serializer()), raw)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun fromInspectCropList(value: List<InspectCrop>): String =
     json.encodeToString(ListSerializer(InspectCrop.serializer()), value)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun toInspectCropList(raw: String): List<InspectCrop> =
     if (raw.isBlank()) emptyList()
     else json.decodeFromString(ListSerializer(InspectCrop.serializer()), raw)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun fromExecutionStatus(value: ExecutionStatus): String = value.name
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun toExecutionStatus(raw: String): ExecutionStatus =
     runCatching { ExecutionStatus.valueOf(raw) }.getOrDefault(ExecutionStatus.STOPPED)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun fromActionLogEntryList(value: List<ActionLogEntry>): String =
     json.encodeToString(ListSerializer(ActionLogEntry.serializer()), value)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun toActionLogEntryList(raw: String): List<ActionLogEntry> =
     if (raw.isBlank()) emptyList()
     else json.decodeFromString(ListSerializer(ActionLogEntry.serializer()), raw)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun fromPipelineStepRunLogList(value: List<PipelineStepRunLog>): String =
     json.encodeToString(ListSerializer(PipelineStepRunLog.serializer()), value)
 
-  @TypeConverter
+  @ColumnTypeConverter
   fun toPipelineStepRunLogList(raw: String): List<PipelineStepRunLog> =
     if (raw.isBlank()) emptyList()
     else json.decodeFromString(ListSerializer(PipelineStepRunLog.serializer()), raw)
