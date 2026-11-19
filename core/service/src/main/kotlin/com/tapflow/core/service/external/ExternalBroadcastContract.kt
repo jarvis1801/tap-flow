@@ -49,6 +49,7 @@ object ExternalBroadcastContract {
   // Deep-link extra for notification click
   const val EXTRA_OPEN_HOME_TAB = "tapflow_open_home_tab"
   const val HOME_TAB_SEAMLESS = "SEAMLESS"
+  const val EXTRA_FROM_EXTERNAL_NOTIFICATION = "tapflow_from_external_notification"
 
   fun actionPlayScript(packageName: String): String = "$packageName.$SUFFIX_PLAY_SCRIPT"
 

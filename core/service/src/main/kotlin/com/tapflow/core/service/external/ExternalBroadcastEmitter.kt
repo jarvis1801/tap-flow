@@ -72,6 +72,10 @@ class ExternalBroadcastEmitter @Inject constructor(
             ExternalBroadcastContract.EXTRA_OPEN_HOME_TAB,
             ExternalBroadcastContract.HOME_TAB_SEAMLESS,
           )
+          putExtra(
+            ExternalBroadcastContract.EXTRA_FROM_EXTERNAL_NOTIFICATION,
+            true,
+          )
         }
       }
 

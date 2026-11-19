@@ -113,6 +113,7 @@ fun HomeScreen(
   onNavigateToExternalAutomationGuide: () -> Unit = {},
   deepLinkTab: HomeTabType? = null,
   deepLinkTabSeq: Int = 0,
+  onConsumeDeepLinkTab: () -> Unit = {},
   onRequestMediaProjection: ((PendingMediaProjectionTarget, onDenied: () -> Unit) -> Unit)? = null,
   viewModel: HomeViewModel = hiltViewModel(),
 ) {
@@ -135,6 +136,7 @@ fun HomeScreen(
   LaunchedEffect(deepLinkTab, deepLinkTabSeq) {
     if (deepLinkTab != null && deepLinkTabSeq > 0) {
       viewModel.onIntent(HomeUiIntent.SelectTab(deepLinkTab))
+      onConsumeDeepLinkTab()
     }
   }
 

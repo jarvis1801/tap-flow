@@ -95,4 +95,62 @@ class TapFlowNavigationAndPermissionsTest {
     assertEquals(7, intent.getIntExtra("steps_executed", -1))
     assertEquals("", intent.getStringExtra("error"))
   }
+
+  @Test
+  fun `manifest disables Android Auto Backup and Route Home defaults to SCRIPT`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val allowBackupEnabled =
+      (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_ALLOW_BACKUP) != 0
+    assertFalse(allowBackupEnabled)
+    assertEquals(HomeTab.SCRIPT, Route.Home().initialTab)
+    assertEquals(0, HomeTab.SCRIPT.ordinal)
+  }
+
+  @Test
+  fun `normal launcher and history intents never route to SEAMLESS`() {
+    val normalLauncherIntent =
+      android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
+        addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+      }
+    org.junit.Assert.assertNull(extractRequestedHomeTab(normalLauncherIntent))
+
+    val staleExtraLauncherIntent =
+      android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
+        addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+        putExtra(
+          com.tapflow.core.service.external.ExternalBroadcastContract.EXTRA_OPEN_HOME_TAB,
+          com.tapflow.core.service.external.ExternalBroadcastContract.HOME_TAB_SEAMLESS,
+        )
+      }
+    org.junit.Assert.assertNull(extractRequestedHomeTab(staleExtraLauncherIntent))
+
+    val recentsHistoryIntent =
+      android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
+        addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+        addFlags(android.content.Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY)
+        putExtra(
+          com.tapflow.core.service.external.ExternalBroadcastContract.EXTRA_OPEN_HOME_TAB,
+          com.tapflow.core.service.external.ExternalBroadcastContract.HOME_TAB_SEAMLESS,
+        )
+        putExtra(
+          com.tapflow.core.service.external.ExternalBroadcastContract.EXTRA_FROM_EXTERNAL_NOTIFICATION,
+          true,
+        )
+      }
+    org.junit.Assert.assertNull(extractRequestedHomeTab(recentsHistoryIntent))
+
+    val validNotificationIntent =
+      android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
+        addCategory(android.content.Intent.CATEGORY_LAUNCHER)
+        putExtra(
+          com.tapflow.core.service.external.ExternalBroadcastContract.EXTRA_OPEN_HOME_TAB,
+          com.tapflow.core.service.external.ExternalBroadcastContract.HOME_TAB_SEAMLESS,
+        )
+        putExtra(
+          com.tapflow.core.service.external.ExternalBroadcastContract.EXTRA_FROM_EXTERNAL_NOTIFICATION,
+          true,
+        )
+      }
+    assertEquals(HomeTab.SEAMLESS, extractRequestedHomeTab(validNotificationIntent))
+  }
 }

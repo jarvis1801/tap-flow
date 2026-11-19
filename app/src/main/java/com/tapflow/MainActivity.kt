@@ -212,8 +212,10 @@ class MainActivity : AppCompatActivity() {
               if (prefs.hasCompletedPermissionOnboarding &&
                 areMandatoryPermissionsGranted(this@MainActivity)
               ) {
-                Route.Home(extractRequestedHomeTab(intent) ?: HomeTab.SCRIPT)
+                Route.Home(consumeRequestedHomeTab(intent) ?: HomeTab.SCRIPT)
               } else {
+                // Ensure stale extras cannot linger across Onboarding -> Home transitions.
+                consumeRequestedHomeTab(intent)
                 Route.Onboarding
               }
             }
@@ -222,6 +224,7 @@ class MainActivity : AppCompatActivity() {
             entitlementRepository = entitlementRepository,
             mediaProjectionBridge = mediaProjectionBridge,
             deepLinkTabRequest = deepLinkState,
+            onConsumeDeepLinkTab = { deepLinkTabRequest.value = null },
             onRequestMediaProjection = ::requestMediaProjectionForTarget,
           )
         }
@@ -274,7 +277,7 @@ class MainActivity : AppCompatActivity() {
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
-    extractRequestedHomeTab(intent)?.let { requestedTab ->
+    consumeRequestedHomeTab(intent)?.let { requestedTab ->
       deepLinkTabSeq += 1
       deepLinkTabRequest.value = requestedTab to deepLinkTabSeq
     }
@@ -288,13 +291,13 @@ class MainActivity : AppCompatActivity() {
     autoCloseActiveOverlayIfReturningToApp()
   }
 
-  private fun extractRequestedHomeTab(intent: Intent?): HomeTab? {
-    val tabExtra = intent?.getStringExtra(ExternalBroadcastContract.EXTRA_OPEN_HOME_TAB)
-    return if (tabExtra == ExternalBroadcastContract.HOME_TAB_SEAMLESS) {
-      HomeTab.SEAMLESS
-    } else {
-      null
+  private fun consumeRequestedHomeTab(intent: Intent?): HomeTab? {
+    val resolved = extractRequestedHomeTab(intent)
+    if (intent != null) {
+      intent.removeExtra(ExternalBroadcastContract.EXTRA_OPEN_HOME_TAB)
+      intent.removeExtra(ExternalBroadcastContract.EXTRA_FROM_EXTERNAL_NOTIFICATION)
     }
+    return resolved
   }
 
   override fun onResume() {
@@ -362,6 +365,7 @@ fun TapFlowNavHost(
   mediaProjectionBridge: MediaProjectionBridge,
   onRequestMediaProjection: (PendingMediaProjectionTarget, onDenied: () -> Unit) -> Unit,
   deepLinkTabRequest: Pair<HomeTab, Int>? = null,
+  onConsumeDeepLinkTab: () -> Unit = {},
 ) {
   val navController = rememberNavController()
   LaunchedEffect(deepLinkTabRequest) {
@@ -379,6 +383,7 @@ fun TapFlowNavHost(
         popUpTo<Route.Home> { inclusive = true }
         launchSingleTop = true
       }
+      onConsumeDeepLinkTab()
     }
   }
   NavHost(
@@ -388,6 +393,7 @@ fun TapFlowNavHost(
     composable<Route.Onboarding> {
       OnboardingScreen(
         onNavigateToHome = {
+          onConsumeDeepLinkTab()
           navController.navigate(Route.Home(HomeTab.SCRIPT)) {
             popUpTo<Route.Onboarding> { inclusive = true }
             launchSingleTop = true
@@ -402,6 +408,7 @@ fun TapFlowNavHost(
         mediaProjectionBridge = mediaProjectionBridge,
         deepLinkTab = deepLinkTabRequest?.first?.toHomeTabType(),
         deepLinkTabSeq = deepLinkTabRequest?.second ?: 0,
+        onConsumeDeepLinkTab = onConsumeDeepLinkTab,
         onRequestMediaProjection = onRequestMediaProjection,
         onNavigateToPaywall = { sourceFeature ->
           navController.navigate(Route.Paywall(sourceFeature)) {
@@ -529,6 +536,16 @@ private fun HomeTab.toHomeTabType(): HomeTabType =
     HomeTab.SEAMLESS -> HomeTabType.SEAMLESS
     HomeTab.SETTINGS -> HomeTabType.SETTINGS
   }
+
+internal fun extractRequestedHomeTab(intent: Intent?): HomeTab? {
+  if (intent == null) return null
+  if ((intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return null
+  val tabExtra = intent.getStringExtra(ExternalBroadcastContract.EXTRA_OPEN_HOME_TAB)
+  if (tabExtra != ExternalBroadcastContract.HOME_TAB_SEAMLESS) return null
+  val isExplicitExternalNotification =
+    intent.getBooleanExtra(ExternalBroadcastContract.EXTRA_FROM_EXTERNAL_NOTIFICATION, false)
+  return if (isExplicitExternalNotification) HomeTab.SEAMLESS else null
+}
 
 internal fun areMandatoryPermissionsGranted(context: Context): Boolean {
   val overlayGranted = Settings.canDrawOverlays(context)
