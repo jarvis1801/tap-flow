@@ -1,5 +1,3 @@
-import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
-
 plugins {
   alias(libs.plugins.tapflow.android.application)
   alias(libs.plugins.tapflow.android.application.compose)
@@ -71,8 +69,6 @@ secrets {
   ignoreList.add("TAPFLOW_OFFLINE_MODE")
 }
 
-googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
-
 dependencies {
   implementation(project(":core:model"))
   implementation(project(":core:database"))
@@ -115,10 +111,8 @@ dependencies {
   testImplementation(libs.robolectric)
   testImplementation(libs.androidx.compose.ui.test.junit4)
 
-  androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(libs.androidx.runner)
-  androidTestImplementation(libs.androidx.compose.ui.test.junit4)
 
   debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
