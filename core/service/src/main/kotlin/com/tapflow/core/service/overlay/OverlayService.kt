@@ -24,6 +24,9 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.DisplayMetrics
 import android.view.Display
 import android.view.Gravity
@@ -57,6 +60,7 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -1292,6 +1296,7 @@ class OverlayService :
   }
 
   private fun triggerSaveQueueBusyFlash() {
+    triggerQueueFullHapticTick()
     saveQueueBusyFlashJob?.cancel()
     uiState.update { it.copy(isSaveQueueBusyFlash = true) }
     saveQueueBusyFlashJob =
@@ -1299,6 +1304,27 @@ class OverlayService :
         delay(650L)
         uiState.update { it.copy(isSaveQueueBusyFlash = false) }
       }
+  }
+
+  private fun triggerQueueFullHapticTick() {
+    runCatching {
+      val vibrator: Vibrator? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+          val manager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+          manager?.defaultVibrator
+        } else {
+          @Suppress("DEPRECATION")
+          getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+      if (vibrator?.hasVibrator() == true) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          vibrator.vibrate(VibrationEffect.createOneShot(15L, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+          @Suppress("DEPRECATION")
+          vibrator.vibrate(15L)
+        }
+      }
+    }
   }
 
   /**
@@ -1965,12 +1991,16 @@ private fun FallbackFloatingDock(
       )
     }
 
+  val isSaving = state.pendingSaveCount > 0
+  val isQueueFull = state.pendingSaveCount >= CaptureSaveQueue.MAX_PENDING_SAVES
+  val amberAccent = Color(0xFFF59E0B)
+
   if (state.isBubbleCollapsed) {
     Surface(
       modifier = dragModifier.size(bubbleSize),
       shape = CircleShape,
       color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-      contentColor = MaterialTheme.colorScheme.primary,
+      contentColor = if (isQueueFull) amberAccent else MaterialTheme.colorScheme.primary,
       border = dockBorder,
       shadowElevation = 0.dp,
       tonalElevation = 0.dp,
@@ -1980,8 +2010,17 @@ private fun FallbackFloatingDock(
         Icon(
           imageVector = Icons.Default.TouchApp,
           contentDescription = "Expand floating dock",
+          tint = if (isQueueFull) amberAccent else MaterialTheme.colorScheme.primary,
           modifier = Modifier.size(iconSize),
         )
+        if (isSaving) {
+          CircularProgressIndicator(
+            modifier = Modifier.size(bubbleSize),
+            strokeWidth = 2.dp,
+            color = if (isQueueFull) amberAccent else MaterialTheme.colorScheme.primary,
+            trackColor = Color.Transparent,
+          )
+        }
       }
     }
     return
@@ -2092,21 +2131,25 @@ private fun FallbackFloatingDock(
           }
           when (state.sessionState) {
             OverlaySessionState.STANDBY -> {
-              IconButton(
+              FallbackPrimaryDockButton(
                 onClick = { callbacks.onStartOrResumeCapture() },
-                modifier = Modifier.size(buttonSize),
-              ) {
-                Icon(Icons.Default.FiberManualRecord, contentDescription = "Start Recording", modifier = Modifier.size(iconSize))
-              }
+                buttonSize = buttonSize,
+                iconSize = iconSize,
+                icon = Icons.Default.FiberManualRecord,
+                contentDescription = "Start Recording",
+                pendingSaveCount = state.pendingSaveCount,
+              )
             }
 
             OverlaySessionState.ACTIVE -> {
-              IconButton(
+              FallbackPrimaryDockButton(
                 onClick = { callbacks.onPauseCapture() },
-                modifier = Modifier.size(buttonSize),
-              ) {
-                Icon(Icons.Default.Pause, contentDescription = "Pause Recording", modifier = Modifier.size(iconSize))
-              }
+                buttonSize = buttonSize,
+                iconSize = iconSize,
+                icon = Icons.Default.Pause,
+                contentDescription = "Pause Recording",
+                pendingSaveCount = state.pendingSaveCount,
+              )
               IconButton(
                 onClick = { callbacks.onStopCapture() },
                 modifier = Modifier.size(buttonSize),
@@ -2116,12 +2159,14 @@ private fun FallbackFloatingDock(
             }
 
             OverlaySessionState.PAUSED -> {
-              IconButton(
+              FallbackPrimaryDockButton(
                 onClick = { callbacks.onStartOrResumeCapture() },
-                modifier = Modifier.size(buttonSize),
-              ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "Resume Recording", modifier = Modifier.size(iconSize))
-              }
+                buttonSize = buttonSize,
+                iconSize = iconSize,
+                icon = Icons.Default.PlayArrow,
+                contentDescription = "Resume Recording",
+                pendingSaveCount = state.pendingSaveCount,
+              )
               IconButton(
                 onClick = { callbacks.onStopCapture() },
                 modifier = Modifier.size(buttonSize),
@@ -2143,21 +2188,25 @@ private fun FallbackFloatingDock(
           }
           when (state.sessionState) {
             OverlaySessionState.STANDBY -> {
-              IconButton(
+              FallbackPrimaryDockButton(
                 onClick = { callbacks.onStartOrResumeCapture() },
-                modifier = Modifier.size(buttonSize),
-              ) {
-                Icon(Icons.Default.CenterFocusStrong, contentDescription = "Start Inspecting", modifier = Modifier.size(iconSize))
-              }
+                buttonSize = buttonSize,
+                iconSize = iconSize,
+                icon = Icons.Default.CenterFocusStrong,
+                contentDescription = "Start Inspecting",
+                pendingSaveCount = state.pendingSaveCount,
+              )
             }
 
             OverlaySessionState.ACTIVE -> {
-              IconButton(
+              FallbackPrimaryDockButton(
                 onClick = { callbacks.onPauseCapture() },
-                modifier = Modifier.size(buttonSize),
-              ) {
-                Icon(Icons.Default.Pause, contentDescription = "Pause Inspecting", modifier = Modifier.size(iconSize))
-              }
+                buttonSize = buttonSize,
+                iconSize = iconSize,
+                icon = Icons.Default.Pause,
+                contentDescription = "Pause Inspecting",
+                pendingSaveCount = state.pendingSaveCount,
+              )
               IconButton(
                 onClick = { callbacks.onStopCapture() },
                 modifier = Modifier.size(buttonSize),
@@ -2167,12 +2216,14 @@ private fun FallbackFloatingDock(
             }
 
             OverlaySessionState.PAUSED -> {
-              IconButton(
+              FallbackPrimaryDockButton(
                 onClick = { callbacks.onStartOrResumeCapture() },
-                modifier = Modifier.size(buttonSize),
-              ) {
-                Icon(Icons.Default.PlayArrow, contentDescription = "Resume Inspecting", modifier = Modifier.size(iconSize))
-              }
+                buttonSize = buttonSize,
+                iconSize = iconSize,
+                icon = Icons.Default.PlayArrow,
+                contentDescription = "Resume Inspecting",
+                pendingSaveCount = state.pendingSaveCount,
+              )
               IconButton(
                 onClick = { callbacks.onStopCapture() },
                 modifier = Modifier.size(buttonSize),
@@ -2199,32 +2250,43 @@ private fun FallbackFloatingDock(
         }
       }
     }
+  }
+}
 
-    if (state.pendingSaveCount > 0) {
-      val isFull = state.pendingSaveCount >= CaptureSaveQueue.MAX_PENDING_SAVES
-      Surface(
-        shape = RoundedCornerShape(10.dp),
-        color =
-          if (state.isSaveQueueBusyFlash || isFull) MaterialTheme.colorScheme.tertiaryContainer
-          else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
-        contentColor =
-          if (state.isSaveQueueBusyFlash || isFull) MaterialTheme.colorScheme.onTertiaryContainer
-          else MaterialTheme.colorScheme.onSurface,
-        border =
-          BorderStroke(
-            width = if (state.isSaveQueueBusyFlash) 1.5.dp else 0.75.dp,
-            color =
-              if (state.isSaveQueueBusyFlash || isFull) MaterialTheme.colorScheme.tertiary
-              else MaterialTheme.colorScheme.outlineVariant,
-          ),
-      ) {
-        Text(
-          text = "Saving ${state.pendingSaveCount}/${CaptureSaveQueue.MAX_PENDING_SAVES}",
-          style = MaterialTheme.typography.labelSmall,
-          fontFamily = FontFamily.Monospace,
-          modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-        )
-      }
+@Composable
+private fun FallbackPrimaryDockButton(
+  onClick: () -> Unit,
+  buttonSize: androidx.compose.ui.unit.Dp,
+  iconSize: androidx.compose.ui.unit.Dp,
+  icon: androidx.compose.ui.graphics.vector.ImageVector,
+  contentDescription: String,
+  pendingSaveCount: Int,
+) {
+  val isSaving = pendingSaveCount > 0
+  val isQueueFull = pendingSaveCount >= CaptureSaveQueue.MAX_PENDING_SAVES
+  val amberAccent = Color(0xFFF59E0B)
+  Box(
+    modifier = Modifier.size(buttonSize),
+    contentAlignment = Alignment.Center,
+  ) {
+    IconButton(
+      onClick = onClick,
+      modifier = Modifier.size(buttonSize),
+    ) {
+      Icon(
+        imageVector = icon,
+        contentDescription = contentDescription,
+        tint = if (isQueueFull) amberAccent else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.size(iconSize),
+      )
+    }
+    if (isSaving) {
+      CircularProgressIndicator(
+        modifier = Modifier.size(buttonSize),
+        strokeWidth = 2.dp,
+        color = if (isQueueFull) amberAccent else MaterialTheme.colorScheme.primary,
+        trackColor = Color.Transparent,
+      )
     }
   }
 }

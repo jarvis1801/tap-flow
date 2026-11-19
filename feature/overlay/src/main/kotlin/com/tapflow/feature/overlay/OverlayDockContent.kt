@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -107,7 +108,7 @@ internal fun OverlayDockView(
     return
   }
 
-  val showSideColumn = state.captureAlertMessage != null || state.pendingSaveCount > 0
+  val showSideColumn = state.captureAlertMessage != null
 
   Row(
     modifier = modifier,
@@ -232,12 +233,16 @@ private fun CollapsedEdgeBubble(
   onExpand: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val isSaving = state.pendingSaveCount > 0
+  val isQueueFull = state.pendingSaveCount >= CaptureSaveQueue.MAX_PENDING_SAVES
+  val effectiveTint = if (isQueueFull) OverlayTokens.QueueAmberAccent else accentColor
+
   Surface(
     onClick = onExpand,
     modifier = modifier.size(bubbleSize).testTag("overlay_collapsed_bubble"),
     shape = CircleShape,
     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-    contentColor = accentColor,
+    contentColor = effectiveTint,
     border = border,
     shadowElevation = 0.dp,
     tonalElevation = 0.dp,
@@ -246,17 +251,18 @@ private fun CollapsedEdgeBubble(
       Icon(
         imageVector = Icons.Filled.TouchApp,
         contentDescription = "Expand floating dock",
-        tint = accentColor,
+        tint = effectiveTint,
         modifier = Modifier.size(iconSize),
       )
-      if (state.captureAlertMessage != null || state.pendingSaveCount > 0) {
-        val indicatorColor =
-          when {
-            state.captureAlertMessage != null -> MaterialTheme.colorScheme.tertiary
-            state.isSaveQueueBusyFlash || state.pendingSaveCount >= CaptureSaveQueue.MAX_PENDING_SAVES ->
-              OverlayTokens.QueueAmberAccent
-            else -> MaterialTheme.colorScheme.primary
-          }
+      if (isSaving) {
+        CircularProgressIndicator(
+          modifier = Modifier.size(bubbleSize).testTag("overlay_save_progress_ring"),
+          strokeWidth = 2.dp,
+          color = if (isQueueFull) OverlayTokens.QueueAmberAccent else MaterialTheme.colorScheme.primary,
+          trackColor = Color.Transparent,
+        )
+      }
+      if (state.captureAlertMessage != null) {
         Box(
           modifier =
             Modifier
@@ -264,7 +270,7 @@ private fun CollapsedEdgeBubble(
               .padding(3.dp)
               .size(6.dp)
               .clip(CircleShape)
-              .background(indicatorColor),
+              .background(MaterialTheme.colorScheme.tertiary),
         )
       }
     }
@@ -477,6 +483,7 @@ private fun LiveRecorderModeControls(
         iconSize = iconSize,
         testTag = "overlay_recorder_start_button",
         onClick = callbacks::onStartOrResumeCapture,
+        pendingSaveCount = state.pendingSaveCount,
       )
     }
 
@@ -490,6 +497,7 @@ private fun LiveRecorderModeControls(
         iconSize = iconSize,
         testTag = "overlay_recorder_pause_button",
         onClick = callbacks::onPauseCapture,
+        pendingSaveCount = state.pendingSaveCount,
       )
 
       DockActionIconButton(
@@ -514,6 +522,7 @@ private fun LiveRecorderModeControls(
         iconSize = iconSize,
         testTag = "overlay_recorder_resume_button",
         onClick = callbacks::onStartOrResumeCapture,
+        pendingSaveCount = state.pendingSaveCount,
       )
 
       DockActionIconButton(
@@ -563,6 +572,7 @@ private fun LiveInspectorModeControls(
         iconSize = iconSize,
         testTag = "overlay_inspector_start_button",
         onClick = callbacks::onStartOrResumeCapture,
+        pendingSaveCount = state.pendingSaveCount,
       )
     }
 
@@ -576,6 +586,7 @@ private fun LiveInspectorModeControls(
         iconSize = iconSize,
         testTag = "overlay_inspector_pause_button",
         onClick = callbacks::onPauseCapture,
+        pendingSaveCount = state.pendingSaveCount,
       )
 
       DockActionIconButton(
@@ -600,6 +611,7 @@ private fun LiveInspectorModeControls(
         iconSize = iconSize,
         testTag = "overlay_inspector_resume_button",
         onClick = callbacks::onStartOrResumeCapture,
+        pendingSaveCount = state.pendingSaveCount,
       )
 
       DockActionIconButton(
@@ -627,66 +639,11 @@ private fun DockSideStatusColumn(
     horizontalAlignment = horizontalAlignment,
     verticalArrangement = Arrangement.spacedBy(4.dp),
   ) {
-    if (state.pendingSaveCount > 0) {
-      SaveQueueStatusBadge(
-        pendingCount = state.pendingSaveCount,
-        isBusyFlash = state.isSaveQueueBusyFlash,
-      )
-    }
     state.captureAlertMessage?.let { msg ->
       CaptureAlertSideCard(
         message = msg,
         onOpenTapFlow = onOpenTapFlow,
         onDismiss = onDismissAlert,
-      )
-    }
-  }
-}
-
-@Composable
-private fun SaveQueueStatusBadge(
-  pendingCount: Int,
-  isBusyFlash: Boolean,
-) {
-  val isFull = pendingCount >= CaptureSaveQueue.MAX_PENDING_SAVES
-  val useAmber = isFull || isBusyFlash
-  val bgColor =
-    if (useAmber) OverlayTokens.QueueAmberSurface
-    else MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
-  val fgColor =
-    if (useAmber) OverlayTokens.QueueAmberContent
-    else MaterialTheme.colorScheme.onSurface
-  val borderColor =
-    if (useAmber) OverlayTokens.QueueAmberAccent
-    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
-
-  Surface(
-    modifier = Modifier.testTag("overlay_save_queue_badge"),
-    shape = RoundedCornerShape(10.dp),
-    color = bgColor,
-    contentColor = fgColor,
-    border = BorderStroke(width = if (isBusyFlash) 1.5.dp else 0.75.dp, color = borderColor),
-    shadowElevation = 0.dp,
-    tonalElevation = 0.dp,
-  ) {
-    Row(
-      modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(5.dp),
-    ) {
-      Box(
-        modifier =
-          Modifier
-            .size(6.dp)
-            .clip(CircleShape)
-            .background(if (useAmber) OverlayTokens.QueueAmberAccent else MaterialTheme.colorScheme.primary),
-      )
-      Text(
-        text = "Saving $pendingCount/${CaptureSaveQueue.MAX_PENDING_SAVES}",
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = if (useAmber) FontWeight.Bold else FontWeight.SemiBold,
-        color = fgColor,
-        maxLines = 1,
       )
     }
   }
@@ -773,21 +730,47 @@ private fun DockActionIconButton(
   iconSize: Dp,
   testTag: String,
   onClick: () -> Unit,
+  pendingSaveCount: Int = 0,
 ) {
-  FilledTonalIconButton(
-    onClick = onClick,
-    colors =
-      IconButtonDefaults.filledTonalIconButtonColors(
-        containerColor = containerColor,
-        contentColor = tint,
-      ),
-    modifier = Modifier.size(buttonSize).testTag(testTag),
+  val isSaving = pendingSaveCount > 0
+  val isQueueFull = pendingSaveCount >= CaptureSaveQueue.MAX_PENDING_SAVES
+  val effectiveTint = if (isQueueFull) OverlayTokens.QueueAmberAccent else tint
+  val effectiveContainer = if (isQueueFull) OverlayTokens.QueueAmberSurface else containerColor
+
+  Box(
+    modifier = Modifier.size(buttonSize),
+    contentAlignment = Alignment.Center,
   ) {
-    Icon(
-      imageVector = icon,
-      contentDescription = contentDescription,
-      modifier = Modifier.size(iconSize),
-    )
+    FilledTonalIconButton(
+      onClick = onClick,
+      colors =
+        IconButtonDefaults.filledTonalIconButtonColors(
+          containerColor = effectiveContainer,
+          contentColor = effectiveTint,
+        ),
+      modifier = Modifier.size(buttonSize).testTag(testTag),
+    ) {
+      Icon(
+        imageVector = icon,
+        contentDescription = contentDescription,
+        modifier = Modifier.size(iconSize),
+      )
+    }
+
+    if (isSaving) {
+      val ringColor =
+        when {
+          isQueueFull -> OverlayTokens.QueueAmberAccent
+          containerColor == MaterialTheme.colorScheme.primary -> MaterialTheme.colorScheme.onPrimary
+          else -> MaterialTheme.colorScheme.primary
+        }
+      CircularProgressIndicator(
+        modifier = Modifier.size(buttonSize).testTag("overlay_save_progress_ring"),
+        strokeWidth = 2.dp,
+        color = ringColor,
+        trackColor = Color.Transparent,
+      )
+    }
   }
 }
 
