@@ -94,7 +94,6 @@ class OnboardingViewModel @Inject constructor(
         _uiState.update { it.copy(isContinuing = true) }
         viewModelScope.launch {
           preferencesRepository.setPermissionOnboardingCompleted(true)
-          _uiState.update { it.copy(isContinuing = false) }
           _effects.send(OnboardingUiEffect.NavigateToHome)
         }
       }

@@ -62,6 +62,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -87,6 +90,7 @@ fun OnboardingScreen(
 ) {
   val context = LocalContext.current
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+  var hasNavigatedToHome by remember { mutableStateOf(false) }
 
   fun evaluateAndDispatch() {
     val snapshot = evaluateDevicePermissions(context)
@@ -177,7 +181,12 @@ fun OnboardingScreen(
             )
           runCatching { context.startActivity(intent) }
         }
-        OnboardingUiEffect.NavigateToHome -> onNavigateToHome()
+        OnboardingUiEffect.NavigateToHome -> {
+          if (!hasNavigatedToHome) {
+            hasNavigatedToHome = true
+            onNavigateToHome()
+          }
+        }
         OnboardingUiEffect.ExitApplication -> {
           context.findActivity()?.finishAffinity()
         }
@@ -239,9 +248,15 @@ fun OnboardingContent(
             Text("Exit App")
           }
 
+          var continueDispatched by remember { mutableStateOf(false) }
           Button(
-            onClick = { onIntent(OnboardingUiIntent.ContinueClicked) },
-            enabled = state.allMandatoryGranted && !state.isContinuing,
+            onClick = {
+              if (state.allMandatoryGranted && !state.isContinuing && !continueDispatched) {
+                continueDispatched = true
+                onIntent(OnboardingUiIntent.ContinueClicked)
+              }
+            },
+            enabled = state.allMandatoryGranted && !state.isContinuing && !continueDispatched,
             modifier =
               Modifier
                 .weight(1f)

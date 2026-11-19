@@ -208,7 +208,7 @@ class MainActivity : AppCompatActivity() {
         } else {
           val deepLinkState by deepLinkTabRequest.collectAsStateWithLifecycle()
           val initialDestination: Route =
-            remember(prefs.hasCompletedPermissionOnboarding) {
+            remember {
               if (prefs.hasCompletedPermissionOnboarding &&
                 areMandatoryPermissionsGranted(this@MainActivity)
               ) {
@@ -393,10 +393,12 @@ fun TapFlowNavHost(
     composable<Route.Onboarding> {
       OnboardingScreen(
         onNavigateToHome = {
-          onConsumeDeepLinkTab()
-          navController.navigate(Route.Home(HomeTab.SCRIPT)) {
-            popUpTo<Route.Onboarding> { inclusive = true }
-            launchSingleTop = true
+          if (navController.currentDestination?.hasRoute<Route.Onboarding>() == true) {
+            onConsumeDeepLinkTab()
+            navController.navigate(Route.Home(HomeTab.SCRIPT)) {
+              popUpTo<Route.Onboarding> { inclusive = true }
+              launchSingleTop = true
+            }
           }
         },
       )

@@ -66,6 +66,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -75,6 +76,8 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -97,6 +100,7 @@ import com.tapflow.core.service.permissions.openAccessibilitySettings
 import com.tapflow.core.service.permissions.openOverlayPermissionSettings
 import com.tapflow.core.service.projection.MediaProjectionBridge
 import com.tapflow.core.service.shizuku.ShizukuManager
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -121,6 +125,12 @@ fun HomeScreen(
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val snackbarHostState = remember { SnackbarHostState() }
   var pendingConsentTarget by remember { mutableStateOf<PendingMediaProjectionTarget?>(null) }
+  var isTabNavigationArmed by remember { mutableStateOf(false) }
+
+  LaunchedEffect(Unit) {
+    delay(350L)
+    isTabNavigationArmed = true
+  }
 
   LaunchedEffect(initialTab) {
     viewModel.onIntent(HomeUiIntent.InitializeTabIfUnset(initialTab))
@@ -338,6 +348,7 @@ fun HomeScreen(
     state = uiState,
     snackbarHostState = snackbarHostState,
     onIntent = viewModel::onIntent,
+    isTabNavigationArmed = isTabNavigationArmed,
     modifier = modifier,
   )
 }
@@ -349,6 +360,7 @@ fun HomeContent(
   snackbarHostState: SnackbarHostState,
   onIntent: (HomeUiIntent) -> Unit,
   modifier: Modifier = Modifier,
+  isTabNavigationArmed: Boolean = true,
 ) {
   HomeDialogs(state = state, onIntent = onIntent)
 
@@ -448,26 +460,34 @@ fun HomeContent(
       },
       bottomBar = {
         if (!useNavigationRail) {
-          NavigationBar {
+          NavigationBar(
+            modifier = Modifier.blockGhostTouchesWhileUnarmed(isTabNavigationArmed),
+          ) {
             HomeTabType.visibleEntries().forEach { tab ->
-              NavigationBarItem(
-                selected = state.activeTab == tab,
-                onClick = { onIntent(HomeUiIntent.SelectTab(tab)) },
-                icon = {
-                  Icon(
-                    imageVector = tabIcon(tab),
-                    contentDescription = tab.title,
-                  )
-                },
-                label = {
-                  Text(
-                    text = tab.title,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                  )
-                },
-                modifier = Modifier.testTag("bottom_nav_${tab.name.lowercase()}"),
-              )
+              key(tab) {
+                NavigationBarItem(
+                  selected = state.activeTab == tab,
+                  onClick = {
+                    if (isTabNavigationArmed && state.activeTab != tab) {
+                      onIntent(HomeUiIntent.SelectTab(tab))
+                    }
+                  },
+                  icon = {
+                    Icon(
+                      imageVector = tabIcon(tab),
+                      contentDescription = tab.title,
+                    )
+                  },
+                  label = {
+                    Text(
+                      text = tab.title,
+                      maxLines = 1,
+                      overflow = TextOverflow.Ellipsis,
+                    )
+                  },
+                  modifier = Modifier.testTag("bottom_nav_${tab.name.lowercase()}"),
+                )
+              }
             }
           }
         }
@@ -475,20 +495,28 @@ fun HomeContent(
     ) { innerPadding ->
       Row(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
         if (useNavigationRail) {
-          NavigationRail(modifier = Modifier.fillMaxHeight()) {
+          NavigationRail(
+            modifier = Modifier.fillMaxHeight().blockGhostTouchesWhileUnarmed(isTabNavigationArmed),
+          ) {
             HomeTabType.visibleEntries().forEach { tab ->
-              NavigationRailItem(
-                selected = state.activeTab == tab,
-                onClick = { onIntent(HomeUiIntent.SelectTab(tab)) },
-                icon = {
-                  Icon(
-                    imageVector = tabIcon(tab),
-                    contentDescription = tab.title,
-                  )
-                },
-                label = { Text(tab.title, maxLines = 1) },
-                modifier = Modifier.testTag("rail_nav_${tab.name.lowercase()}"),
-              )
+              key(tab) {
+                NavigationRailItem(
+                  selected = state.activeTab == tab,
+                  onClick = {
+                    if (isTabNavigationArmed && state.activeTab != tab) {
+                      onIntent(HomeUiIntent.SelectTab(tab))
+                    }
+                  },
+                  icon = {
+                    Icon(
+                      imageVector = tabIcon(tab),
+                      contentDescription = tab.title,
+                    )
+                  },
+                  label = { Text(tab.title, maxLines = 1) },
+                  modifier = Modifier.testTag("rail_nav_${tab.name.lowercase()}"),
+                )
+              }
             }
           }
         }
@@ -695,6 +723,20 @@ private fun EntitlementPill(
     }
   }
 }
+
+private fun Modifier.blockGhostTouchesWhileUnarmed(armed: Boolean): Modifier =
+  if (armed) {
+    this
+  } else {
+    pointerInput(Unit) {
+      awaitPointerEventScope {
+        while (true) {
+          val event = awaitPointerEvent(PointerEventPass.Initial)
+          event.changes.forEach { it.consume() }
+        }
+      }
+    }
+  }
 
 private fun tabIcon(tab: HomeTabType): ImageVector =
   when (tab) {
