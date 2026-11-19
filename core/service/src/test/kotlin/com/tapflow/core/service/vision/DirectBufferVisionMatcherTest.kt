@@ -181,4 +181,35 @@ class DirectBufferVisionMatcherTest {
       )
     assertFalse(denseMiss.matched)
   }
+
+  @Test
+  fun evaluateColorMatchWithReader_samplesOnlyTargetCoordinatesDirectly() {
+    val sampledCoords = mutableListOf<Pair<Int, Int>>()
+    val result =
+      DirectBufferVisionMatcher.evaluateColorMatchWithReader(
+        width = 1080,
+        height = 2400,
+        predicate =
+          ConditionPredicate.ColorMatch(
+            mode = ColorMatchMode.MULTI_POINT,
+            rule = ConditionMatchRule.ALL,
+            targets =
+              listOf(
+                ColorTarget(x = 120, y = 340, hexColor = "#112233", tolerance = 0),
+                ColorTarget(x = 880, y = 1900, hexColor = "#445566", tolerance = 0),
+              ),
+          ),
+      ) { x, y ->
+        sampledCoords += x to y
+        when (x to y) {
+          120 to 340 -> 0x112233
+          880 to 1900 -> 0x445566
+          else -> error("Unexpected coordinate read at ($x, $y)")
+        }
+      }
+
+    assertTrue(result.matched)
+    assertEquals(1f, result.matchRatio, 0.001f)
+    assertEquals(listOf(120 to 340, 880 to 1900), sampledCoords)
+  }
 }

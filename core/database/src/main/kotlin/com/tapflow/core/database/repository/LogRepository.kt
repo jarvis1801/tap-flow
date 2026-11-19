@@ -10,8 +10,11 @@ import com.tapflow.core.model.log.ExecutionSessionLog
 import com.tapflow.core.model.log.PipelineSessionLog
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 
 @Singleton
@@ -33,7 +36,7 @@ class LogRepository @Inject constructor(
       } else {
         executionLogDao.observeByScriptId(scriptId)
       }
-    return source.map { list -> list.map { it.toDomain() } }
+    return source.map { list -> list.map { it.toDomain() } }.flowOn(Dispatchers.IO)
   }
 
   fun observePipelineLogs(pipelineId: String? = null): Flow<List<PipelineSessionLog>> {
@@ -43,106 +46,118 @@ class LogRepository @Inject constructor(
       } else {
         pipelineLogDao.observeByPipelineId(pipelineId)
       }
-    return source.map { list -> list.map { it.toDomain() } }
+    return source.map { list -> list.map { it.toDomain() } }.flowOn(Dispatchers.IO)
   }
 
   suspend fun getAllScriptLogs(): List<ExecutionSessionLog> =
-    executionLogDao.getAllOnce().map { it.toDomain() }
+    withContext(Dispatchers.IO) {
+      executionLogDao.getAllOnce().map { it.toDomain() }
+    }
 
   suspend fun getAllPipelineLogs(): List<PipelineSessionLog> =
-    pipelineLogDao.getAllOnce().map { it.toDomain() }
-
-  suspend fun findErrorScreenshotPathByLogId(logId: String): String? {
-    if (logId.isBlank()) return null
-    executionLogDao.getById(logId)?.errorScreenshotPath?.takeIf { it.isNotBlank() }?.let { return it }
-    val pipelineLogs = pipelineLogDao.getAllOnce()
-    for (pipelineLog in pipelineLogs) {
-      if (pipelineLog.id == logId) {
-        pipelineLog.stepRuns.firstNotNullOfOrNull {
-          it.scriptSessionLog.errorScreenshotPath?.takeIf(String::isNotBlank)
-        }?.let { return it }
-      }
-      pipelineLog.stepRuns
-        .firstOrNull { it.scriptSessionLog.id == logId }
-        ?.scriptSessionLog
-        ?.errorScreenshotPath
-        ?.takeIf { it.isNotBlank() }
-        ?.let { return it }
+    withContext(Dispatchers.IO) {
+      pipelineLogDao.getAllOnce().map { it.toDomain() }
     }
-    return null
-  }
+
+  suspend fun findErrorScreenshotPathByLogId(logId: String): String? =
+    withContext(Dispatchers.IO) {
+      if (logId.isBlank()) return@withContext null
+      executionLogDao.getById(logId)?.errorScreenshotPath?.takeIf { it.isNotBlank() }?.let {
+        return@withContext it
+      }
+      val pipelineLogs = pipelineLogDao.getAllOnce()
+      for (pipelineLog in pipelineLogs) {
+        if (pipelineLog.id == logId) {
+          pipelineLog.stepRuns.firstNotNullOfOrNull {
+            it.scriptSessionLog.errorScreenshotPath?.takeIf(String::isNotBlank)
+          }?.let { return@withContext it }
+        }
+        pipelineLog.stepRuns
+          .firstOrNull { it.scriptSessionLog.id == logId }
+          ?.scriptSessionLog
+          ?.errorScreenshotPath
+          ?.takeIf { it.isNotBlank() }
+          ?.let { return@withContext it }
+      }
+      null
+    }
 
   suspend fun recordScriptSession(
     log: ExecutionSessionLog,
     nowUtcMs: Long = System.currentTimeMillis(),
-  ) {
-    executionLogDao.upsert(log.toEntity())
-    enforceRetentionPolicy(nowUtcMs)
-  }
+  ) =
+    withContext(Dispatchers.IO) {
+      executionLogDao.upsert(log.toEntity())
+      enforceRetentionPolicy(nowUtcMs)
+    }
 
   suspend fun recordPipelineSession(
     log: PipelineSessionLog,
     nowUtcMs: Long = System.currentTimeMillis(),
-  ) {
-    pipelineLogDao.upsert(log.toEntity())
-    enforceRetentionPolicy(nowUtcMs)
-  }
+  ) =
+    withContext(Dispatchers.IO) {
+      pipelineLogDao.upsert(log.toEntity())
+      enforceRetentionPolicy(nowUtcMs)
+    }
 
-  suspend fun enforceRetentionPolicy(nowUtcMs: Long = System.currentTimeMillis()) {
-    val cutoffMs = nowUtcMs - MAX_RETENTION_MS
+  suspend fun enforceRetentionPolicy(nowUtcMs: Long = System.currentTimeMillis()) =
+    withContext(Dispatchers.IO) {
+      val cutoffMs = nowUtcMs - MAX_RETENTION_MS
 
-    val allScriptLogs = executionLogDao.getAllOnce()
-    val scriptToDelete =
-      allScriptLogs.filterIndexed { index, entity ->
-        index >= MAX_SESSIONS_RETAINED || entity.startedAtMs < cutoffMs
+      val allScriptLogs = executionLogDao.getAllOnce()
+      val scriptToDelete =
+        allScriptLogs.filterIndexed { index, entity ->
+          index >= MAX_SESSIONS_RETAINED || entity.startedAtMs < cutoffMs
+        }
+      if (scriptToDelete.isNotEmpty()) {
+        executionLogDao.deleteByIds(scriptToDelete.map { it.id })
+        scriptAssetManager.deleteFilesIfExist(scriptToDelete.mapNotNull { it.errorScreenshotPath })
       }
-    if (scriptToDelete.isNotEmpty()) {
-      executionLogDao.deleteByIds(scriptToDelete.map { it.id })
-      scriptAssetManager.deleteFilesIfExist(scriptToDelete.mapNotNull { it.errorScreenshotPath })
-    }
 
-    val allPipelineLogs = pipelineLogDao.getAllOnce()
-    val pipelineToDelete =
-      allPipelineLogs.filterIndexed { index, entity ->
-        index >= MAX_SESSIONS_RETAINED || entity.startedAtMs < cutoffMs
+      val allPipelineLogs = pipelineLogDao.getAllOnce()
+      val pipelineToDelete =
+        allPipelineLogs.filterIndexed { index, entity ->
+          index >= MAX_SESSIONS_RETAINED || entity.startedAtMs < cutoffMs
+        }
+      if (pipelineToDelete.isNotEmpty()) {
+        pipelineLogDao.deleteByIds(pipelineToDelete.map { it.id })
+        val nestedPaths =
+          pipelineToDelete
+            .flatMap { it.stepRuns }
+            .mapNotNull { it.scriptSessionLog.errorScreenshotPath }
+        scriptAssetManager.deleteFilesIfExist(nestedPaths)
       }
-    if (pipelineToDelete.isNotEmpty()) {
-      pipelineLogDao.deleteByIds(pipelineToDelete.map { it.id })
-      val nestedPaths =
-        pipelineToDelete
-          .flatMap { it.stepRuns }
-          .mapNotNull { it.scriptSessionLog.errorScreenshotPath }
-      scriptAssetManager.deleteFilesIfExist(nestedPaths)
     }
-  }
 
-  suspend fun clearScriptLogs(scriptId: String? = null) {
-    if (scriptId.isNullOrBlank()) {
-      val all = executionLogDao.getAllOnce()
-      executionLogDao.deleteAll()
-      scriptAssetManager.deleteFilesIfExist(all.mapNotNull { it.errorScreenshotPath })
-    } else {
-      val matching = executionLogDao.getByScriptIdOnce(scriptId)
-      executionLogDao.deleteByScriptId(scriptId)
-      scriptAssetManager.deleteFilesIfExist(matching.mapNotNull { it.errorScreenshotPath })
+  suspend fun clearScriptLogs(scriptId: String? = null) =
+    withContext(Dispatchers.IO) {
+      if (scriptId.isNullOrBlank()) {
+        val all = executionLogDao.getAllOnce()
+        executionLogDao.deleteAll()
+        scriptAssetManager.deleteFilesIfExist(all.mapNotNull { it.errorScreenshotPath })
+      } else {
+        val matching = executionLogDao.getByScriptIdOnce(scriptId)
+        executionLogDao.deleteByScriptId(scriptId)
+        scriptAssetManager.deleteFilesIfExist(matching.mapNotNull { it.errorScreenshotPath })
+      }
     }
-  }
 
-  suspend fun clearPipelineLogs(pipelineId: String? = null) {
-    if (pipelineId.isNullOrBlank()) {
-      val all = pipelineLogDao.getAllOnce()
-      pipelineLogDao.deleteAll()
-      val nestedPaths =
-        all.flatMap { it.stepRuns }.mapNotNull { it.scriptSessionLog.errorScreenshotPath }
-      scriptAssetManager.deleteFilesIfExist(nestedPaths)
-    } else {
-      val matching = pipelineLogDao.getByPipelineIdOnce(pipelineId)
-      pipelineLogDao.deleteByPipelineId(pipelineId)
-      val nestedPaths =
-        matching.flatMap { it.stepRuns }.mapNotNull { it.scriptSessionLog.errorScreenshotPath }
-      scriptAssetManager.deleteFilesIfExist(nestedPaths)
+  suspend fun clearPipelineLogs(pipelineId: String? = null) =
+    withContext(Dispatchers.IO) {
+      if (pipelineId.isNullOrBlank()) {
+        val all = pipelineLogDao.getAllOnce()
+        pipelineLogDao.deleteAll()
+        val nestedPaths =
+          all.flatMap { it.stepRuns }.mapNotNull { it.scriptSessionLog.errorScreenshotPath }
+        scriptAssetManager.deleteFilesIfExist(nestedPaths)
+      } else {
+        val matching = pipelineLogDao.getByPipelineIdOnce(pipelineId)
+        pipelineLogDao.deleteByPipelineId(pipelineId)
+        val nestedPaths =
+          matching.flatMap { it.stepRuns }.mapNotNull { it.scriptSessionLog.errorScreenshotPath }
+        scriptAssetManager.deleteFilesIfExist(nestedPaths)
+      }
     }
-  }
 
   fun exportLogsAsJson(logs: List<ExecutionSessionLog>): String {
     return TapFlowJson.instance.encodeToString(

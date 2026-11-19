@@ -19,6 +19,8 @@ import com.tapflow.core.service.R
 import com.tapflow.core.service.engine.RunnerControlHub
 import com.tapflow.core.service.engine.RunnerPhase
 import dagger.hilt.android.AndroidEntryPoint
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,6 +39,7 @@ class TapFlowAccessibilityService : AccessibilityService(), AccessibilityExecuto
   @Inject lateinit var runnerControlHub: RunnerControlHub
 
   private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+  private val screenshotExecutor: ExecutorService = Executors.newSingleThreadExecutor()
   private var preferencesJob: Job? = null
 
   @Volatile
@@ -188,6 +191,7 @@ class TapFlowAccessibilityService : AccessibilityService(), AccessibilityExecuto
     preferencesJob?.cancel()
     preferencesJob = null
     serviceScope.cancel()
+    screenshotExecutor.shutdown()
     bridge.detachHost(this)
     super.onDestroy()
   }
@@ -217,7 +221,7 @@ class TapFlowAccessibilityService : AccessibilityService(), AccessibilityExecuto
     return runCatching {
       takeScreenshot(
         Display.DEFAULT_DISPLAY,
-        mainExecutor,
+        screenshotExecutor,
         object : TakeScreenshotCallback {
           override fun onSuccess(screenshot: ScreenshotResult) {
             val bitmap =

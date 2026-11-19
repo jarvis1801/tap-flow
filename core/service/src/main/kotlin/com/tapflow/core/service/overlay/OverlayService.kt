@@ -12,7 +12,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -34,11 +33,13 @@ import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -66,6 +67,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.font.FontFamily
@@ -86,8 +88,6 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.tapflow.core.billing.EntitlementRepository
-import com.tapflow.core.database.asset.ScriptAssetManager
-import com.tapflow.core.database.repository.InspectRepository
 import com.tapflow.core.database.repository.PipelineRepository
 import com.tapflow.core.database.repository.ScriptRepository
 import com.tapflow.core.datastore.AppPreferences
@@ -100,10 +100,6 @@ import com.tapflow.core.model.common.DelayConfig
 import com.tapflow.core.model.common.DurationInput
 import com.tapflow.core.model.common.NumericInput
 import com.tapflow.core.model.common.OverlayPreferences
-import com.tapflow.core.model.inspect.InspectGroup
-import com.tapflow.core.model.inspect.InspectItem
-import com.tapflow.core.model.inspect.InspectPixel
-import com.tapflow.core.model.script.Script
 import com.tapflow.core.service.R
 import com.tapflow.core.service.accessibility.AccessibilityManagerBridge
 import com.tapflow.core.service.engine.AutomationRunnerEngine
@@ -117,7 +113,6 @@ import com.tapflow.core.service.shizuku.ShizukuManager
 import com.tapflow.core.service.theme.TapFlowTheme
 import com.tapflow.core.service.vision.ZeroAllocVisionEngine
 import dagger.hilt.android.AndroidEntryPoint
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -129,7 +124,6 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -139,7 +133,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class OverlayService :
@@ -175,8 +168,7 @@ class OverlayService :
   @Inject lateinit var preferencesRepository: TapFlowPreferencesRepository
   @Inject lateinit var scriptRepository: ScriptRepository
   @Inject lateinit var pipelineRepository: PipelineRepository
-  @Inject lateinit var inspectRepository: InspectRepository
-  @Inject lateinit var scriptAssetManager: ScriptAssetManager
+  @Inject lateinit var captureSaveQueue: CaptureSaveQueue
   @Inject lateinit var accessibilityBridge: AccessibilityManagerBridge
   @Inject lateinit var shizukuManager: ShizukuManager
   @Inject lateinit var visionEngine: ZeroAllocVisionEngine
@@ -223,11 +215,11 @@ class OverlayService :
   private var activeInspectGroupId: String? = null
   private var activeInspectGroupTitle: String? = null
   private var activeInspectGroupTags: List<String> = emptyList()
-  private var inspectGroupPersisted: Boolean = false
   private var recordedActions = mutableListOf<ScriptAction>()
   private var lastRecordedActionCompletedAtMs: Long? = null
   private var recorderPauseStartedAtMs: Long? = null
   private var isProcessingGesture = false
+  private var saveQueueBusyFlashJob: Job? = null
   @Volatile private var isClosingService = false
   @Volatile private var overlayPrefs = OverlayPreferences()
   private var captureInterceptVisible = false
@@ -422,10 +414,11 @@ class OverlayService :
         when (uiState.value.mode) {
           OverlayMode.LIVE_RECORDER -> stopRecorderAndSaveSession(closeAfter = true)
           OverlayMode.LIVE_INSPECTOR -> {
+            val closingGroupId = activeInspectGroupId
             activeInspectGroupId = null
             activeInspectGroupTitle = null
-            inspectGroupPersisted = false
             setCaptureLayerInterceptable(visible = false, interceptable = false)
+            captureSaveQueue.finalizeInspectGroupSession(groupId = closingGroupId)
             closeOverlayService()
           }
           OverlayMode.GESTURE_PICKER -> cancelPickerAndReturnToApp()
@@ -552,6 +545,12 @@ class OverlayService :
         syncCaptureLayerWindowState()
       }
     }
+
+    serviceScope.launch {
+      captureSaveQueue.pendingSaveCount.collectLatest { count ->
+        uiState.update { it.copy(pendingSaveCount = count) }
+      }
+    }
   }
 
   override fun onBind(intent: Intent?): IBinder? = null
@@ -629,15 +628,17 @@ class OverlayService :
         WindowManager.LayoutParams.MATCH_PARENT,
         WindowManager.LayoutParams.MATCH_PARENT,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-        captureFlagsIdle,
+        captureFlagsIdle and WindowManager.LayoutParams.FLAG_DIM_BEHIND.inv(),
         PixelFormat.TRANSLUCENT,
       ).apply {
         gravity = Gravity.TOP or Gravity.START
+        dimAmount = 0f
         layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
       }
 
     val feedbackCompose =
       ComposeView(this).apply {
+        setBackgroundColor(android.graphics.Color.TRANSPARENT)
         setViewTreeLifecycleOwner(this@OverlayService)
         setViewTreeSavedStateRegistryOwner(this@OverlayService)
         setViewTreeViewModelStoreOwner(this@OverlayService)
@@ -662,6 +663,7 @@ class OverlayService :
 
     val captureContainer =
       FrameLayout(this).apply {
+        setBackgroundColor(android.graphics.Color.TRANSPARENT)
         setViewTreeLifecycleOwner(this@OverlayService)
         setViewTreeSavedStateRegistryOwner(this@OverlayService)
         setViewTreeViewModelStoreOwner(this@OverlayService)
@@ -772,7 +774,7 @@ class OverlayService :
       WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
         WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-    params.flags =
+    val effectiveFlags =
       if (captureInterceptTouch) {
         baseFlags
       } else {
@@ -780,6 +782,9 @@ class OverlayService :
           WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
           WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
       }
+    params.flags = effectiveFlags and WindowManager.LayoutParams.FLAG_DIM_BEHIND.inv()
+    params.dimAmount = 0f
+    params.format = PixelFormat.TRANSLUCENT
     runCatching { windowManager.updateViewLayout(view, params) }
   }
 
@@ -947,7 +952,6 @@ class OverlayService :
     activeInspectGroupId = null
     activeInspectGroupTitle = null
     activeInspectGroupTags = listOf("recorded")
-    inspectGroupPersisted = false
     setCaptureLayerInterceptable(visible = false, interceptable = false)
     uiState.update {
       it.copy(
@@ -977,7 +981,6 @@ class OverlayService :
         activeInspectGroupId = UUID.randomUUID().toString()
         activeInspectGroupTitle = "Recorded Session $stamp"
         activeInspectGroupTags = listOf("recorded")
-        inspectGroupPersisted = false
       }
       uiState.update {
         it.copy(
@@ -999,7 +1002,6 @@ class OverlayService :
     val stamp = SimpleDateFormat("MMM dd HH:mm", Locale.US).format(Date())
     activeInspectGroupTitle = "Recorded Session $stamp"
     activeInspectGroupTags = listOf("recorded")
-    inspectGroupPersisted = false
     uiState.update {
       it.copy(
         sessionState = OverlaySessionState.ACTIVE,
@@ -1038,7 +1040,6 @@ class OverlayService :
     activeInspectGroupId = null
     activeInspectGroupTitle = null
     activeInspectGroupTags = listOf("live_inspect")
-    inspectGroupPersisted = false
     setCaptureLayerInterceptable(visible = false, interceptable = false)
     uiState.update {
       it.copy(
@@ -1073,7 +1074,6 @@ class OverlayService :
     activeInspectGroupId = newGroupId
     activeInspectGroupTitle = null
     activeInspectGroupTags = listOf("live_inspect")
-    inspectGroupPersisted = false
     uiState.update {
       it.copy(
         sessionState = OverlaySessionState.ACTIVE,
@@ -1085,12 +1085,6 @@ class OverlayService :
       )
     }
     setCaptureLayerInterceptable(visible = true, interceptable = true)
-    serviceScope.launch {
-      val existingCount = inspectRepository.countGroups()
-      if (activeInspectGroupId == newGroupId && activeInspectGroupTitle == null) {
-        activeInspectGroupTitle = "InspectGroup (${existingCount + 1})"
-      }
-    }
   }
 
   private fun pauseInspectorCapture() {
@@ -1108,10 +1102,10 @@ class OverlayService :
 
   private fun stopInspectorCapture() {
     setCaptureLayerInterceptable(visible = false, interceptable = false)
-    val capturedCount = uiState.value.inspectedItemCount
+    val closingGroupId = activeInspectGroupId
+    val currentPending = captureSaveQueue.pendingSaveCount.value
     activeInspectGroupId = null
     activeInspectGroupTitle = null
-    inspectGroupPersisted = false
     uiState.update {
       it.copy(
         sessionState = OverlaySessionState.STANDBY,
@@ -1120,9 +1114,26 @@ class OverlayService :
         touchPreview = null,
         inspectedItemCount = 0,
         statusHint =
-          if (capturedCount > 0) "InspectGroup saved ($capturedCount items) — tap Inspect for new"
+          if (currentPending > 0) "Finalizing InspectGroup…"
           else "Standby — navigate to app, then tap Inspect",
       )
+    }
+    captureSaveQueue.finalizeInspectGroupSession(groupId = closingGroupId) { savedCount ->
+      mainHandler.post {
+        if (!isClosingService &&
+          uiState.value.mode == OverlayMode.LIVE_INSPECTOR &&
+          uiState.value.sessionState == OverlaySessionState.STANDBY &&
+          activeInspectGroupId == null
+        ) {
+          uiState.update {
+            it.copy(
+              statusHint =
+                if (savedCount > 0) "InspectGroup saved ($savedCount items) — tap Inspect for new"
+                else "Standby — navigate to app, then tap Inspect",
+            )
+          }
+        }
+      }
     }
   }
 
@@ -1134,7 +1145,10 @@ class OverlayService :
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouch(v: View?, event: MotionEvent): Boolean {
-      if (isProcessingGesture || !uiState.value.isCaptureActive) return true
+      if (isProcessingGesture) {
+        return event.actionMasked != MotionEvent.ACTION_DOWN
+      }
+      if (!uiState.value.isCaptureActive) return false
       val mode = uiState.value.mode
       if (mode != OverlayMode.GESTURE_PICKER &&
         mode != OverlayMode.LIVE_RECORDER &&
@@ -1277,6 +1291,16 @@ class OverlayService :
     }
   }
 
+  private fun triggerSaveQueueBusyFlash() {
+    saveQueueBusyFlashJob?.cancel()
+    uiState.update { it.copy(isSaveQueueBusyFlash = true) }
+    saveQueueBusyFlashJob =
+      serviceScope.launch {
+        delay(650L)
+        uiState.update { it.copy(isSaveQueueBusyFlash = false) }
+      }
+  }
+
   /**
    * 5-Step Intercept-Capture-Disable-Replay-Restore State Machine for Modes 2, 3, and 4.
    */
@@ -1294,15 +1318,22 @@ class OverlayService :
     val isDrag = distance >= MOVE_THRESHOLD_PX
     val isLongPress = !isDrag && durationMs >= LONG_PRESS_THRESHOLD_MS
 
+    val needsImageCapture =
+      mode == OverlayMode.LIVE_RECORDER ||
+        (mode == OverlayMode.LIVE_INSPECTOR && !isDrag)
+
     // Step 1 completed -> Step 2: Pre-Replay Capture (Modes 3 & 4) with highlights hidden
     var preReplayBitmap: Bitmap? = null
     var capturedForegroundPkg = ""
     try {
-      val shouldCaptureCleanFrame =
-        mode == OverlayMode.LIVE_RECORDER ||
-          (mode == OverlayMode.LIVE_INSPECTOR && !isDrag)
+      // Queue-full guard: reject capture tap cleanly before capture or replay so steps stay in sync
+      // while allowing Mode 4 drag/scroll gestures to pass through unblocked.
+      if (needsImageCapture && captureSaveQueue.isQueueFull()) {
+        triggerSaveQueueBusyFlash()
+        return
+      }
 
-      if (shouldCaptureCleanFrame) {
+      if (needsImageCapture) {
         uiState.update {
           it.copy(
             capturePhase = OverlayCapturePhase.CAPTURING_CLEAN_FRAME,
@@ -1361,14 +1392,11 @@ class OverlayService :
         useShizuku = useShizuku,
       )
 
-      // Persist recorded step or inspect snapshot cleanly off-thread
+      // Persist recorded step and enqueue non-blocking background PNG save/DB write
       when (mode) {
         OverlayMode.LIVE_RECORDER -> {
-          val bitmapToPersist = preReplayBitmap
-          preReplayBitmap = null
-          persistRecordedGestureAndInspect(
-            bitmap = bitmapToPersist,
-            foregroundPackage = capturedForegroundPkg,
+          val bitmapToEnqueue = preReplayBitmap
+          recordGestureActionInMemory(
             startX = startX,
             startY = startY,
             endX = endX,
@@ -1378,20 +1406,58 @@ class OverlayService :
             isDrag = isDrag,
             isLongPress = isLongPress,
           )
+          val groupId = activeInspectGroupId
+          if (bitmapToEnqueue != null && groupId != null) {
+            val accepted =
+              captureSaveQueue.tryEnqueue(
+                CaptureSaveTask(
+                  groupId = groupId,
+                  groupTitle = activeInspectGroupTitle,
+                  groupTags = activeInspectGroupTags,
+                  groupCreatedAtMs = System.currentTimeMillis(),
+                  bitmap = bitmapToEnqueue,
+                  foregroundPackage = capturedForegroundPkg,
+                  tapX = startX,
+                  tapY = startY,
+                ),
+              )
+            if (accepted) {
+              preReplayBitmap = null
+            } else {
+              triggerSaveQueueBusyFlash()
+            }
+          }
         }
 
         OverlayMode.LIVE_INSPECTOR -> {
-          val bitmapToPersist = preReplayBitmap
-          preReplayBitmap = null
-          if (!isDrag) {
-            persistLiveInspectItem(
-              bitmap = bitmapToPersist,
-              foregroundPackage = capturedForegroundPkg,
-              tapX = startX,
-              tapY = startY,
-            )
-          } else {
-            bitmapToPersist?.recycle()
+          val bitmapToEnqueue = preReplayBitmap
+          val groupId = activeInspectGroupId
+          if (!isDrag && bitmapToEnqueue != null && groupId != null) {
+            val accepted =
+              captureSaveQueue.tryEnqueue(
+                CaptureSaveTask(
+                  groupId = groupId,
+                  groupTitle = activeInspectGroupTitle,
+                  groupTags = activeInspectGroupTags,
+                  groupCreatedAtMs = System.currentTimeMillis(),
+                  bitmap = bitmapToEnqueue,
+                  foregroundPackage = capturedForegroundPkg,
+                  tapX = startX,
+                  tapY = startY,
+                  onItemPersisted = {
+                    mainHandler.post {
+                      if (activeInspectGroupId == groupId) {
+                        uiState.update { it.copy(inspectedItemCount = it.inspectedItemCount + 1) }
+                      }
+                    }
+                  },
+                ),
+              )
+            if (accepted) {
+              preReplayBitmap = null
+            } else {
+              triggerSaveQueueBusyFlash()
+            }
           }
         }
 
@@ -1478,9 +1544,7 @@ class OverlayService :
     }
   }
 
-  private suspend fun persistRecordedGestureAndInspect(
-    bitmap: Bitmap?,
-    foregroundPackage: String,
+  private fun recordGestureActionInMemory(
     startX: Int,
     startY: Int,
     endX: Int,
@@ -1535,131 +1599,18 @@ class OverlayService :
     recordedActions += action
     lastRecordedActionCompletedAtMs = System.currentTimeMillis()
     uiState.update { it.copy(recordedActionCount = recordedActions.size) }
-
-    if (bitmap != null) {
-      try {
-        val groupId = activeInspectGroupId ?: return
-        saveInspectSnapshotForTap(
-          bitmap = bitmap,
-          groupId = groupId,
-          foregroundPackage = foregroundPackage,
-          tapX = startX,
-          tapY = startY,
-        )
-      } finally {
-        bitmap.recycle()
-      }
-    }
-  }
-
-  private suspend fun persistLiveInspectItem(
-    bitmap: Bitmap?,
-    foregroundPackage: String,
-    tapX: Int,
-    tapY: Int,
-  ) {
-    if (bitmap == null) return
-    try {
-      val groupId = activeInspectGroupId ?: return
-      saveInspectSnapshotForTap(
-        bitmap = bitmap,
-        groupId = groupId,
-        foregroundPackage = foregroundPackage,
-        tapX = tapX,
-        tapY = tapY,
-      )
-      uiState.update { it.copy(inspectedItemCount = it.inspectedItemCount + 1) }
-    } finally {
-      bitmap.recycle()
-    }
-  }
-
-  private suspend fun saveInspectSnapshotForTap(
-    bitmap: Bitmap,
-    groupId: String,
-    foregroundPackage: String,
-    tapX: Int,
-    tapY: Int,
-  ) {
-    ensureInspectGroupPersisted(groupId)
-    val itemId = UUID.randomUUID().toString()
-    val fullScreenFile = File(scriptAssetManager.getInspectScreensDir(), "scr_${itemId}.png")
-    if (!visionEngine.saveLosslessPng(bitmap, fullScreenFile)) return
-
-    val safeX = tapX.coerceIn(0, (bitmap.width - 1).coerceAtLeast(0))
-    val safeY = tapY.coerceIn(0, (bitmap.height - 1).coerceAtLeast(0))
-    val sampledPixel = bitmap.getPixel(safeX, safeY)
-    val hexColor = String.format(Locale.US, "#%06X", sampledPixel and 0x00FFFFFF)
-
-    val pixelEntry =
-      InspectPixel(
-        id = UUID.randomUUID().toString(),
-        label = "Pixel ($safeX, $safeY)",
-        x = safeX,
-        y = safeY,
-        hexColor = hexColor,
-      )
-
-    val pkg = foregroundPackage
-    val appLabel = resolveAppLabel(pkg)
-
-    inspectRepository.saveItem(
-      InspectItem(
-        id = itemId,
-        groupId = groupId,
-        fullScreenPngPath = fullScreenFile.absolutePath,
-        screenWidth = bitmap.width,
-        screenHeight = bitmap.height,
-        appName = appLabel,
-        packageName = pkg,
-        pixels = listOf(pixelEntry),
-        crops = emptyList(),
-        createdAtMs = System.currentTimeMillis(),
-      ),
-    )
-  }
-
-  private suspend fun ensureInspectGroupPersisted(groupId: String) {
-    if (inspectGroupPersisted) return
-    val existingCount = inspectRepository.countGroups()
-    val resolvedTitle =
-      activeInspectGroupTitle ?: "InspectGroup (${existingCount + 1})"
-    inspectRepository.saveGroup(
-      InspectGroup(
-        id = groupId,
-        title = resolvedTitle,
-        tags = activeInspectGroupTags,
-        createdAtMs = System.currentTimeMillis(),
-      ),
-    )
-    inspectGroupPersisted = true
-  }
-
-  private fun resolveAppLabel(packageName: String): String {
-    if (packageName.isBlank()) return "Screen Capture"
-    return runCatching {
-      val info =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-          packageManager.getApplicationInfo(
-            packageName,
-            PackageManager.ApplicationInfoFlags.of(0L),
-          )
-        } else {
-          @Suppress("DEPRECATION")
-          packageManager.getApplicationInfo(packageName, 0)
-        }
-      packageManager.getApplicationLabel(info).toString().ifBlank { packageName }
-    }.getOrDefault(packageName)
   }
 
   private fun stopRecorderAndSaveSession(closeAfter: Boolean) {
     val captured = recordedActions.toList()
+    val closingGroupId = activeInspectGroupId
+    val closingGroupTitle = activeInspectGroupTitle
+    val closingGroupTags = activeInspectGroupTags
     recordedActions.clear()
     lastRecordedActionCompletedAtMs = null
     recorderPauseStartedAtMs = null
     activeInspectGroupId = null
     activeInspectGroupTitle = null
-    inspectGroupPersisted = false
 
     setCaptureLayerInterceptable(visible = false, interceptable = false)
     uiState.update {
@@ -1669,50 +1620,38 @@ class OverlayService :
         capturePhase = OverlayCapturePhase.IDLE,
         touchPreview = null,
         recordedActionCount = 0,
+        statusHint =
+          if (!closeAfter && captured.isNotEmpty()) "Saving recorded script…"
+          else it.statusHint,
       )
     }
 
-    if (closeAfter && captured.isEmpty()) {
-      closeOverlayService()
-      return
+    // Flush queued inspect bitmaps + finalize Script / InspectGroup safely in application-scoped
+    // CaptureSaveQueue so overlay windows hide/close immediately on Main thread without lag.
+    captureSaveQueue.finalizeRecorderSession(
+      actions = captured,
+      inspectGroupId = closingGroupId,
+      inspectGroupTitle = closingGroupTitle,
+      inspectGroupTags = closingGroupTags,
+    ) { savedTitle ->
+      if (!closeAfter) {
+        mainHandler.post {
+          if (!isClosingService && uiState.value.mode == OverlayMode.LIVE_RECORDER) {
+            uiState.update {
+              it.copy(
+                lastSavedScriptTitle = savedTitle,
+                statusHint =
+                  if (savedTitle != null) "Saved \"$savedTitle\" (${captured.size} steps)"
+                  else "Standby — navigate to app, then tap Record",
+              )
+            }
+          }
+        }
+      }
     }
 
     if (closeAfter) {
-      isClosingService = true
-      isServiceRunning = false
-      overlayStateBridge.setOverlayRunning(false)
-      detachOverlayWindowsAndListeners()
-    }
-
-    serviceScope.launch {
-      var savedTitle: String? = null
-      if (captured.isNotEmpty()) {
-        withContext(NonCancellable) {
-          val stamp = SimpleDateFormat("MMM dd HH:mm", Locale.US).format(Date())
-          savedTitle = "Recorded Script $stamp"
-          scriptRepository.saveScript(
-            Script(
-              id = UUID.randomUUID().toString(),
-              title = savedTitle!!,
-              description = "Captured via Floating Recorder",
-              tags = listOf("recorded"),
-              actions = captured,
-            ),
-          )
-        }
-      }
-      if (closeAfter) {
-        closeOverlayService()
-      } else {
-        uiState.update {
-          it.copy(
-            lastSavedScriptTitle = savedTitle,
-            statusHint =
-              if (savedTitle != null) "Saved \"$savedTitle\" (${captured.size} steps)"
-              else "Standby — navigate to app, then tap Record",
-          )
-        }
-      }
+      closeOverlayService()
     }
   }
 
@@ -1733,16 +1672,7 @@ class OverlayService :
     accessibilityBridge.forceReleaseActiveStroke()
     stopMediaProjectionIfNotStreamingToDesktop()
     when (uiState.value.mode) {
-      OverlayMode.LIVE_RECORDER -> {
-        if (recordedActions.isNotEmpty()) {
-          isServiceRunning = false
-          overlayStateBridge.setOverlayRunning(false)
-          detachOverlayWindowsAndListeners()
-          stopRecorderAndSaveSession(closeAfter = true)
-        } else {
-          closeOverlayService()
-        }
-      }
+      OverlayMode.LIVE_RECORDER -> stopRecorderAndSaveSession(closeAfter = true)
 
       OverlayMode.GESTURE_PICKER -> {
         if (gesturePickerBridge.pickedResult.value == null) {
@@ -1752,9 +1682,10 @@ class OverlayService :
       }
 
       OverlayMode.LIVE_INSPECTOR -> {
+        val closingGroupId = activeInspectGroupId
         activeInspectGroupId = null
         activeInspectGroupTitle = null
-        inspectGroupPersisted = false
+        captureSaveQueue.finalizeInspectGroupSession(groupId = closingGroupId)
         closeOverlayService()
       }
 
@@ -2056,211 +1987,243 @@ private fun FallbackFloatingDock(
     return
   }
 
-  Surface(
-    modifier = dragModifier.width(buttonSize + (dockPadding * 2)),
-    shape = RoundedCornerShape(buttonSize / 2),
-    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.90f),
-    contentColor = MaterialTheme.colorScheme.onSurface,
-    border = dockBorder,
-    shadowElevation = 0.dp,
-    tonalElevation = 0.dp,
+  Row(
+    verticalAlignment = Alignment.Top,
+    horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {
-    Column(
-      modifier = Modifier.padding(dockPadding),
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(dockPadding),
+    Surface(
+      modifier = dragModifier.width(buttonSize + (dockPadding * 2)),
+      shape = RoundedCornerShape(buttonSize / 2),
+      color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.90f),
+      contentColor = MaterialTheme.colorScheme.onSurface,
+      border = dockBorder,
+      shadowElevation = 0.dp,
+      tonalElevation = 0.dp,
     ) {
-      IconButton(
-        onClick = { callbacks.onToggleBubbleCollapse() },
-        modifier = Modifier.size(buttonSize),
+      Column(
+        modifier = Modifier.padding(dockPadding),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(dockPadding),
       ) {
-        Icon(
-          imageVector = Icons.Default.KeyboardArrowUp,
-          contentDescription = "Collapse floating dock",
-          modifier = Modifier.size(iconSize),
-        )
-      }
-
-      if (state.mode == OverlayMode.RUNNER_SCRIPT || state.mode == OverlayMode.RUNNER_PIPELINE) {
-        val snap = state.runnerSnapshot
-        Text(
-          text = "${snap.currentTopLevelAction}/${snap.totalTopLevelActions}",
-          fontSize = counterSp,
-          lineHeight = (sizeOption.counterTextSp + 2).sp,
-          fontFamily = FontFamily.Monospace,
-          fontWeight = FontWeight.Bold,
-          maxLines = 1,
-        )
-        when (snap.phase) {
-          RunnerPhase.RUNNING -> {
-            IconButton(onClick = { callbacks.onPlayPause() }, modifier = Modifier.size(buttonSize)) {
-              Icon(
-                imageVector = Icons.Default.Pause,
-                contentDescription = "Pause script",
-                modifier = Modifier.size(iconSize),
-              )
-            }
-            IconButton(onClick = { callbacks.onStopExecution() }, modifier = Modifier.size(buttonSize)) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop execution", modifier = Modifier.size(iconSize))
-            }
-          }
-
-          RunnerPhase.PAUSED -> {
-            IconButton(onClick = { callbacks.onPlayPause() }, modifier = Modifier.size(buttonSize)) {
-              Icon(
-                imageVector = Icons.Default.PlayArrow,
-                contentDescription = "Resume script",
-                modifier = Modifier.size(iconSize),
-              )
-            }
-            IconButton(onClick = { callbacks.onPreviousStep() }, modifier = Modifier.size(buttonSize)) {
-              Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Step", modifier = Modifier.size(iconSize))
-            }
-            IconButton(onClick = { callbacks.onNextStep() }, modifier = Modifier.size(buttonSize)) {
-              Icon(Icons.Default.SkipNext, contentDescription = "Next Step", modifier = Modifier.size(iconSize))
-            }
-            IconButton(onClick = { callbacks.onStopExecution() }, modifier = Modifier.size(buttonSize)) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop execution", modifier = Modifier.size(iconSize))
-            }
-          }
-
-          RunnerPhase.IDLE,
-          RunnerPhase.STOPPED,
-          RunnerPhase.COMPLETED,
-          RunnerPhase.FAILED,
-          RunnerPhase.PAYWALL_BLOCKED -> {
-            IconButton(onClick = { callbacks.onPlayPause() }, modifier = Modifier.size(buttonSize)) {
-              Icon(
-                imageVector = Icons.Default.PlayArrow,
-                contentDescription = "Play script",
-                modifier = Modifier.size(iconSize),
-              )
-            }
-            IconButton(onClick = { callbacks.onPreviousStep() }, modifier = Modifier.size(buttonSize)) {
-              Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Step", modifier = Modifier.size(iconSize))
-            }
-            IconButton(onClick = { callbacks.onNextStep() }, modifier = Modifier.size(buttonSize)) {
-              Icon(Icons.Default.SkipNext, contentDescription = "Next Step", modifier = Modifier.size(iconSize))
-            }
-          }
-        }
-      } else if (state.mode == OverlayMode.LIVE_RECORDER) {
-        if (state.sessionState != OverlaySessionState.STANDBY && state.recordedActionCount > 0) {
-          Text(
-            text = "${state.recordedActionCount}",
-            fontSize = counterSp,
-            lineHeight = (sizeOption.counterTextSp + 2).sp,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-          )
-        }
-        when (state.sessionState) {
-          OverlaySessionState.STANDBY -> {
-            IconButton(
-              onClick = { callbacks.onStartOrResumeCapture() },
-              modifier = Modifier.size(buttonSize),
-            ) {
-              Icon(Icons.Default.FiberManualRecord, contentDescription = "Start Recording", modifier = Modifier.size(iconSize))
-            }
-          }
-
-          OverlaySessionState.ACTIVE -> {
-            IconButton(
-              onClick = { callbacks.onPauseCapture() },
-              modifier = Modifier.size(buttonSize),
-            ) {
-              Icon(Icons.Default.Pause, contentDescription = "Pause Recording", modifier = Modifier.size(iconSize))
-            }
-            IconButton(
-              onClick = { callbacks.onStopCapture() },
-              modifier = Modifier.size(buttonSize),
-            ) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop and Save Recording", modifier = Modifier.size(iconSize))
-            }
-          }
-
-          OverlaySessionState.PAUSED -> {
-            IconButton(
-              onClick = { callbacks.onStartOrResumeCapture() },
-              modifier = Modifier.size(buttonSize),
-            ) {
-              Icon(Icons.Default.PlayArrow, contentDescription = "Resume Recording", modifier = Modifier.size(iconSize))
-            }
-            IconButton(
-              onClick = { callbacks.onStopCapture() },
-              modifier = Modifier.size(buttonSize),
-            ) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop and Save Recording", modifier = Modifier.size(iconSize))
-            }
-          }
-        }
-      } else if (state.mode == OverlayMode.LIVE_INSPECTOR) {
-        if (state.sessionState != OverlaySessionState.STANDBY && state.inspectedItemCount > 0) {
-          Text(
-            text = "${state.inspectedItemCount}",
-            fontSize = counterSp,
-            lineHeight = (sizeOption.counterTextSp + 2).sp,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-          )
-        }
-        when (state.sessionState) {
-          OverlaySessionState.STANDBY -> {
-            IconButton(
-              onClick = { callbacks.onStartOrResumeCapture() },
-              modifier = Modifier.size(buttonSize),
-            ) {
-              Icon(Icons.Default.CenterFocusStrong, contentDescription = "Start Inspecting", modifier = Modifier.size(iconSize))
-            }
-          }
-
-          OverlaySessionState.ACTIVE -> {
-            IconButton(
-              onClick = { callbacks.onPauseCapture() },
-              modifier = Modifier.size(buttonSize),
-            ) {
-              Icon(Icons.Default.Pause, contentDescription = "Pause Inspecting", modifier = Modifier.size(iconSize))
-            }
-            IconButton(
-              onClick = { callbacks.onStopCapture() },
-              modifier = Modifier.size(buttonSize),
-            ) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop InspectGroup", modifier = Modifier.size(iconSize))
-            }
-          }
-
-          OverlaySessionState.PAUSED -> {
-            IconButton(
-              onClick = { callbacks.onStartOrResumeCapture() },
-              modifier = Modifier.size(buttonSize),
-            ) {
-              Icon(Icons.Default.PlayArrow, contentDescription = "Resume Inspecting", modifier = Modifier.size(iconSize))
-            }
-            IconButton(
-              onClick = { callbacks.onStopCapture() },
-              modifier = Modifier.size(buttonSize),
-            ) {
-              Icon(Icons.Default.Stop, contentDescription = "Stop InspectGroup", modifier = Modifier.size(iconSize))
-            }
-          }
-        }
-      } else if (state.mode == OverlayMode.GESTURE_PICKER) {
-        IconButton(onClick = { callbacks.onToggleCaptureListening() }, modifier = Modifier.size(buttonSize)) {
+        IconButton(
+          onClick = { callbacks.onToggleBubbleCollapse() },
+          modifier = Modifier.size(buttonSize),
+        ) {
           Icon(
-            imageVector =
-              if (state.isCaptureActive) Icons.Default.Pause
-              else Icons.Default.CenterFocusStrong,
-            contentDescription =
-              if (state.isCaptureActive) "Pause pick interception"
-              else "Resume gesture picking",
+            imageVector = Icons.Default.KeyboardArrowUp,
+            contentDescription = "Collapse floating dock",
             modifier = Modifier.size(iconSize),
           )
         }
+
+        if (state.mode == OverlayMode.RUNNER_SCRIPT || state.mode == OverlayMode.RUNNER_PIPELINE) {
+          val snap = state.runnerSnapshot
+          Text(
+            text = "${snap.currentTopLevelAction}/${snap.totalTopLevelActions}",
+            fontSize = counterSp,
+            lineHeight = (sizeOption.counterTextSp + 2).sp,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+          )
+          when (snap.phase) {
+            RunnerPhase.RUNNING -> {
+              IconButton(onClick = { callbacks.onPlayPause() }, modifier = Modifier.size(buttonSize)) {
+                Icon(
+                  imageVector = Icons.Default.Pause,
+                  contentDescription = "Pause script",
+                  modifier = Modifier.size(iconSize),
+                )
+              }
+              IconButton(onClick = { callbacks.onStopExecution() }, modifier = Modifier.size(buttonSize)) {
+                Icon(Icons.Default.Stop, contentDescription = "Stop execution", modifier = Modifier.size(iconSize))
+              }
+            }
+
+            RunnerPhase.PAUSED -> {
+              IconButton(onClick = { callbacks.onPlayPause() }, modifier = Modifier.size(buttonSize)) {
+                Icon(
+                  imageVector = Icons.Default.PlayArrow,
+                  contentDescription = "Resume script",
+                  modifier = Modifier.size(iconSize),
+                )
+              }
+              IconButton(onClick = { callbacks.onPreviousStep() }, modifier = Modifier.size(buttonSize)) {
+                Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Step", modifier = Modifier.size(iconSize))
+              }
+              IconButton(onClick = { callbacks.onNextStep() }, modifier = Modifier.size(buttonSize)) {
+                Icon(Icons.Default.SkipNext, contentDescription = "Next Step", modifier = Modifier.size(iconSize))
+              }
+              IconButton(onClick = { callbacks.onStopExecution() }, modifier = Modifier.size(buttonSize)) {
+                Icon(Icons.Default.Stop, contentDescription = "Stop execution", modifier = Modifier.size(iconSize))
+              }
+            }
+
+            RunnerPhase.IDLE,
+            RunnerPhase.STOPPED,
+            RunnerPhase.COMPLETED,
+            RunnerPhase.FAILED,
+            RunnerPhase.PAYWALL_BLOCKED -> {
+              IconButton(onClick = { callbacks.onPlayPause() }, modifier = Modifier.size(buttonSize)) {
+                Icon(
+                  imageVector = Icons.Default.PlayArrow,
+                  contentDescription = "Play script",
+                  modifier = Modifier.size(iconSize),
+                )
+              }
+              IconButton(onClick = { callbacks.onPreviousStep() }, modifier = Modifier.size(buttonSize)) {
+                Icon(Icons.Default.SkipPrevious, contentDescription = "Previous Step", modifier = Modifier.size(iconSize))
+              }
+              IconButton(onClick = { callbacks.onNextStep() }, modifier = Modifier.size(buttonSize)) {
+                Icon(Icons.Default.SkipNext, contentDescription = "Next Step", modifier = Modifier.size(iconSize))
+              }
+            }
+          }
+        } else if (state.mode == OverlayMode.LIVE_RECORDER) {
+          if (state.sessionState != OverlaySessionState.STANDBY && state.recordedActionCount > 0) {
+            Text(
+              text = "${state.recordedActionCount}",
+              fontSize = counterSp,
+              lineHeight = (sizeOption.counterTextSp + 2).sp,
+              fontFamily = FontFamily.Monospace,
+              fontWeight = FontWeight.Bold,
+              maxLines = 1,
+            )
+          }
+          when (state.sessionState) {
+            OverlaySessionState.STANDBY -> {
+              IconButton(
+                onClick = { callbacks.onStartOrResumeCapture() },
+                modifier = Modifier.size(buttonSize),
+              ) {
+                Icon(Icons.Default.FiberManualRecord, contentDescription = "Start Recording", modifier = Modifier.size(iconSize))
+              }
+            }
+
+            OverlaySessionState.ACTIVE -> {
+              IconButton(
+                onClick = { callbacks.onPauseCapture() },
+                modifier = Modifier.size(buttonSize),
+              ) {
+                Icon(Icons.Default.Pause, contentDescription = "Pause Recording", modifier = Modifier.size(iconSize))
+              }
+              IconButton(
+                onClick = { callbacks.onStopCapture() },
+                modifier = Modifier.size(buttonSize),
+              ) {
+                Icon(Icons.Default.Stop, contentDescription = "Stop and Save Recording", modifier = Modifier.size(iconSize))
+              }
+            }
+
+            OverlaySessionState.PAUSED -> {
+              IconButton(
+                onClick = { callbacks.onStartOrResumeCapture() },
+                modifier = Modifier.size(buttonSize),
+              ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = "Resume Recording", modifier = Modifier.size(iconSize))
+              }
+              IconButton(
+                onClick = { callbacks.onStopCapture() },
+                modifier = Modifier.size(buttonSize),
+              ) {
+                Icon(Icons.Default.Stop, contentDescription = "Stop and Save Recording", modifier = Modifier.size(iconSize))
+              }
+            }
+          }
+        } else if (state.mode == OverlayMode.LIVE_INSPECTOR) {
+          if (state.sessionState != OverlaySessionState.STANDBY && state.inspectedItemCount > 0) {
+            Text(
+              text = "${state.inspectedItemCount}",
+              fontSize = counterSp,
+              lineHeight = (sizeOption.counterTextSp + 2).sp,
+              fontFamily = FontFamily.Monospace,
+              fontWeight = FontWeight.Bold,
+              maxLines = 1,
+            )
+          }
+          when (state.sessionState) {
+            OverlaySessionState.STANDBY -> {
+              IconButton(
+                onClick = { callbacks.onStartOrResumeCapture() },
+                modifier = Modifier.size(buttonSize),
+              ) {
+                Icon(Icons.Default.CenterFocusStrong, contentDescription = "Start Inspecting", modifier = Modifier.size(iconSize))
+              }
+            }
+
+            OverlaySessionState.ACTIVE -> {
+              IconButton(
+                onClick = { callbacks.onPauseCapture() },
+                modifier = Modifier.size(buttonSize),
+              ) {
+                Icon(Icons.Default.Pause, contentDescription = "Pause Inspecting", modifier = Modifier.size(iconSize))
+              }
+              IconButton(
+                onClick = { callbacks.onStopCapture() },
+                modifier = Modifier.size(buttonSize),
+              ) {
+                Icon(Icons.Default.Stop, contentDescription = "Stop InspectGroup", modifier = Modifier.size(iconSize))
+              }
+            }
+
+            OverlaySessionState.PAUSED -> {
+              IconButton(
+                onClick = { callbacks.onStartOrResumeCapture() },
+                modifier = Modifier.size(buttonSize),
+              ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = "Resume Inspecting", modifier = Modifier.size(iconSize))
+              }
+              IconButton(
+                onClick = { callbacks.onStopCapture() },
+                modifier = Modifier.size(buttonSize),
+              ) {
+                Icon(Icons.Default.Stop, contentDescription = "Stop InspectGroup", modifier = Modifier.size(iconSize))
+              }
+            }
+          }
+        } else if (state.mode == OverlayMode.GESTURE_PICKER) {
+          IconButton(onClick = { callbacks.onToggleCaptureListening() }, modifier = Modifier.size(buttonSize)) {
+            Icon(
+              imageVector =
+                if (state.isCaptureActive) Icons.Default.Pause
+                else Icons.Default.CenterFocusStrong,
+              contentDescription =
+                if (state.isCaptureActive) "Pause pick interception"
+                else "Resume gesture picking",
+              modifier = Modifier.size(iconSize),
+            )
+          }
+        }
+        IconButton(onClick = { callbacks.onCloseOverlay() }, modifier = Modifier.size(buttonSize)) {
+          Icon(Icons.Default.Close, contentDescription = "Close Overlay", modifier = Modifier.size(iconSize))
+        }
       }
-      IconButton(onClick = { callbacks.onCloseOverlay() }, modifier = Modifier.size(buttonSize)) {
-        Icon(Icons.Default.Close, contentDescription = "Close Overlay", modifier = Modifier.size(iconSize))
+    }
+
+    if (state.pendingSaveCount > 0) {
+      val isFull = state.pendingSaveCount >= CaptureSaveQueue.MAX_PENDING_SAVES
+      Surface(
+        shape = RoundedCornerShape(10.dp),
+        color =
+          if (state.isSaveQueueBusyFlash || isFull) MaterialTheme.colorScheme.tertiaryContainer
+          else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+        contentColor =
+          if (state.isSaveQueueBusyFlash || isFull) MaterialTheme.colorScheme.onTertiaryContainer
+          else MaterialTheme.colorScheme.onSurface,
+        border =
+          BorderStroke(
+            width = if (state.isSaveQueueBusyFlash) 1.5.dp else 0.75.dp,
+            color =
+              if (state.isSaveQueueBusyFlash || isFull) MaterialTheme.colorScheme.tertiary
+              else MaterialTheme.colorScheme.outlineVariant,
+          ),
+      ) {
+        Text(
+          text = "Saving ${state.pendingSaveCount}/${CaptureSaveQueue.MAX_PENDING_SAVES}",
+          style = MaterialTheme.typography.labelSmall,
+          fontFamily = FontFamily.Monospace,
+          modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
       }
     }
   }
@@ -2279,6 +2242,14 @@ private fun FallbackCaptureFeedback(state: OverlayUiState) {
     modifier =
       Modifier
         .fillMaxSize()
-        .background(Color.Black.copy(alpha = 0.08f)),
-  )
+        .background(Color.Transparent),
+  ) {
+    val borderColor = MaterialTheme.colorScheme.primary
+    Canvas(modifier = Modifier.fillMaxSize()) {
+      drawRect(
+        color = borderColor.copy(alpha = 0.55f),
+        style = Stroke(width = 2.dp.toPx()),
+      )
+    }
+  }
 }

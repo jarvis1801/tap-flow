@@ -11,8 +11,6 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.KeyEvent as AndroidKeyEvent
 import com.tapflow.core.billing.EntitlementRepository
-import com.tapflow.core.database.asset.ScriptAssetManager
-import com.tapflow.core.database.repository.LogRepository
 import com.tapflow.core.datastore.ShizukuPreferences
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
 import com.tapflow.core.model.action.ClipboardActionType
@@ -45,7 +43,6 @@ import com.tapflow.core.service.projection.ScreenCaptureState
 import com.tapflow.core.service.shizuku.ShizukuManager
 import com.tapflow.core.service.vision.ZeroAllocVisionEngine
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.File
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -93,8 +90,7 @@ class AutomationRunnerEngine @Inject constructor(
   private val conditionEvaluator: ConditionEvaluator,
   private val preferencesRepository: TapFlowPreferencesRepository,
   private val entitlementRepository: EntitlementRepository,
-  private val logRepository: LogRepository,
-  private val scriptAssetManager: ScriptAssetManager,
+  private val asyncLogDispatcher: AsyncLogDispatcher,
   private val externalBroadcastEmitter: ExternalBroadcastEmitter,
   val controlHub: RunnerControlHub,
 ) {
@@ -231,13 +227,15 @@ class AutomationRunnerEngine @Inject constructor(
     }
 
     val sessionLog =
-      runScriptInternal(
-        script = script,
-        variables = variables,
-        isPipelineChild = false,
-        recordStandaloneLog = true,
-        initialSingleStep = initialSingleStep,
-      )
+      visionEngine.withExecutionTemplateCache {
+        runScriptInternal(
+          script = script,
+          variables = variables,
+          isPipelineChild = false,
+          recordStandaloneLog = true,
+          initialSingleStep = initialSingleStep,
+        )
+      }
 
     val finalPhase =
       when (sessionLog.status) {
@@ -430,9 +428,7 @@ class AutomationRunnerEngine @Inject constructor(
       )
 
     if (recordStandaloneLog && !isPipelineChild) {
-      withContext(NonCancellable) {
-        logRepository.recordScriptSession(sessionLog, finishedAt)
-      }
+      asyncLogDispatcher.enqueueScriptSessionLog(sessionLog, finishedAt)
     }
     sessionLog
   }
@@ -1254,15 +1250,8 @@ class AutomationRunnerEngine @Inject constructor(
     }
   }
 
-  suspend fun captureErrorScreenshot(useShizukuFallback: Boolean): String? {
-    val bitmap = visionEngine.captureCleanBitmap(useShizukuFallback) ?: return null
-    return try {
-      val outFile = File(scriptAssetManager.getErrorScreenshotsDir(), "err_${UUID.randomUUID()}.png")
-      if (visionEngine.saveLosslessPng(bitmap, outFile)) outFile.absolutePath else null
-    } finally {
-      bitmap.recycle()
-    }
-  }
+  suspend fun captureErrorScreenshot(useShizukuFallback: Boolean): String? =
+    asyncLogDispatcher.captureAndEnqueueErrorScreenshot(useShizukuFallback)
 }
 
 internal data class IfChainEvaluation(

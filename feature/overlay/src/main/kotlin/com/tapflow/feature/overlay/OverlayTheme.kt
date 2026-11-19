@@ -10,7 +10,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 internal object OverlayTokens {
-  val ScrimOverlay = Color(0x18020617)
+  val ScrimOverlay = Color.Transparent
+  val QueueAmberAccent = Color(0xFFF59E0B)
+  val QueueAmberSurface = Color(0xEB78350F)
+  val QueueAmberContent = Color(0xFFFEF3C7)
 }
 
 private val OverlayTypography =

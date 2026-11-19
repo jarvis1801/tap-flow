@@ -84,9 +84,7 @@ internal fun OverlayCaptureFeedbackLayer(state: OverlayUiState) {
     modifier =
       Modifier
         .fillMaxSize()
-        .background(
-          if (state.isCaptureActive) OverlayTokens.ScrimOverlay else Color.Transparent,
-        )
+        .background(Color.Transparent)
         .testTag("overlay_capture_feedback_layer"),
   ) {
     if (state.isCaptureActive) {

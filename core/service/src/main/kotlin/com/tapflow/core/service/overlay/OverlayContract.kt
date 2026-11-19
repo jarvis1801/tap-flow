@@ -69,6 +69,8 @@ data class OverlayUiState(
   val captureAlertMessage: String? = null,
   val recordedActionCount: Int = 0,
   val inspectedItemCount: Int = 0,
+  val pendingSaveCount: Int = 0,
+  val isSaveQueueBusyFlash: Boolean = false,
   val lastSavedScriptTitle: String? = null,
   val statusHint: String? = null,
 )

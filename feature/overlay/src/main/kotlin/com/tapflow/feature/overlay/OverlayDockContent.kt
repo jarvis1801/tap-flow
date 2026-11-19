@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.tapflow.core.service.engine.RunnerExecutionSnapshot
 import com.tapflow.core.service.engine.RunnerPhase
+import com.tapflow.core.service.overlay.CaptureSaveQueue
 import com.tapflow.core.service.overlay.OverlayCallbacks
 import com.tapflow.core.service.overlay.OverlayMode
 import com.tapflow.core.service.overlay.OverlaySessionState
@@ -106,16 +107,19 @@ internal fun OverlayDockView(
     return
   }
 
+  val showSideColumn = state.captureAlertMessage != null || state.pendingSaveCount > 0
+
   Row(
     modifier = modifier,
     verticalAlignment = Alignment.Top,
     horizontalArrangement = Arrangement.spacedBy(4.dp),
   ) {
-    if (state.isDockedOnRight && state.captureAlertMessage != null) {
-      CaptureAlertSideCard(
-        message = state.captureAlertMessage ?: "",
+    if (state.isDockedOnRight && showSideColumn) {
+      DockSideStatusColumn(
+        state = state,
+        horizontalAlignment = Alignment.End,
         onOpenTapFlow = callbacks::onReturnToTapFlow,
-        onDismiss = callbacks::onDismissCaptureAlert,
+        onDismissAlert = callbacks::onDismissCaptureAlert,
       )
     }
 
@@ -207,11 +211,12 @@ internal fun OverlayDockView(
       }
     }
 
-    if (!state.isDockedOnRight && state.captureAlertMessage != null) {
-      CaptureAlertSideCard(
-        message = state.captureAlertMessage ?: "",
+    if (!state.isDockedOnRight && showSideColumn) {
+      DockSideStatusColumn(
+        state = state,
+        horizontalAlignment = Alignment.Start,
         onOpenTapFlow = callbacks::onReturnToTapFlow,
-        onDismiss = callbacks::onDismissCaptureAlert,
+        onDismissAlert = callbacks::onDismissCaptureAlert,
       )
     }
   }
@@ -244,7 +249,14 @@ private fun CollapsedEdgeBubble(
         tint = accentColor,
         modifier = Modifier.size(iconSize),
       )
-      if (state.captureAlertMessage != null) {
+      if (state.captureAlertMessage != null || state.pendingSaveCount > 0) {
+        val indicatorColor =
+          when {
+            state.captureAlertMessage != null -> MaterialTheme.colorScheme.tertiary
+            state.isSaveQueueBusyFlash || state.pendingSaveCount >= CaptureSaveQueue.MAX_PENDING_SAVES ->
+              OverlayTokens.QueueAmberAccent
+            else -> MaterialTheme.colorScheme.primary
+          }
         Box(
           modifier =
             Modifier
@@ -252,7 +264,7 @@ private fun CollapsedEdgeBubble(
               .padding(3.dp)
               .size(6.dp)
               .clip(CircleShape)
-              .background(MaterialTheme.colorScheme.tertiary),
+              .background(indicatorColor),
         )
       }
     }
@@ -605,6 +617,82 @@ private fun LiveInspectorModeControls(
 }
 
 @Composable
+private fun DockSideStatusColumn(
+  state: OverlayUiState,
+  horizontalAlignment: Alignment.Horizontal,
+  onOpenTapFlow: () -> Unit,
+  onDismissAlert: () -> Unit,
+) {
+  Column(
+    horizontalAlignment = horizontalAlignment,
+    verticalArrangement = Arrangement.spacedBy(4.dp),
+  ) {
+    if (state.pendingSaveCount > 0) {
+      SaveQueueStatusBadge(
+        pendingCount = state.pendingSaveCount,
+        isBusyFlash = state.isSaveQueueBusyFlash,
+      )
+    }
+    state.captureAlertMessage?.let { msg ->
+      CaptureAlertSideCard(
+        message = msg,
+        onOpenTapFlow = onOpenTapFlow,
+        onDismiss = onDismissAlert,
+      )
+    }
+  }
+}
+
+@Composable
+private fun SaveQueueStatusBadge(
+  pendingCount: Int,
+  isBusyFlash: Boolean,
+) {
+  val isFull = pendingCount >= CaptureSaveQueue.MAX_PENDING_SAVES
+  val useAmber = isFull || isBusyFlash
+  val bgColor =
+    if (useAmber) OverlayTokens.QueueAmberSurface
+    else MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+  val fgColor =
+    if (useAmber) OverlayTokens.QueueAmberContent
+    else MaterialTheme.colorScheme.onSurface
+  val borderColor =
+    if (useAmber) OverlayTokens.QueueAmberAccent
+    else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
+
+  Surface(
+    modifier = Modifier.testTag("overlay_save_queue_badge"),
+    shape = RoundedCornerShape(10.dp),
+    color = bgColor,
+    contentColor = fgColor,
+    border = BorderStroke(width = if (isBusyFlash) 1.5.dp else 0.75.dp, color = borderColor),
+    shadowElevation = 0.dp,
+    tonalElevation = 0.dp,
+  ) {
+    Row(
+      modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+      Box(
+        modifier =
+          Modifier
+            .size(6.dp)
+            .clip(CircleShape)
+            .background(if (useAmber) OverlayTokens.QueueAmberAccent else MaterialTheme.colorScheme.primary),
+      )
+      Text(
+        text = "Saving $pendingCount/${CaptureSaveQueue.MAX_PENDING_SAVES}",
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = if (useAmber) FontWeight.Bold else FontWeight.SemiBold,
+        color = fgColor,
+        maxLines = 1,
+      )
+    }
+  }
+}
+
+@Composable
 private fun CaptureAlertSideCard(
   message: String,
   onOpenTapFlow: () -> Unit,
@@ -793,9 +881,11 @@ private fun OverlayDockInspectorPreview() {
         state =
           OverlayUiState(
             mode = OverlayMode.LIVE_INSPECTOR,
-            sessionState = OverlaySessionState.PAUSED,
-            isCaptureActive = false,
+            sessionState = OverlaySessionState.ACTIVE,
+            isCaptureActive = true,
             inspectedItemCount = 4,
+            pendingSaveCount = CaptureSaveQueue.MAX_PENDING_SAVES,
+            isSaveQueueBusyFlash = true,
           ),
         callbacks = PreviewNoOpCallbacks,
       )

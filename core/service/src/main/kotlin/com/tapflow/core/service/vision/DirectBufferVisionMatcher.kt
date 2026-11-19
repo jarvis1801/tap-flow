@@ -98,12 +98,22 @@ internal object DirectBufferVisionMatcher {
     pixelStride: Int,
     rowStride: Int,
     predicate: ConditionPredicate.ColorMatch,
+  ): ColorMatchResult =
+    evaluateColorMatchWithReader(width = width, height = height, predicate = predicate) { x, y ->
+      readRgbAt(buffer, width, height, pixelStride, rowStride, x, y)
+    }
+
+  inline fun evaluateColorMatchWithReader(
+    width: Int,
+    height: Int,
+    predicate: ConditionPredicate.ColorMatch,
+    readRgb: (x: Int, y: Int) -> Int,
   ): ColorMatchResult {
     return when (predicate.mode) {
       ColorMatchMode.SINGLE_POINT -> {
         val target = predicate.targets.firstOrNull()
           ?: return ColorMatchResult(matched = false, matchRatio = 0f)
-        val sampled = readRgbAt(buffer, width, height, pixelStride, rowStride, target.x, target.y)
+        val sampled = readRgb(target.x, target.y)
         if (sampled < 0) {
           return ColorMatchResult(matched = false, matchRatio = 0f)
         }
@@ -123,7 +133,7 @@ internal object DirectBufferVisionMatcher {
         var hitCount = 0
         var firstHex: String? = null
         for (target in predicate.targets) {
-          val sampled = readRgbAt(buffer, width, height, pixelStride, rowStride, target.x, target.y)
+          val sampled = readRgb(target.x, target.y)
           if (sampled >= 0) {
             if (firstHex == null) firstHex = formatRgbHex(sampled)
             val expected = parseHexRgb(target.hexColor)
@@ -142,6 +152,9 @@ internal object DirectBufferVisionMatcher {
           ?: return ColorMatchResult(matched = false, matchRatio = 0f)
         val target = predicate.targets.firstOrNull()
           ?: return ColorMatchResult(matched = false, matchRatio = 0f)
+        if (width <= 0 || height <= 0) {
+          return ColorMatchResult(matched = false, matchRatio = 0f)
+        }
 
         val minX = min(region.x1, region.x2).coerceIn(0, width - 1)
         val maxX = max(region.x1, region.x2).coerceIn(0, width - 1)
@@ -165,7 +178,7 @@ internal object DirectBufferVisionMatcher {
         while (y <= maxY) {
           var x = minX
           while (x <= maxX) {
-            val sampled = readRgbAt(buffer, width, height, pixelStride, rowStride, x, y)
+            val sampled = readRgb(x, y)
             if (sampled >= 0) {
               if (firstHex == null) firstHex = formatRgbHex(sampled)
               totalSamples++

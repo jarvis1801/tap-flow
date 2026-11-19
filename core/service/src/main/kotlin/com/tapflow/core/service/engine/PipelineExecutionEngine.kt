@@ -3,7 +3,6 @@ package com.tapflow.core.service.engine
 import android.content.Context
 import android.content.Intent
 import com.tapflow.core.billing.EntitlementRepository
-import com.tapflow.core.database.repository.LogRepository
 import com.tapflow.core.database.repository.ScriptRepository
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
 import com.tapflow.core.model.action.SystemKeyType
@@ -20,6 +19,7 @@ import com.tapflow.core.service.clipboard.BackgroundClipboardManager
 import com.tapflow.core.service.external.ExternalBroadcastContract
 import com.tapflow.core.service.external.ExternalBroadcastEmitter
 import com.tapflow.core.service.shizuku.ShizukuManager
+import com.tapflow.core.service.vision.ZeroAllocVisionEngine
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
@@ -40,12 +40,13 @@ import kotlinx.coroutines.withContext
 class PipelineExecutionEngine @Inject constructor(
   @ApplicationContext private val context: Context,
   private val scriptRepository: ScriptRepository,
-  private val logRepository: LogRepository,
+  private val asyncLogDispatcher: AsyncLogDispatcher,
   private val entitlementRepository: EntitlementRepository,
   private val preferencesRepository: TapFlowPreferencesRepository,
   private val backgroundClipboardManager: BackgroundClipboardManager,
   private val accessibilityBridge: AccessibilityManagerBridge,
   private val shizukuManager: ShizukuManager,
+  private val visionEngine: ZeroAllocVisionEngine,
   private val automationRunnerEngine: AutomationRunnerEngine,
   private val externalBroadcastEmitter: ExternalBroadcastEmitter,
   private val controlHub: RunnerControlHub,
@@ -192,96 +193,98 @@ class PipelineExecutionEngine @Inject constructor(
       }
 
     try {
-      var cycle = 1
-      outer@ while (cycle <= maxCycles) {
-        val totalSteps = pipeline.steps.size
-        for ((stepIdx, step) in pipeline.steps.withIndex()) {
-          val script = scriptRepository.getScriptById(step.scriptId)
-          val repeatTotal = step.repeatCount.coerceAtLeast(1)
+      visionEngine.withExecutionTemplateCache {
+        var cycle = 1
+        outer@ while (cycle <= maxCycles) {
+          val totalSteps = pipeline.steps.size
+          for ((stepIdx, step) in pipeline.steps.withIndex()) {
+            val script = scriptRepository.getScriptById(step.scriptId)
+            val repeatTotal = step.repeatCount.coerceAtLeast(1)
 
-          if (script == null) {
-            val errShot = automationRunnerEngine.captureErrorScreenshot(prefs.shizuku.silentScreenshots)
-            val missingReason = "[Missing Script] Step #${stepIdx + 1} references missing script '${step.scriptId}'."
-            val missingLog =
-              ExecutionSessionLog(
-                id = UUID.randomUUID().toString(),
-                scriptId = step.scriptId,
-                scriptTitle = "[Missing Script]",
-                status = ExecutionStatus.FAILED,
-                startedAtMs = System.currentTimeMillis(),
-                finishedAtMs = System.currentTimeMillis(),
-                totalStepsExecuted = 0,
-                errorReason = missingReason,
-                errorScreenshotPath = errShot,
-              )
-            stepRunLogs += PipelineStepRunLog(stepIndex = stepIdx, runNumber = 1, scriptSessionLog = missingLog)
-            lastErrorShot = errShot
+            if (script == null) {
+              val errShot = automationRunnerEngine.captureErrorScreenshot(prefs.shizuku.silentScreenshots)
+              val missingReason = "[Missing Script] Step #${stepIdx + 1} references missing script '${step.scriptId}'."
+              val missingLog =
+                ExecutionSessionLog(
+                  id = UUID.randomUUID().toString(),
+                  scriptId = step.scriptId,
+                  scriptTitle = "[Missing Script]",
+                  status = ExecutionStatus.FAILED,
+                  startedAtMs = System.currentTimeMillis(),
+                  finishedAtMs = System.currentTimeMillis(),
+                  totalStepsExecuted = 0,
+                  errorReason = missingReason,
+                  errorScreenshotPath = errShot,
+                )
+              stepRunLogs += PipelineStepRunLog(stepIndex = stepIdx, runNumber = 1, scriptSessionLog = missingLog)
+              lastErrorShot = errShot
 
-            if (pipeline.errorStrategy == PipelineErrorStrategy.ABORT) {
-              pipelineStatus = ExecutionStatus.FAILED
-              pipelineErrorReason = missingReason
-              break@outer
-            } else {
-              performCrashRecovery(pipeline.crashRecoveryAppPackage, prefs.shizuku.rootlessForceStop)
-              continue
-            }
-          }
-
-          for (runNum in 1..repeatTotal) {
-            controlHub.updateSnapshot {
-              it.copy(
-                phase = if (controlHub.isPaused.value) RunnerPhase.PAUSED else RunnerPhase.RUNNING,
-                title = "${pipeline.title} • ${script.title}",
-                isPipeline = true,
-                currentPipelineStep = stepIdx + 1,
-                totalPipelineSteps = totalSteps,
-                currentStepIteration = runNum,
-                totalStepIterations = repeatTotal,
-                pipelineCycle = cycle,
-                currentTopLevelAction = 1,
-                totalTopLevelActions = script.actions.size,
-              )
-            }
-
-            val useInitialSingleStep = pendingInitialSingleStep
-            pendingInitialSingleStep = false
-            val stepLog =
-              automationRunnerEngine.runScriptInternal(
-                script = script,
-                variables = sharedVariables,
-                isPipelineChild = true,
-                recordStandaloneLog = false,
-                initialSingleStep = useInitialSingleStep,
-              )
-
-            stepRunLogs +=
-              PipelineStepRunLog(
-                stepIndex = stepIdx,
-                runNumber = runNum,
-                scriptSessionLog = stepLog,
-              )
-
-            when (stepLog.status) {
-              ExecutionStatus.SUCCESS -> Unit
-              ExecutionStatus.STOPPED -> {
-                pipelineStatus = ExecutionStatus.STOPPED
-                pipelineErrorReason = stepLog.errorReason ?: "Stopped by user"
+              if (pipeline.errorStrategy == PipelineErrorStrategy.ABORT) {
+                pipelineStatus = ExecutionStatus.FAILED
+                pipelineErrorReason = missingReason
                 break@outer
+              } else {
+                performCrashRecovery(pipeline.crashRecoveryAppPackage, prefs.shizuku.rootlessForceStop)
+                continue
               }
-              ExecutionStatus.FAILED -> {
-                lastErrorShot = stepLog.errorScreenshotPath
-                if (pipeline.errorStrategy == PipelineErrorStrategy.ABORT) {
-                  pipelineStatus = ExecutionStatus.FAILED
-                  pipelineErrorReason = stepLog.errorReason ?: "Step ${stepIdx + 1} (${script.title}) failed"
+            }
+
+            for (runNum in 1..repeatTotal) {
+              controlHub.updateSnapshot {
+                it.copy(
+                  phase = if (controlHub.isPaused.value) RunnerPhase.PAUSED else RunnerPhase.RUNNING,
+                  title = "${pipeline.title} • ${script.title}",
+                  isPipeline = true,
+                  currentPipelineStep = stepIdx + 1,
+                  totalPipelineSteps = totalSteps,
+                  currentStepIteration = runNum,
+                  totalStepIterations = repeatTotal,
+                  pipelineCycle = cycle,
+                  currentTopLevelAction = 1,
+                  totalTopLevelActions = script.actions.size,
+                )
+              }
+
+              val useInitialSingleStep = pendingInitialSingleStep
+              pendingInitialSingleStep = false
+              val stepLog =
+                automationRunnerEngine.runScriptInternal(
+                  script = script,
+                  variables = sharedVariables,
+                  isPipelineChild = true,
+                  recordStandaloneLog = false,
+                  initialSingleStep = useInitialSingleStep,
+                )
+
+              stepRunLogs +=
+                PipelineStepRunLog(
+                  stepIndex = stepIdx,
+                  runNumber = runNum,
+                  scriptSessionLog = stepLog,
+                )
+
+              when (stepLog.status) {
+                ExecutionStatus.SUCCESS -> Unit
+                ExecutionStatus.STOPPED -> {
+                  pipelineStatus = ExecutionStatus.STOPPED
+                  pipelineErrorReason = stepLog.errorReason ?: "Stopped by user"
                   break@outer
-                } else {
-                  performCrashRecovery(pipeline.crashRecoveryAppPackage, prefs.shizuku.rootlessForceStop)
+                }
+                ExecutionStatus.FAILED -> {
+                  lastErrorShot = stepLog.errorScreenshotPath
+                  if (pipeline.errorStrategy == PipelineErrorStrategy.ABORT) {
+                    pipelineStatus = ExecutionStatus.FAILED
+                    pipelineErrorReason = stepLog.errorReason ?: "Step ${stepIdx + 1} (${script.title}) failed"
+                    break@outer
+                  } else {
+                    performCrashRecovery(pipeline.crashRecoveryAppPackage, prefs.shizuku.rootlessForceStop)
+                  }
                 }
               }
             }
           }
+          cycle++
         }
-        cycle++
       }
     } catch (_: CancellationException) {
       pipelineStatus = ExecutionStatus.STOPPED
@@ -303,9 +306,7 @@ class PipelineExecutionEngine @Inject constructor(
         stepRuns = stepRunLogs.toList(),
         errorReason = pipelineErrorReason,
       )
-    withContext(NonCancellable) {
-      logRepository.recordPipelineSession(pipelineLog, finishedAt)
-    }
+    asyncLogDispatcher.enqueuePipelineSessionLog(pipelineLog, finishedAt)
 
     val finalPhase =
       when (pipelineStatus) {

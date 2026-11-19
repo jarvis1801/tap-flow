@@ -12,6 +12,7 @@ import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -47,15 +48,17 @@ class InspectRepository @Inject constructor(
           items = itemsByGroup[group.id].orEmpty(),
         )
       }
-    }
+    }.flowOn(Dispatchers.IO)
   }
 
   fun observeItem(itemId: String): Flow<InspectItem?> =
-    inspectDao.observeItemById(itemId).map { it?.toDomain() }
+    inspectDao.observeItemById(itemId).map { it?.toDomain() }.flowOn(Dispatchers.IO)
 
-  suspend fun getItem(itemId: String): InspectItem? = inspectDao.getItemById(itemId)?.toDomain()
+  suspend fun getItem(itemId: String): InspectItem? =
+    withContext(Dispatchers.IO) { inspectDao.getItemById(itemId)?.toDomain() }
 
-  suspend fun getGroup(groupId: String): InspectGroup? = inspectDao.getGroupById(groupId)?.toDomain()
+  suspend fun getGroup(groupId: String): InspectGroup? =
+    withContext(Dispatchers.IO) { inspectDao.getGroupById(groupId)?.toDomain() }
 
   suspend fun getAllGroupsWithItems(): List<InspectGroupWithItems> =
     withContext(Dispatchers.IO) {
@@ -70,7 +73,8 @@ class InspectRepository @Inject constructor(
       }
     }
 
-  suspend fun countGroups(): Int = inspectDao.countGroups()
+  suspend fun countGroups(): Int =
+    withContext(Dispatchers.IO) { inspectDao.countGroups() }
 
   suspend fun getInspectStorageStats(): InspectStorageStats =
     withContext(Dispatchers.IO) {
@@ -92,53 +96,59 @@ class InspectRepository @Inject constructor(
       }
     }
 
-  suspend fun saveGroup(group: InspectGroup) {
-    val normalized =
-      if (group.createdAtMs <= 0L) group.copy(createdAtMs = System.currentTimeMillis()) else group
-    inspectDao.upsertGroup(normalized.toEntity())
-  }
+  suspend fun saveGroup(group: InspectGroup) =
+    withContext(Dispatchers.IO) {
+      val normalized =
+        if (group.createdAtMs <= 0L) group.copy(createdAtMs = System.currentTimeMillis()) else group
+      inspectDao.upsertGroup(normalized.toEntity())
+    }
 
-  suspend fun saveItem(item: InspectItem) {
-    val normalized =
-      if (item.createdAtMs <= 0L) item.copy(createdAtMs = System.currentTimeMillis()) else item
-    inspectDao.upsertItem(normalized.toEntity())
-  }
+  suspend fun saveItem(item: InspectItem) =
+    withContext(Dispatchers.IO) {
+      val normalized =
+        if (item.createdAtMs <= 0L) item.copy(createdAtMs = System.currentTimeMillis()) else item
+      inspectDao.upsertItem(normalized.toEntity())
+    }
 
-  suspend fun deletePixelFromItem(itemId: String, pixelId: String) {
-    val current = inspectDao.getItemById(itemId)?.toDomain() ?: return
-    val updated = current.copy(pixels = current.pixels.filterNot { it.id == pixelId })
-    inspectDao.upsertItem(updated.toEntity())
-  }
+  suspend fun deletePixelFromItem(itemId: String, pixelId: String) =
+    withContext(Dispatchers.IO) {
+      val current = inspectDao.getItemById(itemId)?.toDomain() ?: return@withContext
+      val updated = current.copy(pixels = current.pixels.filterNot { it.id == pixelId })
+      inspectDao.upsertItem(updated.toEntity())
+    }
 
-  suspend fun deleteCropFromItem(itemId: String, cropId: String) {
-    val current = inspectDao.getItemById(itemId)?.toDomain() ?: return
-    val targetCrop = current.crops.firstOrNull { it.id == cropId }
-    val updated = current.copy(crops = current.crops.filterNot { it.id == cropId })
-    inspectDao.upsertItem(updated.toEntity())
-    scriptAssetManager.deleteFileIfExists(targetCrop?.cropPngPath)
-  }
+  suspend fun deleteCropFromItem(itemId: String, cropId: String) =
+    withContext(Dispatchers.IO) {
+      val current = inspectDao.getItemById(itemId)?.toDomain() ?: return@withContext
+      val targetCrop = current.crops.firstOrNull { it.id == cropId }
+      val updated = current.copy(crops = current.crops.filterNot { it.id == cropId })
+      inspectDao.upsertItem(updated.toEntity())
+      scriptAssetManager.deleteFileIfExists(targetCrop?.cropPngPath)
+    }
 
-  suspend fun deleteItem(itemId: String) {
-    val item = inspectDao.getItemById(itemId)?.toDomain() ?: return
-    inspectDao.deleteItemById(itemId)
-    val pathsToDelete =
-      buildList {
-        add(item.fullScreenPngPath)
-        item.crops.forEach { add(it.cropPngPath) }
-      }
-    scriptAssetManager.deleteFilesIfExist(pathsToDelete)
-  }
-
-  suspend fun deleteGroup(groupId: String) {
-    val childItems = inspectDao.getItemsByGroupOnce(groupId).map { it.toDomain() }
-    inspectDao.deleteGroupById(groupId)
-    val pathsToDelete =
-      buildList {
-        childItems.forEach { item ->
+  suspend fun deleteItem(itemId: String) =
+    withContext(Dispatchers.IO) {
+      val item = inspectDao.getItemById(itemId)?.toDomain() ?: return@withContext
+      inspectDao.deleteItemById(itemId)
+      val pathsToDelete =
+        buildList {
           add(item.fullScreenPngPath)
           item.crops.forEach { add(it.cropPngPath) }
         }
-      }
-    scriptAssetManager.deleteFilesIfExist(pathsToDelete)
-  }
+      scriptAssetManager.deleteFilesIfExist(pathsToDelete)
+    }
+
+  suspend fun deleteGroup(groupId: String) =
+    withContext(Dispatchers.IO) {
+      val childItems = inspectDao.getItemsByGroupOnce(groupId).map { it.toDomain() }
+      inspectDao.deleteGroupById(groupId)
+      val pathsToDelete =
+        buildList {
+          childItems.forEach { item ->
+            add(item.fullScreenPngPath)
+            item.crops.forEach { add(it.cropPngPath) }
+          }
+        }
+      scriptAssetManager.deleteFilesIfExist(pathsToDelete)
+    }
 }
