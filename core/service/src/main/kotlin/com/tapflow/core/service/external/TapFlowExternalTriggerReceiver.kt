@@ -11,7 +11,6 @@ import androidx.core.content.ContextCompat
 import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.database.repository.PipelineRepository
 import com.tapflow.core.database.repository.ScriptRepository
-import com.tapflow.core.datastore.TapFlowPreferencesRepository
 import com.tapflow.core.model.entitlement.ProFeatureGate
 import com.tapflow.core.model.pipeline.Pipeline
 import com.tapflow.core.model.script.Script
@@ -35,7 +34,6 @@ class TapFlowExternalTriggerReceiver : BroadcastReceiver() {
 
   @Inject lateinit var entitlementRepository: EntitlementRepository
   @Inject lateinit var shizukuManager: ShizukuManager
-  @Inject lateinit var preferencesRepository: TapFlowPreferencesRepository
   @Inject lateinit var scriptRepository: ScriptRepository
   @Inject lateinit var pipelineRepository: PipelineRepository
   @Inject lateinit var runnerControlHub: RunnerControlHub
@@ -122,25 +120,7 @@ class TapFlowExternalTriggerReceiver : BroadcastReceiver() {
       return
     }
 
-    // 3. External Broadcast Preference Toggle Check
-    val prefs = preferencesRepository.getPreferencesOnce()
-    if (!prefs.shizuku.externalBroadcastEnabled) {
-      externalBroadcastEmitter.emitExecutionFinished(
-        status = ExternalBroadcastContract.STATUS_REJECTED,
-        mode = mode,
-        targetId = hintTargetId,
-        targetTitle = hintTargetTitle,
-        error = ExternalBroadcastContract.ERROR_EXTERNAL_TRIGGER_DISABLED,
-      )
-      externalBroadcastEmitter.postExternalTriggerNotification(
-        title = "External Broadcasts Disabled",
-        message = "Enable External Broadcasts in TapFlow Seamless tab",
-        openSeamlessTab = true,
-      )
-      return
-    }
-
-    // 4. Accessibility & Overlay Permissions Check
+    // 3. Accessibility & Overlay Permissions Check
     if (!hasSystemAutomationPermissions(context)) {
       externalBroadcastEmitter.emitExecutionFinished(
         status = ExternalBroadcastContract.STATUS_FAILED,

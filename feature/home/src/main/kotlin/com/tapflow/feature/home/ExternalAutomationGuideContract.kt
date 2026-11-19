@@ -23,7 +23,6 @@ data class ExternalTargetOption(
 data class ExternalAutomationGuideUiState(
   val isPro: Boolean = false,
   val shizukuStatus: ShizukuDiagnosticState = ShizukuDiagnosticState(),
-  val externalBroadcastEnabled: Boolean = false,
   val targetMode: ExternalTargetMode = ExternalTargetMode.SCRIPT,
   val scripts: List<ExternalTargetOption> = emptyList(),
   val pipelines: List<ExternalTargetOption> = emptyList(),
@@ -41,7 +40,7 @@ data class ExternalAutomationGuideUiState(
       }
 
   val isAllPrerequisitesReady: Boolean
-    get() = isPro && shizukuStatus.isFullyReady && externalBroadcastEnabled
+    get() = isPro && shizukuStatus.isFullyReady
 }
 
 sealed interface ExternalAutomationGuideUiIntent {
@@ -54,8 +53,6 @@ sealed interface ExternalAutomationGuideUiIntent {
   data class SelectTarget(val id: String) : ExternalAutomationGuideUiIntent
 
   data class SelectPlatformTab(val tab: ExternalGuidePlatformTab) : ExternalAutomationGuideUiIntent
-
-  data class ToggleExternalBroadcast(val enabled: Boolean) : ExternalAutomationGuideUiIntent
 
   data object OpenPaywallClicked : ExternalAutomationGuideUiIntent
 

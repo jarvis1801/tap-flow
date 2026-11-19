@@ -304,15 +304,27 @@ fun SeamlessTabContent(
               onCheckedChange = { onIntent(HomeUiIntent.ToggleShizukuAutoGrantProjectMedia(it)) },
             )
             HorizontalDivider()
-            ShizukuToggleRow(
-              title = "MacroDroid / Tasker Broadcasts [Pro]",
-              subtitle = "Trigger scripts/pipelines & receive completion broadcasts (Requires Shizuku & Pro/Trial).",
-              checked = state.preferences.shizuku.externalBroadcastEnabled,
-              enabled = togglesEnabled,
-              testTag = "toggle_shizuku_external_broadcast",
-              onCheckedChange = { onIntent(HomeUiIntent.ToggleExternalBroadcast(it)) },
-            )
-            HorizontalDivider()
+            val (guideStatusText, guideStatusContainer, guideStatusContent) =
+              when {
+                !state.isPro ->
+                  Triple(
+                    "Pro / Trial",
+                    MaterialTheme.colorScheme.tertiaryContainer,
+                    MaterialTheme.colorScheme.onTertiaryContainer,
+                  )
+                !shizuku.isFullyReady ->
+                  Triple(
+                    "Needs Shizuku",
+                    MaterialTheme.colorScheme.errorContainer,
+                    MaterialTheme.colorScheme.onErrorContainer,
+                  )
+                else ->
+                  Triple(
+                    "Active ✓",
+                    MaterialTheme.colorScheme.primaryContainer,
+                    MaterialTheme.colorScheme.onPrimaryContainer,
+                  )
+              }
             Surface(
               onClick = { onIntent(HomeUiIntent.OpenExternalAutomationGuideClicked) },
               shape = MaterialTheme.shapes.medium,
@@ -336,23 +348,42 @@ fun SeamlessTabContent(
                 )
                 Column(
                   modifier = Modifier.weight(1f),
-                  verticalArrangement = Arrangement.spacedBy(2.dp),
+                  verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                  Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                  ) {
+                    Text(
+                      text = "MacroDroid & Tasker Integration Guide",
+                      style = MaterialTheme.typography.bodyLarge,
+                      fontWeight = FontWeight.SemiBold,
+                      color = MaterialTheme.colorScheme.onSurface,
+                      modifier = Modifier.weight(1f, fill = false),
+                    )
+                    Surface(
+                      shape = MaterialTheme.shapes.extraSmall,
+                      color = guideStatusContainer,
+                      modifier = Modifier.testTag("seamless_external_guide_status_badge"),
+                    ) {
+                      Text(
+                        text = guideStatusText,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = guideStatusContent,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                      )
+                    }
+                  }
                   Text(
-                    text = "Setup Guide & Action Generator (MacroDroid / Tasker)",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                  )
-                  Text(
-                    text = "Copy pre-filled Package, Action & Extra parameters for your scripts and pipelines.",
+                    text = "Trigger scripts/pipelines, receive completion broadcasts, and copy intent parameters.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                   )
                 }
                 Icon(
                   imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                  contentDescription = "Open Setup Guide",
+                  contentDescription = "Open Integration Guide",
                   tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
               }

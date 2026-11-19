@@ -199,12 +199,7 @@ class AutomationRunnerEngine @Inject constructor(
           blockedProGates = blockers,
         ),
       )
-      val externalEnabled =
-        withContext(NonCancellable) {
-          runCatching { preferencesRepository.getPreferencesOnce().shizuku.externalBroadcastEnabled }
-            .getOrDefault(false)
-        }
-      if (externalEnabled || wasTriggeredExternally) {
+      if (entitlementRepository.entitlementState.value.hasTrialOrLifetimeAccess || wasTriggeredExternally) {
         externalBroadcastEmitter.emitExecutionFinished(
           status = ExternalBroadcastContract.STATUS_REJECTED,
           mode = ExternalBroadcastContract.MODE_SCRIPT,
@@ -261,12 +256,7 @@ class AutomationRunnerEngine @Inject constructor(
       ),
     )
 
-    val externalEnabled =
-      withContext(NonCancellable) {
-        runCatching { preferencesRepository.getPreferencesOnce().shizuku.externalBroadcastEnabled }
-          .getOrDefault(false)
-      }
-    if (externalEnabled || wasTriggeredExternally) {
+    if (entitlementRepository.entitlementState.value.hasTrialOrLifetimeAccess || wasTriggeredExternally) {
       val broadcastStatus =
         when (sessionLog.status) {
           ExecutionStatus.SUCCESS -> ExternalBroadcastContract.STATUS_COMPLETED

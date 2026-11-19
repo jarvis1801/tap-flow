@@ -252,8 +252,7 @@ Tabs:
   - Enhanced Key Event Injection (Direct physical key events).
   - Silent Background Screenshots (`screencap` via shell instead of MediaProjection when active).
   - Auto-Grant Screen Capture (`PROJECT_MEDIA`): Grants `PROJECT_MEDIA` AppOp via Shizuku (`cmd appops set <pkg> PROJECT_MEDIA allow`), verifies `Allowed ✓`, skips TapFlow's pre-consent dialog so `createScreenCaptureIntent()` resolves silently on supported ROMs (falling back safely if blocked by OEM), and helps prevent Android 15+ screen-lock capture interruption.
-  - MacroDroid / Tasker Broadcasts [Pro] (`externalBroadcastEnabled` in `ShizukuPreferences`): Enables `TapFlowExternalTriggerReceiver` and automatic `ACTION_EXECUTION_FINISHED` completion callbacks.
-  - Setup Guide & Action Generator (MacroDroid / Tasker): Always-clickable entry opening `Route.ExternalAutomationGuide` (`ExternalAutomationGuideScreen`) with live prerequisite checks, Script/Pipeline intent generator with 1-tap copy, all 6 control actions, and step-by-step `MacroDroid` | `Tasker` setup instructions.
+  - MacroDroid & Tasker Integration Guide (Pro / Trial + Shizuku): Always-clickable entry opening `Route.ExternalAutomationGuide` (`ExternalAutomationGuideScreen`) with live status pill (`Active ✓`, `Needs Shizuku`, or `Pro / Trial`), live prerequisite checks, Script/Pipeline intent generator with 1-tap copy, all 6 control actions, and step-by-step `MacroDroid` | `Tasker` setup instructions. Listeners and automatic `ACTION_EXECUTION_FINISHED` callbacks are active automatically whenever Pro/Trial and Shizuku are ready (no redundant switch).
   State Guardrail:
   - All feature toggles are strictly Disabled & Greyed Out if Shizuku is not installed, not running, permission is ungranted, OR Pro entitlement is inactive.
 
@@ -474,6 +473,5 @@ Exported BroadcastReceiver: `com.tapflow.core.service.external.TapFlowExternalTr
 - Guardrails (`goAsync()` + cold-start Shizuku binder wait ~800ms):
     1. Pro / 7-Day Trial active (`EXTERNAL_BROADCAST`) ➔ else `REJECTED` (`PRO_REQUIRED`) + Notification.
     2. Shizuku installed, `pingBinder()` alive, permission granted ➔ else `FAILED` (`SHIZUKU_NOT_READY`) + Notification.
-    3. `externalBroadcastEnabled == true` ➔ else `REJECTED` (`EXTERNAL_TRIGGER_DISABLED`) + Notification.
-    4. Accessibility & Overlay permissions granted ➔ else `FAILED` (`PERMISSIONS_MISSING`) + Notification.
-    5. Starts `OverlayService` via `ContextCompat.startForegroundService` with Shizuku `am start-foreground-service` fallback.
+    3. Accessibility & Overlay permissions granted ➔ else `FAILED` (`PERMISSIONS_MISSING`) + Notification.
+    4. Starts `OverlayService` via `ContextCompat.startForegroundService` with Shizuku `am start-foreground-service` fallback.

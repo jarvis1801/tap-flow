@@ -5,7 +5,6 @@ import androidx.lifecycle.viewModelScope
 import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.database.repository.PipelineRepository
 import com.tapflow.core.database.repository.ScriptRepository
-import com.tapflow.core.datastore.TapFlowPreferencesRepository
 import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.entitlement.ProFeatureGate
 import com.tapflow.core.service.shizuku.ShizukuManager
@@ -27,7 +26,6 @@ class ExternalAutomationGuideViewModel @Inject constructor(
   private val pipelineRepository: PipelineRepository,
   private val entitlementRepository: EntitlementRepository,
   private val shizukuManager: ShizukuManager,
-  private val preferencesRepository: TapFlowPreferencesRepository,
 ) : ViewModel() {
 
   private data class LocalSelectionState(
@@ -51,13 +49,12 @@ class ExternalAutomationGuideViewModel @Inject constructor(
         pipelineRepository.observePipelines(),
         entitlementRepository.entitlementState,
         shizukuManager.diagnosticState,
-        preferencesRepository.preferencesFlow,
-      ) { scripts, pipelines, entitlement, shizuku, prefs ->
+      ) { scripts, pipelines, entitlement, shizuku ->
         val scriptOptions = scripts.map { ExternalTargetOption(id = it.id, title = it.title) }
         val pipelineOptions = pipelines.map { ExternalTargetOption(id = it.id, title = it.title) }
         val isPro = EntitlementValidator.canUseFeature(entitlement, ProFeatureGate.EXTERNAL_BROADCAST)
-        Triple(scriptOptions to pipelineOptions, isPro to shizuku, prefs.shizuku.externalBroadcastEnabled)
-      }.combine(_localState) { (targets, statusPair, externalEnabled), local ->
+        (scriptOptions to pipelineOptions) to (isPro to shizuku)
+      }.combine(_localState) { (targets, statusPair), local ->
         val (scriptOptions, pipelineOptions) = targets
         val (isPro, shizuku) = statusPair
         val resolvedScriptId =
@@ -70,7 +67,6 @@ class ExternalAutomationGuideViewModel @Inject constructor(
         ExternalAutomationGuideUiState(
           isPro = isPro,
           shizukuStatus = shizuku,
-          externalBroadcastEnabled = externalEnabled,
           targetMode = local.targetMode,
           scripts = scriptOptions,
           pipelines = pipelineOptions,
@@ -105,27 +101,6 @@ class ExternalAutomationGuideViewModel @Inject constructor(
       }
       is ExternalAutomationGuideUiIntent.SelectPlatformTab -> {
         _localState.update { it.copy(activePlatformTab = intent.tab) }
-      }
-      is ExternalAutomationGuideUiIntent.ToggleExternalBroadcast -> {
-        if (!entitlementRepository.canUseFeature(ProFeatureGate.EXTERNAL_BROADCAST)) {
-          sendEffect(
-            ExternalAutomationGuideUiEffect.NavigateToPaywall(
-              ProFeatureGate.EXTERNAL_BROADCAST.displayName,
-            ),
-          )
-          return
-        }
-        if (!shizukuManager.isReadyNow()) {
-          sendEffect(
-            ExternalAutomationGuideUiEffect.ShowSnackbar(
-              "Install, start, and grant Shizuku permission first.",
-            ),
-          )
-          return
-        }
-        viewModelScope.launch {
-          preferencesRepository.setExternalBroadcastEnabled(intent.enabled)
-        }
       }
       ExternalAutomationGuideUiIntent.OpenPaywallClicked -> {
         sendEffect(

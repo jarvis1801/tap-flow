@@ -47,7 +47,6 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -278,25 +277,26 @@ private fun PrerequisiteBannerCard(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
       ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
           Text(
-            text = "External Broadcast Listener",
+            text =
+              if (state.isAllPrerequisitesReady) {
+                "Listeners & Completion Callbacks Active"
+              } else {
+                "Automatic Activation (No Toggle Needed)"
+              },
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
           )
           Text(
             text =
-              if (state.externalBroadcastEnabled) {
-                "Enabled — TapFlow accepts triggers & emits completion broadcasts."
-              } else {
-                "Disabled — turn ON to accept MacroDroid / Tasker broadcasts."
-              },
+              "Tip: Enable Silent Background Screenshots (or Auto-Grant PROJECT_MEDIA) in the Seamless tab when triggering Vision scripts from background.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
           )
         }
-        Spacer(modifier = Modifier.width(12.dp))
         if (!state.isPro) {
+          Spacer(modifier = Modifier.width(12.dp))
           FilledTonalButton(
             onClick = { onIntent(ExternalAutomationGuideUiIntent.OpenPaywallClicked) },
             modifier = Modifier.testTag("external_guide_upgrade_button"),
@@ -309,15 +309,6 @@ private fun PrerequisiteBannerCard(
             Spacer(modifier = Modifier.width(6.dp))
             Text("Unlock")
           }
-        } else {
-          Switch(
-            checked = state.externalBroadcastEnabled,
-            enabled = state.shizukuStatus.isFullyReady,
-            onCheckedChange = {
-              onIntent(ExternalAutomationGuideUiIntent.ToggleExternalBroadcast(it))
-            },
-            modifier = Modifier.testTag("external_guide_toggle_switch"),
-          )
         }
       }
     }
@@ -841,7 +832,7 @@ private fun ExtrasReferenceTable() {
         "target_title (%target_title)" to "Script or Pipeline title (String)",
         "duration_ms (%duration_ms)" to "Total run duration in ms (Long)",
         "steps_executed (%steps_executed)" to "Total steps completed (Int)",
-        "error (%error)" to "\"\" on success, or SHIZUKU_NOT_READY, PRO_REQUIRED, EXTERNAL_TRIGGER_DISABLED, PERMISSIONS_MISSING, TARGET_NOT_FOUND, or failure reason",
+        "error (%error)" to "\"\" on success, or SHIZUKU_NOT_READY, PRO_REQUIRED, PERMISSIONS_MISSING, TARGET_NOT_FOUND, or failure reason",
       )
     }
 
@@ -938,7 +929,6 @@ private fun ExternalAutomationGuidePreview() {
               isPermissionGranted = true,
               isUserServiceBound = true,
             ),
-          externalBroadcastEnabled = true,
           scripts =
             listOf(
               ExternalTargetOption(id = "scr-101", title = "Daily Check-In"),

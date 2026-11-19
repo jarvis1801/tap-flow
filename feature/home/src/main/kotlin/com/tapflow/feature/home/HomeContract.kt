@@ -321,8 +321,6 @@ sealed interface HomeUiIntent {
 
   data class ToggleShizukuAutoGrantProjectMedia(val enabled: Boolean) : HomeUiIntent
 
-  data class ToggleExternalBroadcast(val enabled: Boolean) : HomeUiIntent
-
   data object OpenExternalAutomationGuideClicked : HomeUiIntent
 
   // Settings Tab
