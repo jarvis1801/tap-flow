@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tapflow.core.database.backup.ImportConflictStrategy
+import com.tapflow.core.model.common.FeatureFlags
 import com.tapflow.core.service.permissions.AccessibilityProminentDisclosureDialog
 import com.tapflow.core.service.permissions.RuntimePermissionsDisabledDialog
 
@@ -454,7 +455,12 @@ internal fun HomeDialogs(
             "TapFlow is strictly offline-only. All scripts, pipelines, execution logs, inspected screenshots, and preferences are stored locally in your device's private Room database and DataStore.",
           )
           Text(
-            "Accessibility Service and MediaProjection frames are processed transiently in memory on-device and are never transmitted to external servers. The optional Desktop Studio WebSocket bridge listens strictly on localhost (127.0.0.1) for your local ADB session.",
+            text =
+              if (FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+                "Accessibility Service and MediaProjection frames are processed transiently in memory on-device and are never transmitted to external servers. The optional Desktop Studio WebSocket bridge listens strictly on localhost (127.0.0.1) for your local ADB session."
+              } else {
+                "Accessibility Service and MediaProjection frames are processed transiently in memory on-device and are never transmitted to external servers."
+              },
           )
         }
       },

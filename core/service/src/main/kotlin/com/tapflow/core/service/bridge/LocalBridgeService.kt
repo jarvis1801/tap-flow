@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.datastore.AppPreferences
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
+import com.tapflow.core.model.common.FeatureFlags
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.entitlement.ProFeatureGate
@@ -58,6 +59,13 @@ class LocalBridgeService : Service() {
 
   override fun onCreate() {
     super.onCreate()
+    if (!FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+      localBridgeStateBridge.setBridgeRunning(false)
+      ensureNotificationChannel()
+      startBridgeForeground(buildNotification(AppPreferences.DEFAULT_KTOR_PORT))
+      stopBridgeFromAction(reason = null)
+      return
+    }
     localBridgeStateBridge.setBridgeRunning(true)
     ensureNotificationChannel()
     val initialPort = serverController.activePort.value.coerceIn(1024, 65535)
@@ -69,6 +77,10 @@ class LocalBridgeService : Service() {
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    if (!FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+      stopBridgeFromAction(reason = null)
+      return START_NOT_STICKY
+    }
     when (intent?.action) {
       ACTION_STOP -> {
         stopBridgeFromAction(reason = "Stopped by user")

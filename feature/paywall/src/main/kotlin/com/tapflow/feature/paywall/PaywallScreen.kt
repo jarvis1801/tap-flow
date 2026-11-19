@@ -79,6 +79,7 @@ import com.tapflow.core.billing.DiscountReason
 import com.tapflow.core.billing.EntitlementRepository
 import com.tapflow.core.billing.PaywallPricingState
 import com.tapflow.core.billing.ProductOfferInfo
+import com.tapflow.core.model.common.FeatureFlags
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.entitlement.TrialStatus
@@ -144,12 +145,17 @@ private val PAYWALL_COMPARISON_ROWS =
     ),
     PaywallComparisonRow(
       id = "backup",
-      feature = "Data Backup (.tapflow Export/Import)",
+      feature = ".tapflow Data Backup & Sharing",
       freeTier = "Not Included",
       proTier = "Export / Import [Lifetime Only]",
       lifetimeOnly = true,
     ),
   )
+
+private val VISIBLE_PAYWALL_COMPARISON_ROWS =
+  PAYWALL_COMPARISON_ROWS.filter { row ->
+    FeatureFlags.ENABLE_DESKTOP_CONSOLE || row.id != "console"
+  }
 
 @Composable
 fun PaywallScreen(
@@ -320,7 +326,7 @@ fun PaywallContent(
         }
 
         items(
-          items = PAYWALL_COMPARISON_ROWS,
+          items = VISIBLE_PAYWALL_COMPARISON_ROWS,
           key = { it.id },
         ) { row ->
           ComparisonRowItem(row = row)
@@ -701,7 +707,12 @@ private fun PaywallHeroCard(state: PaywallUiState) {
               color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
             Text(
-              text = "All automation, vision matching, Shizuku, and Desktop Studio features are permanently unlocked.",
+              text =
+                if (FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+                  "All automation, vision matching, Shizuku, and Desktop Studio features are permanently unlocked."
+                } else {
+                  "All automation, vision matching, Shizuku, and .tapflow Data Backup features are permanently unlocked."
+                },
               style = MaterialTheme.typography.bodyMedium,
               color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.88f),
             )
@@ -754,7 +765,12 @@ private fun PaywallHeroCard(state: PaywallUiState) {
             modifier = Modifier.fillMaxWidth().testTag("paywall_trial_lifetime_callout"),
           ) {
             Text(
-              text = "Upgrade to Lifetime Pro to unlock Desktop Console & Data Backup",
+              text =
+                if (FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+                  "Upgrade to Lifetime Pro to unlock Desktop Console & Data Backup"
+                } else {
+                  "Upgrade to Lifetime Pro to unlock .tapflow Data Backup & keep all Pro features forever"
+                },
               style = MaterialTheme.typography.bodyMedium,
               fontWeight = FontWeight.SemiBold,
               color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -845,9 +861,17 @@ private fun PaywallHeroCard(state: PaywallUiState) {
             text =
               when (entitlement.trialStatus) {
                 TrialStatus.NOT_STARTED ->
-                  "All Actions, Unlimited Scripts & Flows — Forever Free. Start a 7-day trial (no card needed) for MacroDroid/Tasker broadcasts, Seamless Shizuku, Image Vision, Pipeline Looping & Crash Recovery, Full Logs, and AMOLED black theme. Desktop Console & .tapflow Backup unlock with Lifetime Pro."
+                  if (FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+                    "All Actions, Unlimited Scripts & Flows — Forever Free. Start a 7-day trial (no card needed) for MacroDroid/Tasker broadcasts, Seamless Shizuku, Image Vision, Pipeline Looping & Crash Recovery, Full Logs, and AMOLED black theme. Desktop Console & .tapflow Backup unlock with Lifetime Pro."
+                  } else {
+                    "All Actions, Unlimited Scripts & Flows — Forever Free. Start a 7-day trial (no card needed) for MacroDroid/Tasker broadcasts, Seamless Shizuku, Image Vision, Pipeline Looping & Crash Recovery, Full Logs, and AMOLED black theme. .tapflow Data Backup & Sharing unlocks with Lifetime Pro."
+                  }
                 TrialStatus.EXPIRED ->
-                  "All Actions, Unlimited Scripts & Flows remain free forever. Unlock Lifetime Pro with a single one-time purchase for unattended Pipeline looping, Shizuku, Image Vision, External Triggers, Desktop Console & Backup."
+                  if (FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+                    "All Actions, Unlimited Scripts & Flows remain free forever. Unlock Lifetime Pro with a single one-time purchase for unattended Pipeline looping, Shizuku, Image Vision, External Triggers, Desktop Console & Backup."
+                  } else {
+                    "All Actions, Unlimited Scripts & Flows remain free forever. Unlock Lifetime Pro with a single one-time purchase for unattended Pipeline looping, Shizuku, Image Vision, External Triggers, and .tapflow Data Backup & Sharing."
+                  }
                 TrialStatus.EXPIRED_TAMPERED ->
                   "Local trial verification failed due to device clock rollback or integrity mismatch. All Actions & Unlimited Scripts remain free; unlock Lifetime Pro via Google Play for Pro automation."
                 TrialStatus.ACTIVE -> ""

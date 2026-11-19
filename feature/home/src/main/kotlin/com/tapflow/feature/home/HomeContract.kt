@@ -10,6 +10,7 @@ import com.tapflow.core.datastore.AppPreferences
 import java.util.Locale
 import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.ThemePaletteOption
+import com.tapflow.core.model.common.FeatureFlags
 import com.tapflow.core.model.common.OverlaySizeOption
 import com.tapflow.core.model.common.RunnerLaunchMode
 import com.tapflow.core.model.entitlement.EntitlementState
@@ -26,6 +27,19 @@ enum class HomeTabType(val title: String) {
   CONSOLE("Console"),
   SEAMLESS("Seamless"),
   SETTINGS("Settings"),
+  ;
+
+  companion object {
+    fun visibleEntries(): List<HomeTabType> =
+      if (FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+        entries
+      } else {
+        entries.filter { it != CONSOLE }
+      }
+
+    fun sanitizeTab(tab: HomeTabType): HomeTabType =
+      if (tab == CONSOLE && !FeatureFlags.ENABLE_DESKTOP_CONSOLE) SCRIPT else tab
+  }
 }
 
 enum class AppLocaleOption(val label: String, val languageTag: String) {

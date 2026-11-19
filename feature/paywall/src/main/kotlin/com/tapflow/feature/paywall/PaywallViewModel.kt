@@ -8,6 +8,7 @@ import com.tapflow.core.billing.PaywallPricingState
 import com.tapflow.core.billing.PromoRedeemResult
 import com.tapflow.core.billing.TrialEvaluation
 import com.tapflow.core.billing.TrialGuardManager
+import com.tapflow.core.model.common.FeatureFlags
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.TrialStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -106,7 +107,11 @@ class PaywallViewModel @Inject constructor(
           val msg =
             when (eval.status) {
               TrialStatus.ACTIVE ->
-                "7-Day Pro Trial activated! Desktop Console & Data Backup require Lifetime Pro."
+                if (FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+                  "7-Day Pro Trial activated! Desktop Console & Data Backup require Lifetime Pro."
+                } else {
+                  "7-Day Pro Trial activated! .tapflow Data Backup requires Lifetime Pro."
+                }
               TrialStatus.EXPIRED, TrialStatus.EXPIRED_TAMPERED ->
                 "Free trial has already been used or expired on this device."
               TrialStatus.NOT_STARTED -> "Unable to activate trial."

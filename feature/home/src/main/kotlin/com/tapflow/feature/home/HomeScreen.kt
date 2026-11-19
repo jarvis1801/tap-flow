@@ -89,6 +89,7 @@ import androidx.core.os.LocaleListCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.tapflow.core.model.common.FeatureFlags
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.service.bridge.LocalBridgeControlIntents
 import com.tapflow.core.service.overlay.OverlayLaunchIntents
@@ -303,10 +304,12 @@ fun HomeScreen(
             }
         }
         is HomeUiEffect.StartLocalBridgeService -> {
-          ContextCompat.startForegroundService(
-            context,
-            LocalBridgeControlIntents.createStartIntent(context, effect.port),
-          )
+          if (FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+            ContextCompat.startForegroundService(
+              context,
+              LocalBridgeControlIntents.createStartIntent(context, effect.port),
+            )
+          }
         }
         HomeUiEffect.StopLocalBridgeService -> {
           runCatching {
@@ -444,7 +447,7 @@ fun HomeContent(
       bottomBar = {
         if (!useNavigationRail) {
           NavigationBar {
-            HomeTabType.entries.forEach { tab ->
+            HomeTabType.visibleEntries().forEach { tab ->
               NavigationBarItem(
                 selected = state.activeTab == tab,
                 onClick = { onIntent(HomeUiIntent.SelectTab(tab)) },
@@ -471,7 +474,7 @@ fun HomeContent(
       Row(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
         if (useNavigationRail) {
           NavigationRail(modifier = Modifier.fillMaxHeight()) {
-            HomeTabType.entries.forEach { tab ->
+            HomeTabType.visibleEntries().forEach { tab ->
               NavigationRailItem(
                 selected = state.activeTab == tab,
                 onClick = { onIntent(HomeUiIntent.SelectTab(tab)) },
@@ -493,7 +496,12 @@ fun HomeContent(
             HomeTabType.SCRIPT -> ScriptsTabContent(state = state, onIntent = onIntent)
             HomeTabType.PIPELINE -> PipelinesTabContent(state = state, onIntent = onIntent)
             HomeTabType.INSPECT -> InspectTabContent(state = state, onIntent = onIntent)
-            HomeTabType.CONSOLE -> ConsoleTabContent(state = state, onIntent = onIntent)
+            HomeTabType.CONSOLE ->
+              if (FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+                ConsoleTabContent(state = state, onIntent = onIntent)
+              } else {
+                ScriptsTabContent(state = state, onIntent = onIntent)
+              }
             HomeTabType.SEAMLESS -> SeamlessTabContent(state = state, onIntent = onIntent)
             HomeTabType.SETTINGS -> SettingsTabContent(state = state, onIntent = onIntent)
           }

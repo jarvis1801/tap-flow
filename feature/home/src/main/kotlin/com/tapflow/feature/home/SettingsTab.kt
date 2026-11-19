@@ -62,6 +62,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.ThemePaletteOption
+import com.tapflow.core.model.common.FeatureFlags
 import com.tapflow.core.model.common.OverlaySizeOption
 import com.tapflow.core.model.common.RunnerLaunchMode
 import com.tapflow.core.model.entitlement.EntitlementState
@@ -754,7 +755,11 @@ private fun SettingsProBannerCard(
               when (val ent = state.entitlementState) {
                 is EntitlementState.ProLifetime -> "All Pro modules permanently unlocked."
                 is EntitlementState.ProTrial ->
-                  "Enjoying Pro automation & vision during your local trial. Desktop Console & Data Backup require Lifetime Pro."
+                  if (FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+                    "Enjoying Pro automation & vision during your local trial. Desktop Console & Data Backup require Lifetime Pro."
+                  } else {
+                    "Enjoying Pro automation & vision during your local trial. .tapflow Data Backup requires Lifetime Pro."
+                  }
                 EntitlementState.PendingPurchase -> "Awaiting Google Play settlement."
                 is EntitlementState.Free ->
                   when (ent.trialStatus) {

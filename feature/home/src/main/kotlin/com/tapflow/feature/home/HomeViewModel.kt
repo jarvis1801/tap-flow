@@ -18,6 +18,7 @@ import com.tapflow.core.datastore.AppPreferences
 import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
 import com.tapflow.core.datastore.ThemePaletteOption
+import com.tapflow.core.model.common.FeatureFlags
 import com.tapflow.core.model.common.RunnerLaunchMode
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.EntitlementValidator
@@ -351,31 +352,33 @@ class HomeViewModel @Inject constructor(
     when (intent) {
       is HomeUiIntent.InitializeTabIfUnset -> {
         if (!savedStateHandle.contains(KEY_ACTIVE_HOME_TAB)) {
-          savedStateHandle[KEY_ACTIVE_HOME_TAB] = intent.tab.name
-          _localState.update { it.copy(activeTab = intent.tab) }
-          if (intent.tab == HomeTabType.SEAMLESS) {
+          val safeTab = HomeTabType.sanitizeTab(intent.tab)
+          savedStateHandle[KEY_ACTIVE_HOME_TAB] = safeTab.name
+          _localState.update { it.copy(activeTab = safeTab) }
+          if (safeTab == HomeTabType.SEAMLESS) {
             shizukuManager.refreshDiagnostics()
             viewModelScope.launch { shizukuManager.isProjectMediaAllowed() }
-          } else if (intent.tab == HomeTabType.SETTINGS || intent.tab == HomeTabType.INSPECT) {
+          } else if (safeTab == HomeTabType.SETTINGS || safeTab == HomeTabType.INSPECT) {
             refreshInspectStorageStats()
           }
         }
       }
       is HomeUiIntent.SelectTab -> {
-        savedStateHandle[KEY_ACTIVE_HOME_TAB] = intent.tab.name
+        val safeTab = HomeTabType.sanitizeTab(intent.tab)
+        savedStateHandle[KEY_ACTIVE_HOME_TAB] = safeTab.name
         _localState.update {
           it.copy(
-            activeTab = intent.tab,
+            activeTab = safeTab,
             isScriptFabExpanded = false,
             isInspectFabExpanded = false,
             isSearchExpanded = false,
             searchQuery = "",
           )
         }
-        if (intent.tab == HomeTabType.SEAMLESS) {
+        if (safeTab == HomeTabType.SEAMLESS) {
           shizukuManager.refreshDiagnostics()
           viewModelScope.launch { shizukuManager.isProjectMediaAllowed() }
-        } else if (intent.tab == HomeTabType.SETTINGS || intent.tab == HomeTabType.INSPECT) {
+        } else if (safeTab == HomeTabType.SETTINGS || safeTab == HomeTabType.INSPECT) {
           refreshInspectStorageStats()
         }
       }
@@ -772,6 +775,13 @@ class HomeViewModel @Inject constructor(
 
       // Console Tab
       HomeUiIntent.ToggleLocalServer -> {
+        if (!FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+          if (localServer.status.value.isRunning) {
+            sendEffect(HomeUiEffect.StopLocalBridgeService)
+            viewModelScope.launch { localServer.stopServer("Desktop Console is disabled in this release.") }
+          }
+          return
+        }
         val isLifetimePro =
           entitlementRepository.entitlementState.value is EntitlementState.ProLifetime &&
             entitlementRepository.canUseFeature(ProFeatureGate.DESKTOP_CONSOLE)
@@ -797,6 +807,7 @@ class HomeViewModel @Inject constructor(
         }
       }
       is HomeUiIntent.UpdateServerPort -> {
+        if (!FeatureFlags.ENABLE_DESKTOP_CONSOLE) return
         val parsed = intent.portText.toIntOrNull()
         if (parsed == null || parsed !in 1024..65535) {
           sendEffect(HomeUiEffect.ShowSnackbar("Enter a valid port between 1024 and 65535"))
@@ -808,6 +819,7 @@ class HomeViewModel @Inject constructor(
         }
       }
       HomeUiIntent.CopyAdbCommandClicked -> {
+        if (!FeatureFlags.ENABLE_DESKTOP_CONSOLE) return
         val cmd = _uiState.value.serverStatus.adbCommand
         sendEffect(HomeUiEffect.CopyToClipboard("ADB Forward Command", cmd))
         sendEffect(HomeUiEffect.ShowSnackbar("Copied: $cmd"))
@@ -1362,7 +1374,12 @@ class HomeViewModel @Inject constructor(
 
   private fun readSavedActiveTab(): HomeTabType? {
     val savedName = savedStateHandle.get<String>(KEY_ACTIVE_HOME_TAB) ?: return null
-    return runCatching { HomeTabType.valueOf(savedName) }.getOrNull()
+    val parsed = runCatching { HomeTabType.valueOf(savedName) }.getOrNull() ?: return null
+    val safeTab = HomeTabType.sanitizeTab(parsed)
+    if (safeTab != parsed) {
+      savedStateHandle[KEY_ACTIVE_HOME_TAB] = safeTab.name
+    }
+    return safeTab
   }
 
   private fun matchesInspectOrientationQuery(item: InspectItem, query: String): Boolean {

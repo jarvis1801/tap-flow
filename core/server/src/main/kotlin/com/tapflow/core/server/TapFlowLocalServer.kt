@@ -30,6 +30,7 @@ import com.tapflow.core.database.repository.ScriptRepository
 import com.tapflow.core.datastore.AppPreferences
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
 import com.tapflow.core.model.action.SystemKeyType
+import com.tapflow.core.model.common.FeatureFlags
 import com.tapflow.core.model.entitlement.EntitlementState
 import com.tapflow.core.model.entitlement.EntitlementValidator
 import com.tapflow.core.model.entitlement.ProFeatureGate
@@ -232,6 +233,10 @@ class TapFlowLocalServer @Inject constructor(
 
   suspend fun startServer(requestedPort: Int? = null): Boolean =
     serverMutex.withLock {
+      if (!FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+        stopServerInternal(error = "Desktop Console is disabled in this release.")
+        return@withLock false
+      }
       val currentEntitlement = entitlementRepository.entitlementState.value
       if (currentEntitlement !is EntitlementState.ProLifetime ||
         !EntitlementValidator.canUseFeature(currentEntitlement, ProFeatureGate.DESKTOP_CONSOLE)
@@ -370,6 +375,10 @@ class TapFlowLocalServer @Inject constructor(
     }
 
   suspend fun toggleServer(): Boolean {
+    if (!FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+      stopServer()
+      return false
+    }
     return if (_status.value.isRunning) {
       stopServer()
       false

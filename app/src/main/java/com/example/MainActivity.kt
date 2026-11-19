@@ -49,6 +49,7 @@ import com.tapflow.core.datastore.AppPreferences
 import com.tapflow.core.datastore.DarkModeOption
 import com.tapflow.core.datastore.TapFlowPreferencesRepository
 import com.tapflow.core.datastore.ThemePaletteOption
+import com.tapflow.core.model.common.FeatureFlags
 import com.tapflow.core.service.accessibility.TapFlowAccessibilityService
 import com.tapflow.core.service.external.ExternalBroadcastContract
 import com.tapflow.core.service.overlay.GesturePickerBridge
@@ -365,10 +366,16 @@ fun TapFlowNavHost(
   val navController = rememberNavController()
   LaunchedEffect(deepLinkTabRequest) {
     val request = deepLinkTabRequest ?: return@LaunchedEffect
+    val safeTab =
+      if (request.first == HomeTab.CONSOLE && !FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
+        HomeTab.SCRIPT
+      } else {
+        request.first
+      }
     if (navController.currentDestination?.hasRoute<Route.Home>() == false &&
       navController.currentDestination?.hasRoute<Route.Onboarding>() == false
     ) {
-      navController.navigate(Route.Home(request.first)) {
+      navController.navigate(Route.Home(safeTab)) {
         popUpTo<Route.Home> { inclusive = true }
         launchSingleTop = true
       }
@@ -517,7 +524,8 @@ private fun HomeTab.toHomeTabType(): HomeTabType =
     HomeTab.SCRIPT -> HomeTabType.SCRIPT
     HomeTab.PIPELINE -> HomeTabType.PIPELINE
     HomeTab.INSPECT -> HomeTabType.INSPECT
-    HomeTab.CONSOLE -> HomeTabType.CONSOLE
+    HomeTab.CONSOLE ->
+      if (FeatureFlags.ENABLE_DESKTOP_CONSOLE) HomeTabType.CONSOLE else HomeTabType.SCRIPT
     HomeTab.SEAMLESS -> HomeTabType.SEAMLESS
     HomeTab.SETTINGS -> HomeTabType.SETTINGS
   }
