@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="legal_badge">TapFlow Legal</string>
+    <string name="legal_effective_meta">Effective Date: November 19, 2026 • App: TapFlow (com.jarvis.tapflow)</string>
+    <string name="legal_close">Close</string>
+    <string name="legal_view_online">View Online ↗</string>
+    <string name="legal_footer_copyright">Copyright © 2026 TapFlow. All Rights Reserved.</string>
+    <string name="legal_open_link_failed">Unable to open link on this device.</string>
+
+    <string name="legal_terms_title">Terms &amp; Conditions</string>
+    <string name="legal_terms_row_subtitle">Commercial license &amp; automation responsibility</string>
+    <string name="legal_privacy_title">Privacy Policy</string>
+    <string name="legal_privacy_row_subtitle">100% offline local automation — no ads or telemetry</string>
+    <string name="legal_feedback_title">Feedback via Email</string>
+    <string name="legal_feedback_row_subtitle">Opens email client to ccplayconsole@gmail.com with diagnostics</string>
+
+    <!-- Privacy Policy -->
+    <string name="privacy_summary_title">Privacy at a Glance</string>
+    <string name="privacy_summary_body">TapFlow requires no user account, contains no ads or behavioral tracking, and executes all automation, color/image matching, and script storage 100% locally on your device. Network access is used strictly for Google Play Billing and optional Firebase Remote Config promo-code verification.</string>
+
+    <string name="privacy_s1_title">1. Local Storage on Your Device</string>
+    <string name="privacy_s1_intro">TapFlow operates on an offline-first architecture. All automation data remains inside your device’s private application storage unless you explicitly export it:</string>
+    <string name="privacy_s1_b1_head">Scripts, Pipelines &amp; Variables:</string>
+    <string name="privacy_s1_b1_body">Automation sequences, timing settings, and variable definitions stored in a local Room/SQLite database.</string>
+    <string name="privacy_s1_b2_head">Inspect Screenshots &amp; Pixel Targets:</string>
+    <string name="privacy_s1_b2_body">Lossless PNG screenshots, sampled pixel coordinates/colors, and crop region bounds captured when you use Live Recording, Live Inspect, or Screenshot Import.</string>
+    <string name="privacy_s1_b3_head">Execution Logs &amp; Crash Snapshots:</string>
+    <string name="privacy_s1_b3_body">Local execution history and optional failure screenshots stored temporarily on-device and automatically pruned to the latest 50 sessions or 7 days.</string>
+    <string name="privacy_s1_b4_head">Preferences &amp; Keystore Entitlements:</string>
+    <string name="privacy_s1_b4_body">UI settings, local 7-day trial timestamps, and redeemed promo window timestamps protected using Android Keystore HMAC-SHA256 verification against tampering.</string>
+    <string name="privacy_s1_b5_head">Manual .tapflow Exports:</string>
+    <string name="privacy_s1_b5_body">Exporting a .tapflow backup file via Android’s system file picker saves only script and pipeline logic (Inspect screenshots are strictly excluded).</string>
+
+    <string name="privacy_s2_title">2. Sensitive Android Permissions</string>
+    <string name="privacy_s2_intro">TapFlow requests only system permissions strictly required for user-initiated automation features:</string>
+    <string name="privacy_s2_sub_a11y_title">AccessibilityService API</string>
+    <string name="privacy_s2_sub_a11y_b1_head">Purpose:</string>
+    <string name="privacy_s2_sub_a11y_b1_body">Dispatches user-configured touch gestures (tap, double tap, long press, multi-touch, swipe), global navigation actions, optional text insertion into focused fields, reads the active foreground app package name for App Match rules &amp; Inspect metadata, and optionally intercepts hardware Volume Down presses for Emergency Stop.</string>
+    <string name="privacy_s2_sub_a11y_b2_head">Strict Non-Collection Guarantee:</string>
+    <string name="privacy_s2_sub_a11y_b2_body">TapFlow NEVER harvests, logs remotely, sells, or transmits screen content, keystrokes, passwords, messages, or personal data.</string>
+
+    <string name="privacy_s2_sub_proj_title">Screen Capture (MediaProjection)</string>
+    <string name="privacy_s2_sub_proj_b1_head">Purpose:</string>
+    <string name="privacy_s2_sub_proj_b1_body">Used solely during Color Match, Image Match, Live Recording, or Live Inspect. Frames are analyzed on-device in memory (or saved locally in private Inspect/log storage) and are never uploaded or streamed externally.</string>
+
+    <string name="privacy_s2_sub_overlay_title">Display Over Other Apps</string>
+    <string name="privacy_s2_sub_overlay_b1_head">Purpose:</string>
+    <string name="privacy_s2_sub_overlay_b1_body">Renders the floating control dock, coordinate picker, and optional visual touch debug marker over other apps while testing or running scripts.</string>
+
+    <string name="privacy_s2_sub_apps_title">Installed Applications Visibility</string>
+    <string name="privacy_s2_sub_apps_b1_head">Purpose:</string>
+    <string name="privacy_s2_sub_apps_b1_body">Populates Launch App, Force Stop App, and App Match pickers and displays app icons/names on Inspect items strictly on-device.</string>
+
+    <string name="privacy_s2_sub_integrations_title">Optional Local Integrations</string>
+    <string name="privacy_s2_sub_integrations_b1_head">Shizuku, MacroDroid &amp; Tasker:</string>
+    <string name="privacy_s2_sub_integrations_b1_body">Commands and local broadcast triggers run exclusively on-device with no remote data sharing.</string>
+
+    <string name="privacy_s3_title">3. Network &amp; Third-Party Services</string>
+    <string name="privacy_s3_intro">Limited network communication occurs strictly for licensing and optional promo code verification:</string>
+    <string name="privacy_s3_b1_head">Google Play Billing:</string>
+    <string name="privacy_s3_b1_body">Handles in-app purchases and restoration directly through Google Play. TapFlow receives entitlement tokens only and never accesses payment credentials.</string>
+    <string name="privacy_s3_b2_head">Firebase Remote Config (Promo Codes):</string>
+    <string name="privacy_s3_b2_body">Verifies promo_redeem_codes parameters and date windows using an ephemeral Firebase Installations ID with NO Google Analytics behavioral or ad tracking.</string>
+    <string name="privacy_link_google">Google Privacy Policy</string>
+    <string name="privacy_link_firebase">Firebase Privacy &amp; Security</string>
+
+    <string name="privacy_s4_title">4. Data Control, Retention &amp; Deletion</string>
+    <string name="privacy_s4_b1">You can delete any Script, Pipeline, Inspect Group, Execution Log, or clear cached Inspect images at any time inside Settings.</string>
+    <string name="privacy_s4_b2">Execution logs and crash snapshots are automatically pruned at 50 sessions or 7 days.</string>
+    <string name="privacy_s4_b3">Uninstalling TapFlow permanently removes all app-private databases, preferences, and saved screenshots (excluding .tapflow backups you manually saved elsewhere).</string>
+
+    <string name="privacy_s5_title">5. Children’s Privacy</string>
+    <string name="privacy_s5_body">TapFlow is a general utility application and is not directed at children under 13 (or the minimum legal age in your jurisdiction). Because we do not collect user accounts or analytics, we do not knowingly collect personal data from children.</string>
+
+    <string name="privacy_s6_title">6. Changes to This Policy</string>
+    <string name="privacy_s6_body">We may update this Privacy Policy to reflect new features or regulatory requirements. Updates take effect on the Effective Date listed at the top of this page.</string>
+
+    <string name="privacy_s7_title">7. Contact Us</string>
+    <string name="privacy_s7_body">For questions about this Privacy Policy or TapFlow’s permissions, please email our support team:</string>
+
+    <!-- Terms & Conditions -->
+    <string name="terms_warning_title">Important Notice</string>
+    <string name="terms_warning_body">By installing or using TapFlow, you agree to these Terms &amp; Conditions. Always review scripts before running them—you are solely responsible for compliance with the terms of any third-party apps you automate.</string>
+
+    <string name="terms_s1_title">1. Proprietary Software License</string>
+    <string name="terms_s1_intro">TapFlow is commercial, closed-source software. We grant you a personal, non-exclusive, non-transferable, revocable license to use TapFlow on Android devices you own or control.</string>
+    <string name="terms_s1_b1">You may not reverse engineer, decompile, disassemble, modify, repackage, sublicense, redistribute TapFlow, or bypass licensing and entitlement checks.</string>
+    <string name="terms_s1_b2">Copyright © 2026 TapFlow. All Rights Reserved. All source code, designs, and assets remain TapFlow’s exclusive property.</string>
+
+    <string name="terms_s2_title">2. Acceptable Use &amp; User Responsibility</string>
+    <string name="terms_s2_intro">All automation actions executed by TapFlow are configured and initiated strictly by you:</string>
+    <string name="terms_s2_b1_head">Third-Party Terms Compliance:</string>
+    <string name="terms_s2_b1_body">You are solely responsible for ensuring compliance with the Terms of Service of any third-party apps or games you interact with. TapFlow is not liable for account bans, suspensions, or data loss.</string>
+    <string name="terms_s2_b2_head">No Unlawful Use:</string>
+    <string name="terms_s2_b2_body">You agree not to use TapFlow for unauthorized access, spam, fraud, or violating applicable laws.</string>
+    <string name="terms_s2_b3_head">Device Safety Controls:</string>
+    <string name="terms_s2_b3_body">You are responsible for configuring safe delays, loop limits, and built-in safeguards such as Pause on Screen Off and Emergency Stop (Volume Down).</string>
+
+    <string name="terms_s3_title">3. Optional Third-Party Integrations</string>
+    <string name="terms_s3_b1">TapFlow optionally supports Shizuku, MacroDroid, and Tasker on-device. These third-party tools are unaffiliated with TapFlow and provided without warranty or guarantee across all Android OEMs or OS updates.</string>
+
+    <string name="terms_s4_title">4. Free Tier, 7-Day Trial, Promo Codes &amp; Lifetime Pro</string>
+    <string name="terms_s4_b1_head">Free Tier:</string>
+    <string name="terms_s4_b1_body">Unlimited scripts, pipelines, actions, visual flow diagrams, and single-point color matching at no cost.</string>
+    <string name="terms_s4_b2_head">7-Day Free Trial:</string>
+    <string name="terms_s4_b2_body">Optional one-time 7-day local trial per device installation unlocking Pro features (excluding .tapflow Data Backup, which strictly requires Lifetime Pro).</string>
+    <string name="terms_s4_b3_head">Promo Codes &amp; Tamper Protection:</string>
+    <string name="terms_s4_b3_body">Valid promo codes unlock a 7-day discounted Lifetime Pro SKU window. Trial and promo windows use Android Keystore HMAC and clock rollback checks—manipulating device clocks invalidates the active window.</string>
+    <string name="terms_s4_b4_head">Lifetime Pro &amp; Refunds:</string>
+    <string name="terms_s4_b4_body">One-time non-consumable purchase managed via Google Play Billing and restorable on compatible Android devices. Refunds follow Google Play’s official refund policy.</string>
+    <string name="terms_link_refund">Google Play Refund Policies</string>
+
+    <string name="terms_s5_title">5. Disclaimer of Warranties</string>
+    <string name="terms_s5_body">TO THE MAXIMUM EXTENT PERMITTED BY LAW, TAPFLOW IS PROVIDED “AS IS” AND “AS AVAILABLE” WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT. WE DO NOT WARRANT UNINTERRUPTED OR ERROR-FREE EXECUTION ACROSS ALL DEVICES OR THIRD-PARTY APPS.</string>
+
+    <string name="terms_s6_title">6. Limitation of Liability</string>
+    <string name="terms_s6_body">TO THE MAXIMUM EXTENT PERMITTED BY LAW, TAPFLOW AND ITS DEVELOPER SHALL NOT BE LIABLE FOR INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF DATA, ACCOUNTS, OR REVENUE. TOTAL AGGREGATE LIABILITY SHALL NOT EXCEED THE AMOUNT YOU ACTUALLY PAID FOR TAPFLOW PRO IN THE PRECEDING TWELVE (12) MONTHS.</string>
+
+    <string name="terms_s7_title">7. Changes &amp; Governing Law</string>
+    <string name="terms_s7_body">Continued use after Terms updates constitutes acceptance. These Terms are governed by the laws of the Hong Kong Special Administrative Region, without regard to conflict-of-law principles.</string>
+
+    <string name="terms_s8_title">8. Contact</string>
+    <string name="terms_s8_body">For licensing, billing, or legal inquiries, please email us:</string>
+</resources>

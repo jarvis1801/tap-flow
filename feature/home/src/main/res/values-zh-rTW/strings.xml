@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="legal_badge">TapFlow 法律聲明</string>
+    <string name="legal_effective_meta">生效日期：2026 年 11 月 19 日 • 應用程式：TapFlow (com.jarvis.tapflow)</string>
+    <string name="legal_close">關閉</string>
+    <string name="legal_view_online">線上檢視 ↗</string>
+    <string name="legal_footer_copyright">Copyright © 2026 TapFlow. 保留所有權利。</string>
+    <string name="legal_open_link_failed">無法在此裝置開啟連結。</string>
+
+    <string name="legal_terms_title">服務條款</string>
+    <string name="legal_terms_row_subtitle">商業授權與自動化使用責任</string>
+    <string name="legal_privacy_title">隱私權政策</string>
+    <string name="legal_privacy_row_subtitle">100% 本機離線儲存 — 無廣告、無遙測追蹤</string>
+    <string name="legal_feedback_title">電子郵件意見回饋</string>
+    <string name="legal_feedback_row_subtitle">開啟郵件程式寄至 ccplayconsole@gmail.com（附帶診斷資訊）</string>
+
+    <!-- 隱私權政策 -->
+    <string name="privacy_summary_title">隱私重點摘要</string>
+    <string name="privacy_summary_body">TapFlow 無需註冊帳號，完全不含任何廣告或行為追蹤，所有自動化腳本、顏色/圖像辨識與資料儲存皆 100% 在您的裝置本機執行。網路連線僅嚴格用於 Google Play 結算與選用的 Firebase Remote Config 優惠碼驗證。</string>
+
+    <string name="privacy_s1_title">1. 裝置本機儲存資訊</string>
+    <string name="privacy_s1_intro">TapFlow 採用離線優先架構。除非您主動匯出，否則所有自動化資料皆保留於裝置的私有應用程式儲存空間中：</string>
+    <string name="privacy_s1_b1_head">腳本、流程線與變數：</string>
+    <string name="privacy_s1_b1_body">自動化步驟、延遲設定與變數定義皆儲存於本機 Room/SQLite 資料庫。</string>
+    <string name="privacy_s1_b2_head">偵測截圖與取樣目標：</string>
+    <string name="privacy_s1_b2_body">使用即時錄製、即時偵測或匯入截圖時所建立的無損 PNG 截圖、取樣像素座標/色彩與裁切區域座標。</string>
+    <string name="privacy_s1_b3_head">執行紀錄與失敗截圖：</string>
+    <string name="privacy_s1_b3_body">暫存於本機的執行歷史紀錄與選用的失敗畫面截圖，系統會自動清理（僅保留最近 50 次或 7 天內紀錄）。</string>
+    <string name="privacy_s1_b4_head">偏好設定與 Keystore 授權錨點：</string>
+    <string name="privacy_s1_b4_body">介面設定、7 天本機試用時間戳記與已兌換優惠視窗時間戳記，並透過 Android Keystore HMAC-SHA256 驗證防止竄改。</string>
+    <string name="privacy_s1_b5_head">手動匯出 .tapflow 備份檔：</string>
+    <string name="privacy_s1_b5_body">透過系統檔案選擇器匯出 .tapflow 備份時，僅會匯出腳本與流程線邏輯（嚴格排除截圖檔案）。</string>
+
+    <string name="privacy_s2_title">2. 敏感權限與用途說明</string>
+    <string name="privacy_s2_intro">TapFlow 僅申請用戶主動觸發之自動化功能所必需的系統權限：</string>
+    <string name="privacy_s2_sub_a11y_title">AccessibilityService 無障礙服務 API</string>
+    <string name="privacy_s2_sub_a11y_b1_head">用途：</string>
+    <string name="privacy_s2_sub_a11y_b1_body">僅用於派發用戶設定的觸控手勢（點擊、雙擊、長按、多點觸控、滑動）、系統導覽按鍵、在已聚焦欄位輸入設定文字、讀取目前前景應用程式套件名稱以供「App 比對」與偵測標籤使用，以及在啟用時攔截音量下鍵作緊急停止。</string>
+    <string name="privacy_s2_sub_a11y_b2_head">嚴格不收集保證：</string>
+    <string name="privacy_s2_sub_a11y_b2_body">TapFlow 絕不會利用無障礙服務收集、遠端紀錄、販售或傳輸任何螢幕畫面內容、按鍵輸入、密碼、訊息或個人資訊。</string>
+
+    <string name="privacy_s2_sub_proj_title">螢幕擷取（MediaProjection）</string>
+    <string name="privacy_s2_sub_proj_b1_head">用途：</string>
+    <string name="privacy_s2_sub_proj_b1_body">僅於執行色彩比對、圖像比對、即時錄製或即時偵測時使用。畫面影格僅在裝置記憶體內即時分析（或儲存於本機私有偵測/錯誤紀錄空間），絕不上傳或串流至外部伺服器。</string>
+
+    <string name="privacy_s2_sub_overlay_title">顯示在其他應用程式上層</string>
+    <string name="privacy_s2_sub_overlay_b1_head">用途：</string>
+    <string name="privacy_s2_sub_overlay_b1_body">顯示懸浮控制列、座標選取器與選用的觸控除錯標記。</string>
+
+    <string name="privacy_s2_sub_apps_title">已安裝應用程式清單可見性</string>
+    <string name="privacy_s2_sub_apps_b1_head">用途：</string>
+    <string name="privacy_s2_sub_apps_b1_body">僅在本機顯示啟動應用程式、強制停止應用程式、App 比對選擇器清單與偵測項目的圖示與名稱。</string>
+
+    <string name="privacy_s2_sub_integrations_title">選用本機整合</string>
+    <string name="privacy_s2_sub_integrations_b1_head">Shizuku、MacroDroid 與 Tasker：</string>
+    <string name="privacy_s2_sub_integrations_b1_body">所有指令與本機廣播觸發皆僅於您的裝置本機執行，不會對外傳送資料。</string>
+
+    <string name="privacy_s3_title">3. 網路連線與第三方服務</string>
+    <string name="privacy_s3_intro">僅於授權購買及選用優惠碼驗證時進行必要網路請求：</string>
+    <string name="privacy_s3_b1_head">Google Play 結算服務：</string>
+    <string name="privacy_s3_b1_body">所有應用程式內購買與恢復購買皆由 Google Play 直接處理，TapFlow 僅取得授權狀態與憑證，絕不存取您的付款資料。</string>
+    <string name="privacy_s3_b2_head">Firebase Remote Config（優惠碼驗證）：</string>
+    <string name="privacy_s3_b2_body">驗證 promo_redeem_codes 參數與有效日期區間時，僅使用暫時性的 Firebase Installations 識別碼，絕不使用 Google Analytics 進行廣告追蹤或用戶分析。</string>
+    <string name="privacy_link_google">Google 隱私權政策</string>
+    <string name="privacy_link_firebase">Firebase 隱私與安全性</string>
+
+    <string name="privacy_s4_title">4. 資料控制、保存與刪除</string>
+    <string name="privacy_s4_b1">您隨時可在應用程式內刪除個別腳本、流程線、偵測群組與執行紀錄，或在設定中一鍵清除所有偵測截圖。</string>
+    <string name="privacy_s4_b2">執行紀錄與錯誤截圖會自動依保留原則清理（最多保留 50 次或 7 天）。</string>
+    <string name="privacy_s4_b3">解除安裝 TapFlow 將永久移除所有本機私有資料庫、偏好設定與截圖（不包含您自行另存他處的 .tapflow 備份檔）。</string>
+
+    <string name="privacy_s5_title">5. 兒童隱私保護</string>
+    <string name="privacy_s5_body">TapFlow 為一般工具軟體，並非針對 13 歲以下（或當地法定最低年齡）兒童設計。由於我們不收集帳號或分析資料，亦不會刻意收集兒童個人資料。</string>
+
+    <string name="privacy_s6_title">6. 政策修訂</string>
+    <string name="privacy_s6_body">我們可能會視功能更新或法規需要修訂本隱私權政策，修訂版本將隨頁頂所示之生效日期生效。</string>
+
+    <string name="privacy_s7_title">7. 聯絡我們</string>
+    <string name="privacy_s7_body">如對本隱私權政策或 TapFlow 權限有任何疑問，請來信聯絡：</string>
+
+    <!-- 服務條款 -->
+    <string name="terms_warning_title">重要提醒</string>
+    <string name="terms_warning_body">下載、安裝或使用 TapFlow 即表示您同意本服務條款。執行腳本前請務必仔細檢查動作內容，並自行負責遵守任何第三方應用程式之服務條款。</string>
+
+    <string name="terms_s1_title">1. 專有軟體授權</string>
+    <string name="terms_s1_intro">TapFlow 為商業閉源軟體。我們授予您個人、非專屬、不可轉讓且可撤銷之授權，在您擁有或控制的 Android 裝置上安裝及使用 TapFlow。</string>
+    <string name="terms_s1_b1">您不得對 TapFlow 進行逆向工程、反編譯、反組譯、修改、重新打包、再授權、散佈，或繞過授權驗證機制。</string>
+    <string name="terms_s1_b2">Copyright © 2026 TapFlow. 保留所有權利。所有原始碼、設計與資源皆屬 TapFlow 專屬財產。</string>
+
+    <string name="terms_s2_title">2. 合理使用與用戶責任</string>
+    <string name="terms_s2_intro">TapFlow 執行的所有自動化操作皆完全由您自行建立與觸發：</string>
+    <string name="terms_s2_b1_head">遵守第三方應用程式條款：</string>
+    <string name="terms_s2_b1_body">您應自行確保您的自動化行為符合所互動第三方應用程式或遊戲的條款與法律規範。對於第三方採取的帳號限制、停權或資料損失，TapFlow 概不負責。</string>
+    <string name="terms_s2_b2_head">禁止違法用途：</string>
+    <string name="terms_s2_b2_body">您同意不將 TapFlow 用於未經授權的存取、垃圾訊息、詐欺或任何違法行為。</string>
+    <string name="terms_s2_b3_head">裝置安全控制：</string>
+    <string name="terms_s2_b3_body">您有責任設定適當延遲、迴圈安全限制，並善用「螢幕關閉自動暫停」與「音量下鍵緊急停止」等安全機制。</string>
+
+    <string name="terms_s3_title">3. 選用第三方工具整合</string>
+    <string name="terms_s3_b1">TapFlow 提供對 Shizuku、MacroDroid 與 Tasker 的選用本機整合支援。上述第三方工具與 TapFlow 無從屬關係，亦不保證與所有手機品牌客製系統或系統更新完全相容。</string>
+
+    <string name="terms_s4_title">4. 免費版、7 天試用、優惠碼與終身專業版</string>
+    <string name="terms_s4_b1_head">免費版：</string>
+    <string name="terms_s4_b1_body">免費提供無限制數量的腳本、流程線、動作積木、流程圖檢視與單點色彩比對功能。</string>
+    <string name="terms_s4_b2_head">7 天免費試用：</string>
+    <string name="terms_s4_b2_body">每台裝置安裝可享一次性的 7 天本機試用，解鎖所有進階專業功能（.tapflow 資料備份與匯出除外，該功能僅限終身專業版使用）。</string>
+    <string name="terms_s4_b3_head">優惠碼與防竄改保護：</string>
+    <string name="terms_s4_b3_body">於有效期內兌換有效優惠碼可獲得 7 天折扣優惠 SKU 購買視窗。試用期與優惠視窗採用 Android Keystore HMAC 及單調時鐘防回溯檢查，竄改系統時間將使效期立即失效。</string>
+    <string name="terms_s4_b4_head">終身買斷與退款政策：</string>
+    <string name="terms_s4_b4_body">終身專業版為透過 Google Play 結算的一次性非消耗型購買，可於相容 Android 裝置恢復購買。所有退款皆依 Google Play 官方退款政策辦理。</string>
+    <string name="terms_link_refund">Google Play 退款政策</string>
+
+    <string name="terms_s5_title">5. 免責聲明</string>
+    <string name="terms_s5_body">在適用法律允許的最大範圍內，TapFlow 係依「現狀」及「現有」基礎提供，不附帶任何明示或默示保證（包括適售性、特定用途適用性或不侵權保證）。我們不保證自動化腳本於所有裝置或第三方應用程式上皆可永久無誤運作。</string>
+
+    <string name="terms_s6_title">6. 責任限制</string>
+    <string name="terms_s6_body">在法律允許的最大範圍內，TapFlow 及其開發者對任何間接、附帶、特殊、衍生性或懲罰性損害，或任何資料、帳號、利益或營收損失概不承擔責任。於任何情況下，我們的累計賠償責任上限不超過您在索賠前十二（12）個月內實際支付予 TapFlow Pro 之金額。</string>
+
+    <string name="terms_s7_title">7. 條款變更與準據法</string>
+    <string name="terms_s7_body">條款修訂生效後您繼續使用本軟體即代表同意修訂內容。本條款受中華人民共和國香港特別行政區法律管轄（不適用法律衝突原則）。</string>
+
+    <string name="terms_s8_title">8. 聯絡方式</string>
+    <string name="terms_s8_body">如有授權、帳務或法律相關疑問，歡迎透過電子郵件聯絡我們：</string>
+</resources>

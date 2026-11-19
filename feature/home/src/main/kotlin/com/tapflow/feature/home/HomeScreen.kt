@@ -293,7 +293,7 @@ fun HomeScreen(
         is HomeUiEffect.LaunchFeedbackEmail -> {
           val intent =
             Intent(Intent.ACTION_SENDTO).apply {
-              data = Uri.parse("mailto:support@tapflow.app")
+              data = Uri.parse("mailto:${TapFlowLegalLinks.CONTACT_EMAIL}")
               putExtra(Intent.EXTRA_SUBJECT, effect.subject)
               putExtra(Intent.EXTRA_TEXT, effect.body)
             }

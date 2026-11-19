@@ -10,10 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PauseCircleOutline
 import androidx.compose.material.icons.filled.PlayArrow
@@ -35,7 +33,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tapflow.core.database.backup.ImportConflictStrategy
-import com.tapflow.core.model.common.FeatureFlags
 import com.tapflow.core.service.permissions.AccessibilityProminentDisclosureDialog
 import com.tapflow.core.service.permissions.RuntimePermissionsDisabledDialog
 
@@ -415,60 +412,16 @@ internal fun HomeDialogs(
   }
 
   if (state.showTermsDialog) {
-    AlertDialog(
-      onDismissRequest = { onIntent(HomeUiIntent.SetTermsDialogVisible(false)) },
-      title = { Text("Terms & Conditions") },
-      text = {
-        Column(
-          modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          Text(
-            "TapFlow is licensed as proprietary offline automation software for personal productivity, UI testing, and accessibility workflows.",
-          )
-          Text(
-            "You are solely responsible for ensuring that scripts and pipelines you create comply with the terms of service of any third-party applications or games you automate.",
-          )
-          Text(
-            "TapFlow Pro lifetime purchases are managed via Google Play Billing and tied to your Google account.",
-          )
-        }
-      },
-      confirmButton = {
-        TextButton(onClick = { onIntent(HomeUiIntent.SetTermsDialogVisible(false)) }) {
-          Text("Close")
-        }
-      },
+    LegalDocumentDialog(
+      documentType = LegalDocumentType.TERMS_AND_CONDITIONS,
+      onDismiss = { onIntent(HomeUiIntent.SetTermsDialogVisible(false)) },
     )
   }
 
   if (state.showPrivacyDialog) {
-    AlertDialog(
-      onDismissRequest = { onIntent(HomeUiIntent.SetPrivacyDialogVisible(false)) },
-      title = { Text("Privacy Policy") },
-      text = {
-        Column(
-          modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-          Text(
-            "TapFlow is strictly offline-only. All scripts, pipelines, execution logs, inspected screenshots, and preferences are stored locally in your device's private Room database and DataStore.",
-          )
-          Text(
-            text =
-              if (FeatureFlags.ENABLE_DESKTOP_CONSOLE) {
-                "Accessibility Service and MediaProjection frames are processed transiently in memory on-device and are never transmitted to external servers. The optional Desktop Studio WebSocket bridge listens strictly on localhost (127.0.0.1) for your local ADB session."
-              } else {
-                "Accessibility Service and MediaProjection frames are processed transiently in memory on-device and are never transmitted to external servers."
-              },
-          )
-        }
-      },
-      confirmButton = {
-        TextButton(onClick = { onIntent(HomeUiIntent.SetPrivacyDialogVisible(false)) }) {
-          Text("Close")
-        }
-      },
+    LegalDocumentDialog(
+      documentType = LegalDocumentType.PRIVACY_POLICY,
+      onDismiss = { onIntent(HomeUiIntent.SetPrivacyDialogVisible(false)) },
     )
   }
 

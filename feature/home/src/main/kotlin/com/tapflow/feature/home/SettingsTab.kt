@@ -57,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -635,24 +636,24 @@ fun SettingsTabContent(
           Column(modifier = Modifier.padding(vertical = 6.dp)) {
             SettingsClickableRow(
               icon = Icons.Filled.Description,
-              title = "Terms & Conditions",
-              subtitle = "Commercial license & automation responsibility",
+              title = stringResource(R.string.legal_terms_title),
+              subtitle = stringResource(R.string.legal_terms_row_subtitle),
               testTag = "settings_tnc_row",
               onClick = { onIntent(HomeUiIntent.SetTermsDialogVisible(true)) },
             )
             HorizontalDivider()
             SettingsClickableRow(
               icon = Icons.Filled.PrivacyTip,
-              title = "Privacy Policy",
-              subtitle = "100% offline storage — zero telemetry or cloud upload",
+              title = stringResource(R.string.legal_privacy_title),
+              subtitle = stringResource(R.string.legal_privacy_row_subtitle),
               testTag = "settings_privacy_row",
               onClick = { onIntent(HomeUiIntent.SetPrivacyDialogVisible(true)) },
             )
             HorizontalDivider()
             SettingsClickableRow(
               icon = Icons.Filled.Email,
-              title = "Feedback via Email",
-              subtitle = "Opens email client with system & Shizuku diagnostics",
+              title = stringResource(R.string.legal_feedback_title),
+              subtitle = stringResource(R.string.legal_feedback_row_subtitle),
               testTag = "settings_feedback_row",
               onClick = { onIntent(HomeUiIntent.SendFeedbackEmailClicked) },
             )
@@ -682,7 +683,7 @@ fun SettingsTabContent(
                 fontWeight = FontWeight.SemiBold,
               )
               Text(
-                text = "Copyright © TapFlow. All Rights Reserved (Proprietary Software).",
+                text = stringResource(R.string.legal_footer_copyright),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
               )
